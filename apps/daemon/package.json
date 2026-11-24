@@ -1,0 +1,29 @@
+{
+  "name": "@tetherbox/daemon",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "tetherbox-daemon": "./dist/main.mjs"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json",
+    "dev": "node --watch src/main.ts serve"
+  },
+  "dependencies": {
+    "@hono/node-server": "catalog:",
+    "@slack/socket-mode": "catalog:",
+    "@slack/web-api": "catalog:",
+    "@tetherbox/core": "workspace:*",
+    "@tetherbox/starters": "workspace:*",
+    "croner": "catalog:",
+    "hono": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}

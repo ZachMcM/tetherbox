@@ -1,0 +1,26 @@
+{
+  "name": "@tetherbox/cli",
+  "version": "0.0.0",
+  "private": true,
+  "bin": {
+    "tetherbox": "./dist/main.mjs"
+  },
+  "type": "module",
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@clack/prompts": "catalog:",
+    "@tetherbox/core": "workspace:*",
+    "commander": "catalog:",
+    "ora": "catalog:",
+    "picocolors": "catalog:",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@types/node": "catalog:",
+    "tsdown": "catalog:",
+    "typescript": "catalog:"
+  }
+}
