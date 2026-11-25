@@ -29,6 +29,14 @@ async function verifyWebhook(
         return false;
       }
 
+      if (secret.binding.kind !== "daemon") {
+        console.warn(
+          `webhook secret ${verify.secretKey} has binding "${secret.binding.kind}", expected "daemon"`,
+        );
+
+        return false;
+      }
+
       const expected = createHmac("sha256", secret.value).update(body).digest();
       const received = Buffer.from(signature, "hex");
 

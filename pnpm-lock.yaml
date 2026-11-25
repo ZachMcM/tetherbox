@@ -281,6 +281,9 @@ importers:
       '@tetherbox/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@tetherbox/starters':
+        specifier: workspace:*
+        version: link:../../packages/starters
       commander:
         specifier: 'catalog:'
         version: 15.1.0
@@ -367,10 +370,11 @@ importers:
         version: 7.0.2
 
   packages/starters:
-    devDependencies:
+    dependencies:
       '@tetherbox/core':
         specifier: workspace:*
         version: link:../core
+    devDependencies:
       '@types/node':
         specifier: 'catalog:'
         version: 24.19.2

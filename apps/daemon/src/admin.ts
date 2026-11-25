@@ -1,27 +1,72 @@
+import { execFile } from "node:child_process";
+import { access, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { text } from "node:stream/consumers";
-import { parseArgs } from "node:util";
+import { parseArgs, promisify } from "node:util";
 import {
+  formatSecretInjection,
+  llmProviderSchema,
+  profileConfigSchema,
   profileIdSchema,
-  secretBindingSchema,
+  profileLayout,
+  resolveSecretBinding,
   secretKeySchema,
-  type SecretInjection,
+  type SecretBinding,
 } from "@tetherbox/core";
+import { getStarter, templatesDir, type Starter } from "@tetherbox/starters";
 import type { DaemonConfig } from "./config.ts";
+import { signalDaemonReload } from "./pid.ts";
 import { ProfileRegistry } from "./profiles.ts";
 import type { SecretStore } from "./secret-store.ts";
 
-function parseInjection(spec: string): SecretInjection {
-  const [kind, name] = spec.split(":", 2);
+const execFileAsync = promisify(execFile);
 
-  if (kind === "bearer" && name === undefined) {
-    return { kind: "bearer" };
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function resolveStarters(rawIds: readonly string[]): Starter[] {
+  const seen = new Set<string>();
+  const resolved: Starter[] = [];
+
+  for (const id of rawIds) {
+    if (seen.has(id)) {
+      continue;
+    }
+
+    const starter = getStarter(id);
+
+    if (starter === undefined) {
+      throw new Error(`unknown starter "${id}"`);
+    }
+
+    seen.add(id);
+    resolved.push(starter);
   }
 
-  if ((kind === "header" || kind === "query") && name !== undefined && name !== "") {
-    return { kind, name };
-  }
+  return resolved;
+}
 
-  throw new Error(`invalid --inject "${spec}", expected bearer, header:<name>, or query:<name>`);
+function formatBinding(binding: SecretBinding): string {
+  switch (binding.kind) {
+    case "daemon":
+      return "daemon";
+    case "llm":
+      return `llm\t${binding.provider}`;
+    case "proxy":
+      return `proxy\t${binding.domains.join(",")}\t${formatSecretInjection(binding.inject)}`;
+    default: {
+      const exhaustive: never = binding;
+
+      return exhaustive;
+    }
+  }
 }
 
 /**
@@ -37,13 +82,15 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
         args: rest,
         options: {
           domain: { type: "string", multiple: true, default: [] },
-          inject: { type: "string", default: "bearer" },
+          inject: { type: "string" },
+          provider: { type: "string" },
         },
       });
       const key = secretKeySchema.parse(rawKey);
-      const binding = secretBindingSchema.parse({
+      const binding = resolveSecretBinding({
         domains: values.domain,
-        inject: parseInjection(values.inject),
+        inject: values.inject,
+        provider: values.provider,
       });
       const value = (await text(process.stdin)).trim();
 
@@ -52,7 +99,7 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
       }
 
       await store.set(key, { value, binding });
-      console.log(`stored ${key}`);
+      console.log(`stored ${key} (${binding.kind})`);
 
       return;
     }
@@ -65,8 +112,8 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
 
       return;
     case "list":
-      for (const key of await store.list()) {
-        console.log(key);
+      for (const entry of await store.list()) {
+        console.log(`${entry.key}\t${formatBinding(entry.binding)}`);
       }
 
       return;
@@ -76,7 +123,7 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
 }
 
 export async function runProfilesCommand(config: DaemonConfig, args: string[]): Promise<void> {
-  const [action, rawId] = args;
+  const [action, rawId, ...rest] = args;
   const registry = new ProfileRegistry(config.profilesDir);
 
   switch (action) {
@@ -102,11 +149,85 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
 
       return;
     }
-    case "create":
-      // TODO: Create <profilesDir>/<id> owned by the agent user, write profile.json and MEMORY.md,
-      // copy the selected starters from @tetherbox/starters' templatesDir, and `git init` it.
-      throw new Error("profiles create is not implemented");
+    case "create": {
+      const id = profileIdSchema.parse(rawId);
+      const { values } = parseArgs({
+        args: rest,
+        options: {
+          name: { type: "string" },
+          channel: { type: "string" },
+          provider: { type: "string" },
+          model: { type: "string" },
+          starter: { type: "string", multiple: true, default: [] },
+        },
+      });
+      const selectedStarters = resolveStarters(values.starter);
+      const profileConfig = profileConfigSchema.parse({
+        name: values.name ?? id,
+        slackChannelId: values.channel,
+        model: {
+          provider: llmProviderSchema.parse(values.provider),
+          id: values.model,
+        },
+        starters: selectedStarters.map((starter) => starter.id),
+      });
+      const profileDir = join(config.profilesDir, id);
+
+      if (await pathExists(profileDir)) {
+        throw new Error(`profile "${id}" already exists at ${profileDir}`);
+      }
+
+      await registry.loadAll();
+
+      const channelOwner = registry.byChannel(profileConfig.slackChannelId);
+
+      if (channelOwner !== undefined) {
+        throw new Error(
+          `Slack channel ${profileConfig.slackChannelId} already belongs to profile ${channelOwner.id}`,
+        );
+      }
+
+      await mkdir(profileDir, { recursive: true });
+
+      try {
+        await writeFile(
+          join(profileDir, profileLayout.config),
+          `${JSON.stringify(profileConfig, null, 2)}\n`,
+        );
+        await writeFile(join(profileDir, profileLayout.memory), `# ${profileConfig.name}\n`);
+
+        for (const starter of selectedStarters) {
+          await cp(join(templatesDir, starter.path), join(profileDir, starter.path), {
+            recursive: true,
+          });
+        }
+
+        await execFileAsync("git", ["init", "-q"], { cwd: profileDir });
+      } catch (error) {
+        await rm(profileDir, { recursive: true, force: true });
+        throw error;
+      }
+
+      // TODO: Set profileDir ownership to config.agent.user once the VM installer configures a
+      // shared group or chown rule for the daemon user.
+      const reloaded = await signalDaemonReload(config.dataDir);
+
+      console.log(reloaded ? `created ${id} (reloaded daemon)` : `created ${id}`);
+
+      return;
+    }
+    case "reload": {
+      const reloaded = await signalDaemonReload(config.dataDir);
+
+      if (!reloaded) {
+        throw new Error("daemon is not running");
+      }
+
+      console.log("reloaded daemon");
+
+      return;
+    }
     default:
-      throw new Error("usage: tetherbox-daemon profiles <list|validate|create> [id]");
+      throw new Error("usage: tetherbox-daemon profiles <list|validate|create|reload> [id]");
   }
 }

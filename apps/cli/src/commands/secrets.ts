@@ -1,8 +1,9 @@
 import * as p from "@clack/prompts";
-import { secretKeySchema } from "@tetherbox/core";
+import { resolveSecretBinding, secretKeySchema } from "@tetherbox/core";
 import type { Command } from "commander";
 import { readConfig } from "../config.ts";
 import { runDaemonCommand } from "../remote.ts";
+import { promptAndSetSecret } from "../secrets.ts";
 
 export function registerSecrets(program: Command): void {
   const secrets = program
@@ -11,33 +12,34 @@ export function registerSecrets(program: Command): void {
 
   secrets
     .command("set")
-    .description("Store a secret pinned to the domains it may be sent to")
-    .argument("<key>", "secret name, such as LINEAR_API_KEY")
-    .requiredOption("-d, --domain <domain...>", "domains the secret proxy may send this secret to")
-    .option("-i, --inject <spec>", "bearer, header:<name>, or query:<name>", "bearer")
-    .action(async (rawKey: string, options: { domain: string[]; inject: string }) => {
-      const key = secretKeySchema.parse(rawKey);
-      const { sshAlias } = await readConfig();
-      const value = await p.password({ message: `Value for ${key}` });
+    .description("Store a daemon-only secret, domain-pinned proxy secret, or LLM provider key")
+    .argument("<key>", "secret name, such as LINEAR_API_KEY or SLACK_APP_TOKEN")
+    .option("-d, --domain <domain...>", "domains the secret proxy may send this secret to")
+    .option("-i, --inject <spec>", "bearer, header:<name>, or query:<name> (requires --domain)")
+    .option("-p, --provider <provider>", "LLM provider name for /llm proxy credentials")
+    .action(
+      async (
+        rawKey: string,
+        options: { domain?: string[]; inject?: string; provider?: string },
+      ) => {
+        const key = secretKeySchema.parse(rawKey);
+        const binding = resolveSecretBinding({
+          domains: options.domain,
+          inject: options.inject,
+          provider: options.provider,
+        });
+        const { sshAlias } = await readConfig();
+        const status = await promptAndSetSecret({ sshAlias, key, binding });
 
-      if (p.isCancel(value) || value === "") {
-        p.cancel("No value entered.");
-
-        return;
-      }
-
-      const domainArgs = options.domain.flatMap((domain) => ["--domain", domain]);
-
-      process.exitCode = await runDaemonCommand(
-        sshAlias,
-        ["secrets", "set", key, ...domainArgs, "--inject", options.inject],
-        { input: value },
-      );
-    });
+        if (status === "cancelled") {
+          p.cancel("No value entered.");
+        }
+      },
+    );
 
   secrets
     .command("list")
-    .description("List stored secret names")
+    .description("List stored secrets and their bindings")
     .action(async () => {
       const { sshAlias } = await readConfig();
 

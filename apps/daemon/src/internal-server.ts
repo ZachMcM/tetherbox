@@ -28,7 +28,11 @@ export async function startInternalServer({
     resolveRun: (token) => turns.resolveRun(token),
     sendMessage: (run, input) => turns.sendMessage(run, input),
     addReaction: (run, input) => turns.addReaction(run, input),
-    hasSecret: (key) => secrets.has(key),
+    async checkSecret(key) {
+      const secret = await secrets.get(key);
+
+      return secret === undefined ? { exists: false } : { exists: true, kind: secret.binding.kind };
+    },
     async validateProfile(run): Promise<ProfileValidation> {
       const profile = registry.get(run.profileId);
 

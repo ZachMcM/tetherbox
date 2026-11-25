@@ -47,6 +47,24 @@ export class Scheduler {
     return issues;
   }
 
+  syncAll(profiles: readonly LoadedProfile[]): ProfileIssue[] {
+    const active = new Set(profiles.map((profile) => profile.id));
+
+    for (const profileId of this.#jobs.keys()) {
+      if (!active.has(profileId)) {
+        this.remove(profileId);
+      }
+    }
+
+    const issues: ProfileIssue[] = [];
+
+    for (const profile of profiles) {
+      issues.push(...this.sync(profile));
+    }
+
+    return issues;
+  }
+
   remove(profileId: ProfileId): void {
     for (const cron of this.#jobs.get(profileId) ?? []) {
       cron.stop();

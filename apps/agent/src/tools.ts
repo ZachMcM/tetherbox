@@ -58,7 +58,7 @@ function createProfileTools(client: InternalClient): ToolDefinition[] {
     name: "check_secret",
     label: "Check secret",
     description:
-      "Report whether a secret key (such as LINEAR_API_KEY) is stored, without revealing its value. If it is missing, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` on their own machine. Never ask for a secret value in chat.",
+      "Report whether a secret key (such as LINEAR_API_KEY) is stored and its binding kind, without revealing its value. If it is missing, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
     parameters: Type.Object({ key: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }) }),
     async execute(_toolCallId, params) {
       const response = await client.rpc.secrets[":key"].$get({ param: { key: params.key } });
@@ -67,9 +67,11 @@ function createProfileTools(client: InternalClient): ToolDefinition[] {
         throw await failure(response, "check_secret");
       }
 
-      const { exists } = await response.json();
+      const result = await response.json();
 
-      return text(exists ? `${params.key} is set.` : `${params.key} is not set.`);
+      return text(
+        result.exists ? `${params.key} is set (${result.kind}).` : `${params.key} is not set.`,
+      );
     },
   });
   const validateProfile = defineTool({

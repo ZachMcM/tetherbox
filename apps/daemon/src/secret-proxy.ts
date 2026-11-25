@@ -41,6 +41,10 @@ export async function proxyWithSecret(store: SecretStore, request: Request): Pro
     return fail(404, `secret ${key.data} is not set`);
   }
 
+  if (secret.binding.kind !== "proxy") {
+    return fail(403, `secret ${key.data} is not bound for proxy use`);
+  }
+
   if (!matchesPinnedDomain(target.hostname, secret.binding.domains)) {
     return fail(403, `secret ${key.data} is not pinned to ${target.hostname}`);
   }
@@ -63,6 +67,11 @@ export async function proxyWithSecret(store: SecretStore, request: Request): Pro
     case "query":
       target.searchParams.set(inject.name, secret.value);
       break;
+    default: {
+      const exhaustive: never = inject;
+
+      return exhaustive;
+    }
   }
 
   const upstream = await fetch(target, {

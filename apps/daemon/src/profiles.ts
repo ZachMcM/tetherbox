@@ -128,7 +128,19 @@ export class ProfileRegistry {
 
   async loadAll(): Promise<ProfileIssue[]> {
     const issues: ProfileIssue[] = [];
-    const dirs = await readdir(this.#profilesDir, { withFileTypes: true });
+    let dirs;
+
+    try {
+      dirs = await readdir(this.#profilesDir, { withFileTypes: true });
+    } catch (error) {
+      if (isMissing(error)) {
+        this.#profiles.clear();
+
+        return issues;
+      }
+
+      throw error;
+    }
 
     this.#profiles.clear();
 

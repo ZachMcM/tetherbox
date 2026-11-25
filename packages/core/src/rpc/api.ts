@@ -15,6 +15,7 @@ import {
   type RegisterPollJobInput,
 } from "../poll.ts";
 import type { ProfileValidation } from "../profile.ts";
+import type { SecretCheckResult } from "../secrets.ts";
 import { RUN_TOKEN_HEADER } from "./headers.ts";
 
 export interface RunContext {
@@ -32,7 +33,7 @@ export interface InternalApiHandlers {
   resolveRun(runToken: string): RunContext | undefined;
   sendMessage(run: RunContext, input: SendMessageInput): Promise<{ ts: string }>;
   addReaction(run: RunContext, input: AddReactionInput): Promise<void>;
-  hasSecret(key: SecretKey): Promise<boolean>;
+  checkSecret(key: SecretKey): Promise<SecretCheckResult>;
   validateProfile(run: RunContext): Promise<ProfileValidation>;
   registerPollJob(run: RunContext, input: RegisterPollJobInput): Promise<RegisteredPollJob>;
   listPollJobs(run: RunContext): RegisteredPollJob[];
@@ -67,7 +68,7 @@ export function createInternalApi(handlers: InternalApiHandlers) {
       return c.body(null, 204);
     })
     .get("/rpc/secrets/:key", zValidator("param", z.object({ key: secretKeySchema })), async (c) =>
-      c.json({ exists: await handlers.hasSecret(c.req.valid("param").key) }),
+      c.json(await handlers.checkSecret(c.req.valid("param").key)),
     )
     .post("/rpc/profile/validate", async (c) =>
       c.json(await handlers.validateProfile(c.get("run"))),
