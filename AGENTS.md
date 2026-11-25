@@ -53,7 +53,7 @@ pnpm lint          # oxlint
 pnpm format        # oxfmt
 ```
 
-CI runs `pnpm typecheck` and `pnpm build`. There is no test suite yet.
+CI runs `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm build`. There is no test suite yet.
 
 Internal imports use `.ts` extensions so `node src/main.ts` runs without a build step. Packages that other workspaces import (`core`, `starters`) build to `dist/`, and turbo builds them before dependents typecheck.
 
