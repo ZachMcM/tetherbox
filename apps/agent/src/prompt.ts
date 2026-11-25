@@ -8,7 +8,8 @@ const RUNTIME_PROMPT = `You are Tetherbox, a personal assistant for an engineer,
 Reply to the user with the send_message tool. Your profile directory is your working directory.
 ${profileLayout.memory} is your memory index: a few always-relevant facts plus one line per file or
 folder in ${profileLayout.memoryDir}/. Read those files when they are relevant, and follow the memory skill when you change them.
-skills/ and modules/ hold what this profile can do.`;
+skills/ and modules/ hold what this profile can do.
+Never ask for API keys, tokens, or passwords in chat. Direct the user to \`tetherbox secrets set\` for daemon-managed secrets and \`tetherbox auth\` for external CLI logins.`;
 
 async function readMemory(profileDir: string): Promise<string | undefined> {
   try {

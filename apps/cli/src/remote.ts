@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 
 const DAEMON_USER = "tetherbox";
 const DAEMON_BIN = "tetherbox-daemon";
+const AGENT_USER = "tetherbox-agent";
 
 function shellQuote(arg: string): string {
   return `'${arg.replaceAll("'", `'\\''`)}'`;
@@ -20,6 +21,10 @@ export interface CaptureResult {
 
 function daemonCommandArgs(args: readonly string[]): string[] {
   return ["sudo", "-n", "-u", DAEMON_USER, DAEMON_BIN, ...args];
+}
+
+function agentCommandArgs(args: readonly string[], nonInteractive: boolean): string[] {
+  return ["sudo", ...(nonInteractive ? ["-n"] : []), "-H", "-u", AGENT_USER, "--", ...args];
 }
 
 /**
@@ -92,4 +97,20 @@ export function captureDaemonCommand(
   options: Pick<RemoteOptions, "input"> = {},
 ) {
   return captureRemote(alias, daemonCommandArgs(args), options);
+}
+
+export function runAgentCommand(
+  alias: string,
+  args: readonly string[],
+  options: RemoteOptions = {},
+) {
+  return runRemote(alias, agentCommandArgs(args, !options.interactive), options);
+}
+
+export function captureAgentCommand(
+  alias: string,
+  args: readonly string[],
+  options: Pick<RemoteOptions, "input"> = {},
+) {
+  return captureRemote(alias, agentCommandArgs(args, true), options);
 }

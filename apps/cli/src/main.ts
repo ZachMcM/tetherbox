@@ -1,14 +1,18 @@
 #!/usr/bin/env node
 import { Command } from "commander";
+import { registerAuth } from "./commands/auth.ts";
 import { registerProfiles } from "./commands/profiles.ts";
 import { registerSecrets } from "./commands/secrets.ts";
 import { registerSetup } from "./commands/setup.ts";
 import { registerSsh } from "./commands/ssh.ts";
 
-const program = new Command("tetherbox").description("Install and operate a remote Tetherbox VM");
+const program = new Command("tetherbox")
+  .description("Install and operate a remote Tetherbox VM")
+  .enablePositionalOptions();
 
 registerSetup(program);
 registerSsh(program);
+registerAuth(program);
 registerSecrets(program);
 registerProfiles(program);
 

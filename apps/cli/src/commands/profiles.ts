@@ -1,8 +1,9 @@
 import * as p from "@clack/prompts";
 import { llmProviderSchema, profileConfigSchema, profileIdSchema } from "@tetherbox/core";
-import { collectStarterSecrets, starters } from "@tetherbox/starters";
+import { collectStarterCliAuth, collectStarterSecrets, starters } from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
+import { ensureStarterCliAuth } from "../auth.ts";
 import { readConfig } from "../config.ts";
 import { runDaemonCommand } from "../remote.ts";
 import { ensureLlmProviderSecret, ensureRequiredSecrets, listRemoteSecrets } from "../secrets.ts";
@@ -142,6 +143,17 @@ export function registerProfiles(program: Command): void {
       });
 
       if (starterStatus === "cancelled") {
+        p.cancel("Profile creation cancelled.");
+
+        return;
+      }
+
+      const cliAuthStatus = await ensureStarterCliAuth({
+        sshAlias,
+        entries: collectStarterCliAuth(selectedStarters),
+      });
+
+      if (cliAuthStatus === "cancelled") {
         p.cancel("Profile creation cancelled.");
 
         return;

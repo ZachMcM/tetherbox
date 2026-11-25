@@ -13,6 +13,17 @@ export interface StarterSecret {
   readonly binding: SecretBinding;
 }
 
+export interface StarterCliAuth {
+  readonly binary: string;
+  readonly checkCommand?: readonly [string, ...string[]];
+  readonly loginCommand: readonly [string, ...string[]];
+}
+
+export interface StarterCliAuthEntry {
+  readonly starterId: string;
+  readonly cliAuth: StarterCliAuth;
+}
+
 function proxySecret(key: string, domains: [string, ...string[]]): StarterSecret {
   return {
     key: secretKeySchema.parse(key),
@@ -24,29 +35,62 @@ function proxySecret(key: string, domains: [string, ...string[]]): StarterSecret
   };
 }
 
+interface StarterBase {
+  readonly id: string;
+  readonly category: StarterCategory;
+  readonly secrets: readonly StarterSecret[];
+  readonly cliAuth?: StarterCliAuth;
+}
+
 export type Starter =
-  | {
-      kind: "skill";
-      id: string;
-      category: StarterCategory;
-      path: `skills/${string}`;
-      secrets: readonly StarterSecret[];
-    }
-  | {
-      kind: "module";
-      id: string;
-      category: StarterCategory;
-      path: `modules/${string}`;
-      secrets: readonly StarterSecret[];
-    };
+  | (StarterBase & {
+      readonly kind: "skill";
+      readonly path: `skills/${string}`;
+    })
+  | (StarterBase & {
+      readonly kind: "module";
+      readonly path: `modules/${string}`;
+    });
 
 export const templatesDir = fileURLToPath(new URL("../templates", import.meta.url));
 
 export const starters = [
   { kind: "skill", id: "git", category: "cli", path: "skills/git", secrets: [] },
-  { kind: "skill", id: "gh", category: "cli", path: "skills/gh", secrets: [] },
-  { kind: "skill", id: "claude", category: "harness", path: "skills/claude", secrets: [] },
-  { kind: "skill", id: "opencode", category: "harness", path: "skills/opencode", secrets: [] },
+  {
+    kind: "skill",
+    id: "gh",
+    category: "cli",
+    path: "skills/gh",
+    secrets: [],
+    cliAuth: {
+      binary: "gh",
+      checkCommand: ["gh", "auth", "status"],
+      loginCommand: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
+    },
+  },
+  {
+    kind: "skill",
+    id: "claude",
+    category: "harness",
+    path: "skills/claude",
+    secrets: [],
+    cliAuth: {
+      binary: "claude",
+      checkCommand: ["claude", "auth", "status"],
+      loginCommand: ["claude", "auth", "login"],
+    },
+  },
+  {
+    kind: "skill",
+    id: "opencode",
+    category: "harness",
+    path: "skills/opencode",
+    secrets: [],
+    cliAuth: {
+      binary: "opencode",
+      loginCommand: ["opencode", "auth", "login"],
+    },
+  },
   { kind: "skill", id: "t3code", category: "harness", path: "skills/t3code", secrets: [] },
   {
     kind: "skill",
@@ -89,6 +133,18 @@ export function getStarter(id: string): Starter | undefined {
   return startersById.get(id);
 }
 
+export function listCliAuthStarters(): StarterCliAuthEntry[] {
+  const entries: StarterCliAuthEntry[] = [];
+
+  for (const starter of startersById.values()) {
+    if (starter.cliAuth !== undefined) {
+      entries.push({ starterId: starter.id, cliAuth: starter.cliAuth });
+    }
+  }
+
+  return entries;
+}
+
 export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
   const seen = new Set<SecretKey>();
   const required: StarterSecret[] = [];
@@ -105,6 +161,26 @@ export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
         seen.add(secret.key);
         required.push(secret);
       }
+    }
+  }
+
+  return required;
+}
+
+export function collectStarterCliAuth(ids: readonly string[]): StarterCliAuthEntry[] {
+  const seen = new Set<string>();
+  const required: StarterCliAuthEntry[] = [];
+
+  for (const id of ids) {
+    const starter = startersById.get(id);
+
+    if (starter === undefined) {
+      throw new Error(`unknown starter "${id}"`);
+    }
+
+    if (starter.cliAuth !== undefined && !seen.has(starter.id)) {
+      seen.add(starter.id);
+      required.push({ starterId: starter.id, cliAuth: starter.cliAuth });
     }
   }
 

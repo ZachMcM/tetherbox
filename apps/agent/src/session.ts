@@ -66,9 +66,10 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
 
     await resourceLoader.reload();
 
+    const fetchWithSecret = createSecretProxyFetch({ socketPath, runToken });
     const moduleTools = await loadProfileModules(profileDir, {
       profileId: input.profileId,
-      fetchWithSecret: createSecretProxyFetch({ socketPath, runToken }),
+      fetchWithSecret,
       async hasSecret(secretKey) {
         const response = await client.rpc.secrets[":key"].$get({ param: { key: secretKey } });
 
@@ -83,7 +84,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       settingsManager,
       resourceLoader,
       sessionManager: SessionManager.inMemory(profileDir),
-      customTools: [...createBuiltinTools(client), ...moduleTools],
+      customTools: [...createBuiltinTools(client, fetchWithSecret), ...moduleTools],
     });
 
     try {

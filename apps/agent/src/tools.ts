@@ -1,8 +1,9 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { InternalClient } from "@tetherbox/core";
+import type { InternalClient, ModuleContext } from "@tetherbox/core";
 import { Type } from "typebox";
 
 const SLUG_PATTERN = "^[a-z0-9][a-z0-9-]{0,62}$";
+const MAX_PROXY_BODY_CHARS = 32 * 1024;
 
 async function failure(response: Response, action: string): Promise<Error> {
   return new Error(`${action} failed with ${response.status}: ${await response.text()}`);
@@ -53,12 +54,15 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
   return [sendMessage, addReaction];
 }
 
-function createProfileTools(client: InternalClient): ToolDefinition[] {
+function createProfileTools(
+  client: InternalClient,
+  fetchWithSecret: ModuleContext["fetchWithSecret"],
+): ToolDefinition[] {
   const checkSecret = defineTool({
     name: "check_secret",
     label: "Check secret",
     description:
-      "Report whether a secret key (such as LINEAR_API_KEY) is stored and its binding kind, without revealing its value. If it is missing, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
+      "Report whether a secret key (such as LINEAR_API_KEY) is stored and its binding kind, without revealing its value. If it is missing or has the wrong binding kind, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key (adding `--inject header:<name>` or `--inject query:<name>` if not bearer auth) or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
     parameters: Type.Object({ key: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }) }),
     async execute(_toolCallId, params) {
       const response = await client.rpc.secrets[":key"].$get({ param: { key: params.key } });
@@ -72,6 +76,45 @@ function createProfileTools(client: InternalClient): ToolDefinition[] {
       return text(
         result.exists ? `${params.key} is set (${result.kind}).` : `${params.key} is not set.`,
       );
+    },
+  });
+  const proxyFetch = defineTool({
+    name: "fetch_with_secret",
+    label: "Fetch with secret",
+    description:
+      "Send an HTTPS request through the daemon's domain-pinned secret proxy, injecting the named proxy-bound secret without exposing its value. Use this to probe APIs while reverse-engineering or testing an integration before writing a module.",
+    parameters: Type.Object({
+      secretKey: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }),
+      url: Type.String({ minLength: 1 }),
+      method: Type.Optional(
+        Type.Union([
+          Type.Literal("GET"),
+          Type.Literal("POST"),
+          Type.Literal("PUT"),
+          Type.Literal("PATCH"),
+          Type.Literal("DELETE"),
+          Type.Literal("HEAD"),
+        ]),
+      ),
+      headers: Type.Optional(Type.Record(Type.String(), Type.String())),
+      body: Type.Optional(Type.String()),
+    }),
+    async execute(_toolCallId, params) {
+      const response = await fetchWithSecret(params.secretKey, params.url, {
+        method: params.method ?? "GET",
+        ...(params.headers !== undefined ? { headers: params.headers } : {}),
+        ...(params.body !== undefined ? { body: params.body } : {}),
+      });
+      const rawBody = await response.text();
+      const truncated = rawBody.length > MAX_PROXY_BODY_CHARS;
+      const body = truncated ? rawBody.slice(0, MAX_PROXY_BODY_CHARS) : rawBody;
+
+      return json({
+        status: response.status,
+        headers: Object.fromEntries(response.headers.entries()),
+        body,
+        ...(truncated ? { truncated: true } : {}),
+      });
     },
   });
   const validateProfile = defineTool({
@@ -93,7 +136,7 @@ function createProfileTools(client: InternalClient): ToolDefinition[] {
     },
   });
 
-  return [checkSecret, validateProfile];
+  return [checkSecret, proxyFetch, validateProfile];
 }
 
 function createPollTools(client: InternalClient): ToolDefinition[] {
@@ -171,10 +214,13 @@ function createPollTools(client: InternalClient): ToolDefinition[] {
   return [registerPollJob, listPollJobs, cancelPollJob];
 }
 
-export function createBuiltinTools(client: InternalClient): ToolDefinition[] {
+export function createBuiltinTools(
+  client: InternalClient,
+  fetchWithSecret: ModuleContext["fetchWithSecret"],
+): ToolDefinition[] {
   return [
     ...createMessagingTools(client),
-    ...createProfileTools(client),
+    ...createProfileTools(client, fetchWithSecret),
     ...createPollTools(client),
   ];
 }
