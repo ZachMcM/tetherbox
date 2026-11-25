@@ -1,8 +1,22 @@
 import { connect, createServer, type AddressInfo, type Server } from "node:net";
 
 export interface LlmForwarder {
-  baseUrl(provider: string): string;
+  baseUrl(provider: string, upstreamBaseUrl?: string): string;
   close(): Promise<void>;
+}
+
+function basePathFor(upstreamBaseUrl: string | undefined): string {
+  if (upstreamBaseUrl === undefined || upstreamBaseUrl === "") {
+    return "";
+  }
+
+  const parsed = URL.parse(upstreamBaseUrl);
+
+  if (parsed === null) {
+    return "";
+  }
+
+  return parsed.pathname.replace(/\/+$/, "");
 }
 
 /**
@@ -23,7 +37,8 @@ export async function startLlmForwarder(socketPath: string): Promise<LlmForwarde
   const { port } = server.address() as AddressInfo;
 
   return {
-    baseUrl: (provider) => `http://127.0.0.1:${port}/llm/${encodeURIComponent(provider)}`,
+    baseUrl: (provider, upstreamBaseUrl) =>
+      `http://127.0.0.1:${port}/llm/${encodeURIComponent(provider)}${basePathFor(upstreamBaseUrl)}`,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

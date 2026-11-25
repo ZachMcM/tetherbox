@@ -1,10 +1,12 @@
 import { zValidator } from "@hono/zod-validator";
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
   entryNameSchema,
+  llmProviderSchema,
   secretKeySchema,
   type EntryName,
+  type LlmProvider,
   type ProfileId,
   type RunId,
   type SecretKey,
@@ -39,7 +41,32 @@ export interface InternalApiHandlers {
   listPollJobs(run: RunContext): RegisteredPollJob[];
   cancelPollJob(run: RunContext, name: EntryName): Promise<{ cancelled: boolean }>;
   proxyWithSecret(run: RunContext, request: Request): Promise<Response>;
-  proxyLlm(run: RunContext, provider: string, request: Request): Promise<Response>;
+  proxyLlm(run: RunContext, provider: LlmProvider, request: Request): Promise<Response>;
+}
+
+function bearerToken(header: string | undefined): string | undefined {
+  if (header === undefined) {
+    return undefined;
+  }
+
+  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
+
+  return match?.[1];
+}
+
+function runTokenCandidates(c: Context): readonly (string | undefined)[] {
+  const explicit = c.req.header(RUN_TOKEN_HEADER)?.trim();
+
+  if (!c.req.path.startsWith("/llm/")) {
+    return [explicit];
+  }
+
+  return [
+    explicit,
+    bearerToken(c.req.header("authorization")),
+    c.req.header("x-api-key")?.trim(),
+    c.req.header("x-goog-api-key")?.trim(),
+  ];
 }
 
 /**
@@ -49,8 +76,19 @@ export interface InternalApiHandlers {
 export function createInternalApi(handlers: InternalApiHandlers) {
   return new Hono<{ Variables: { run: RunContext } }>()
     .use(async (c, next) => {
-      const token = c.req.header(RUN_TOKEN_HEADER);
-      const run = token === undefined ? undefined : handlers.resolveRun(token);
+      let run: RunContext | undefined;
+
+      for (const token of runTokenCandidates(c)) {
+        if (token === undefined || token === "") {
+          continue;
+        }
+
+        run = handlers.resolveRun(token);
+
+        if (run !== undefined) {
+          break;
+        }
+      }
 
       if (run === undefined) {
         return c.json({ error: "unknown run token" }, 401);
@@ -83,8 +121,8 @@ export function createInternalApi(handlers: InternalApiHandlers) {
       async (c) => c.json(await handlers.cancelPollJob(c.get("run"), c.req.valid("param").name)),
     )
     .all("/proxy/*", (c) => handlers.proxyWithSecret(c.get("run"), c.req.raw))
-    .all("/llm/:provider/*", (c) =>
-      handlers.proxyLlm(c.get("run"), c.req.param("provider"), c.req.raw),
+    .all("/llm/:provider/*", zValidator("param", z.object({ provider: llmProviderSchema })), (c) =>
+      handlers.proxyLlm(c.get("run"), c.req.valid("param").provider, c.req.raw),
     );
 }
 

@@ -44,7 +44,10 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
 
     // TODO: Confirm every provider Pi supports honors a baseUrl override, and register custom
     // providers for BYO subscriptions that are not in Pi's catalog.
-    const model = { ...catalogModel, baseUrl: forwarder.baseUrl(input.model.provider) };
+    const model = {
+      ...catalogModel,
+      baseUrl: forwarder.baseUrl(input.model.provider, catalogModel.baseUrl),
+    };
 
     await modelRuntime.setRuntimeApiKey(input.model.provider, runToken);
 
