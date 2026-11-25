@@ -1,73 +1,154 @@
 import { z } from "zod";
-import { llmProviderSchema, type LlmProvider } from "./ids.ts";
+
+export const llmProviderIds = [
+  "anthropic",
+  "openai",
+  "openai-codex",
+  "google",
+  "openrouter",
+  "opencode",
+  "opencode-go",
+  "xai",
+  "deepseek",
+  "groq",
+  "mistral",
+  "together",
+  "cerebras",
+  "fireworks",
+  "minimax",
+  "minimax-cn",
+  "moonshotai",
+  "moonshotai-cn",
+  "baseten",
+  "huggingface",
+  "nvidia",
+  "kimi-coding",
+  "meta",
+  "vercel-ai-gateway",
+  "github-copilot",
+  "zai",
+  "zai-coding-cn",
+] as const;
+
+export const llmProviderSchema = z.enum(llmProviderIds);
+export type LlmProvider = z.infer<typeof llmProviderSchema>;
 
 export const llmAuthKindSchema = z.enum(["api-key", "oauth"]);
 export type LlmAuthKind = z.infer<typeof llmAuthKindSchema>;
 
+type LlmProviderAuthConfig =
+  | { readonly kind: "api-key" }
+  | { readonly kind: "oauth"; readonly label: string; readonly callbackPort?: number }
+  | { readonly kind: "both"; readonly label: string; readonly callbackPort?: number };
+
+/**
+ * Auth capabilities for every LLM provider the daemon can proxy. `callbackPort` is the fixed
+ * loopback port the provider's browser redirect lands on, which the CLI forwards over SSH during
+ * OAuth login. Device-code logins and logins with a paste fallback need no port.
+ */
+const llmProviderCatalog = {
+  anthropic: {
+    kind: "both",
+    label: "Claude Pro/Max",
+    callbackPort: 53692,
+  },
+  openai: { kind: "api-key" },
+  "openai-codex": {
+    kind: "oauth",
+    label: "ChatGPT Plus/Pro (Codex)",
+    callbackPort: 1455,
+  },
+  google: { kind: "api-key" },
+  openrouter: {
+    kind: "both",
+    label: "OpenRouter sign-in (pay per token)",
+  },
+  opencode: { kind: "api-key" },
+  "opencode-go": { kind: "api-key" },
+  xai: {
+    kind: "both",
+    label: "SuperGrok or X Premium",
+  },
+  deepseek: { kind: "api-key" },
+  groq: { kind: "api-key" },
+  mistral: { kind: "api-key" },
+  together: { kind: "api-key" },
+  cerebras: { kind: "api-key" },
+  fireworks: { kind: "api-key" },
+  minimax: { kind: "api-key" },
+  "minimax-cn": { kind: "api-key" },
+  moonshotai: { kind: "api-key" },
+  "moonshotai-cn": { kind: "api-key" },
+  baseten: { kind: "api-key" },
+  huggingface: { kind: "api-key" },
+  nvidia: { kind: "api-key" },
+  "kimi-coding": {
+    kind: "both",
+    label: "Kimi Code membership",
+  },
+  meta: {
+    kind: "both",
+    label: "Meta Muse subscription",
+  },
+  "vercel-ai-gateway": { kind: "api-key" },
+  "github-copilot": {
+    kind: "both",
+    label: "GitHub Copilot",
+  },
+  zai: { kind: "api-key" },
+  "zai-coding-cn": { kind: "api-key" },
+} as const satisfies Record<LlmProvider, LlmProviderAuthConfig>;
+
+export type LlmOAuthProviderId = {
+  [K in LlmProvider]: (typeof llmProviderCatalog)[K]["kind"] extends "api-key" ? never : K;
+}[LlmProvider];
+
 export interface LlmOAuthProvider {
-  readonly provider: LlmProvider;
+  readonly provider: LlmOAuthProviderId;
   readonly label: string;
-  readonly acceptsApiKey: boolean;
   readonly callbackPort?: number;
 }
 
-/**
- * Providers whose OAuth login the daemon can run. `callbackPort` is the fixed loopback port the
- * provider's browser redirect lands on, which the CLI forwards over SSH during login. Device-code
- * logins and logins with a paste fallback need no port.
- */
-export const llmOAuthProviders: readonly LlmOAuthProvider[] = [
-  {
-    provider: llmProviderSchema.parse("anthropic"),
-    label: "Claude Pro/Max",
-    acceptsApiKey: true,
-    callbackPort: 53692,
-  },
-  {
-    provider: llmProviderSchema.parse("openai-codex"),
-    label: "ChatGPT Plus/Pro (Codex)",
-    acceptsApiKey: false,
-    callbackPort: 1455,
-  },
-  {
-    provider: llmProviderSchema.parse("github-copilot"),
-    label: "GitHub Copilot",
-    acceptsApiKey: true,
-  },
-  {
-    provider: llmProviderSchema.parse("xai"),
-    label: "SuperGrok or X Premium",
-    acceptsApiKey: true,
-  },
-  {
-    provider: llmProviderSchema.parse("kimi-coding"),
-    label: "Kimi Code membership",
-    acceptsApiKey: true,
-  },
-  {
-    provider: llmProviderSchema.parse("meta"),
-    label: "Meta Muse subscription",
-    acceptsApiKey: true,
-  },
-  {
-    provider: llmProviderSchema.parse("openrouter"),
-    label: "OpenRouter sign-in (pay per token)",
-    acceptsApiKey: true,
-  },
-];
+function isLlmOAuthProvider(provider: LlmProvider): provider is LlmOAuthProviderId {
+  return llmProviderCatalog[provider].kind !== "api-key";
+}
 
-export function getLlmOAuthProvider(provider: string): LlmOAuthProvider | undefined {
+export const llmOAuthProviders: readonly LlmOAuthProvider[] = llmProviderIds.flatMap((provider) => {
+  if (!isLlmOAuthProvider(provider)) {
+    return [];
+  }
+
+  const config = llmProviderCatalog[provider];
+
+  return [
+    {
+      provider,
+      label: config.label,
+      ...("callbackPort" in config ? { callbackPort: config.callbackPort } : {}),
+    },
+  ];
+});
+
+export function getLlmOAuthProvider(provider: LlmProvider): LlmOAuthProvider | undefined {
   return llmOAuthProviders.find((entry) => entry.provider === provider);
 }
 
-export function supportedLlmAuthKinds(provider: string): readonly LlmAuthKind[] {
-  const entry = getLlmOAuthProvider(provider);
+export function supportedLlmAuthKinds(provider: LlmProvider): readonly LlmAuthKind[] {
+  const config: LlmProviderAuthConfig = llmProviderCatalog[provider];
 
-  if (entry === undefined) {
-    return ["api-key"];
+  switch (config.kind) {
+    case "api-key":
+      return ["api-key"];
+    case "oauth":
+      return ["oauth"];
+    case "both":
+      return ["oauth", "api-key"];
+    default: {
+      const exhaustive: never = config;
+
+      return exhaustive;
+    }
   }
-
-  return entry.acceptsApiKey ? ["oauth", "api-key"] : ["oauth"];
 }
 
 /**

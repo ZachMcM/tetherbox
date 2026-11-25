@@ -2,6 +2,7 @@ import * as p from "@clack/prompts";
 import {
   getLlmOAuthProvider,
   llmOAuthStatusListSchema,
+  llmProviderIds,
   llmProviderSchema,
   modelRefSchema,
   supportedLlmAuthKinds,
@@ -15,7 +16,7 @@ import pc from "picocolors";
 import { captureDaemonCommand, runDaemonCommand } from "./remote.ts";
 import { ensureLlmProviderSecret, setLlmProviderSecret } from "./secrets.ts";
 
-function describeAuthKind(provider: string, kind: LlmAuthKind): string {
+function describeAuthKind(provider: LlmProvider, kind: LlmAuthKind): string {
   switch (kind) {
     case "api-key":
       return "API key";
@@ -36,7 +37,7 @@ export async function promptLlmProvider(): Promise<LlmProvider | undefined> {
     validate: (value) =>
       llmProviderSchema.safeParse(value?.trim()).success
         ? undefined
-        : "Use a lowercase provider slug such as openai or openai-codex",
+        : `Unsupported provider. Supported: ${llmProviderIds.join(", ")}`,
   });
 
   return p.isCancel(rawProvider) ? undefined : llmProviderSchema.parse(rawProvider.trim());

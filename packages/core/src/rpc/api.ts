@@ -3,14 +3,13 @@ import { Hono, type Context } from "hono";
 import { z } from "zod";
 import {
   entryNameSchema,
-  llmProviderSchema,
   secretKeySchema,
   type EntryName,
-  type LlmProvider,
   type ProfileId,
   type RunId,
   type SecretKey,
 } from "../ids.ts";
+import { llmProviderSchema, type LlmProvider } from "../llm-auth.ts";
 import {
   registerPollJobInputSchema,
   type RegisteredPollJob,

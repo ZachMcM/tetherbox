@@ -14,7 +14,13 @@ import { metaProvider } from "@earendil-works/pi-ai/providers/meta";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
 import { xaiProvider } from "@earendil-works/pi-ai/providers/xai";
-import { llmProviderSchema, type LlmProvider, type TurnModelAuth } from "@tetherbox/core";
+import {
+  llmOAuthProviders,
+  llmProviderSchema,
+  type LlmOAuthProviderId,
+  type LlmProvider,
+  type TurnModelAuth,
+} from "@tetherbox/core";
 import { z } from "zod";
 
 const REFRESH_MARGIN_MS = 60_000;
@@ -83,7 +89,7 @@ function tokenFrom(auth: ModelAuth): string | undefined {
  * the request to the account's endpoint.
  */
 const OAUTH_FLOW_SOURCES: Readonly<
-  Record<string, readonly [() => { auth: { oauth?: OAuthAuth } }, AgentAuthFor]>
+  Record<LlmOAuthProviderId, readonly [() => { auth: { oauth?: OAuthAuth } }, AgentAuthFor]>
 > = {
   anthropic: [anthropicProvider, placeholder("sk-ant-oat01-tetherbox")],
   "openai-codex": [openaiCodexProvider, codexAgentAuth],
@@ -94,9 +100,10 @@ const OAUTH_FLOW_SOURCES: Readonly<
   openrouter: [openrouterProvider, placeholder("tetherbox-placeholder")],
 };
 
-function createOAuthFlows(): ReadonlyMap<string, OAuthFlow> {
-  return new Map(
-    Object.entries(OAUTH_FLOW_SOURCES).map(([provider, [createProvider, agentAuth]]) => {
+function createOAuthFlows(): ReadonlyMap<LlmProvider, OAuthFlow> {
+  return new Map<LlmProvider, OAuthFlow>(
+    llmOAuthProviders.map(({ provider }) => {
+      const [createProvider, agentAuth] = OAUTH_FLOW_SOURCES[provider];
       const { oauth } = createProvider().auth;
 
       if (oauth === undefined) {

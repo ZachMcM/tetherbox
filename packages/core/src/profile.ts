@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { llmProviderSchema, secretKeySchema } from "./ids.ts";
-import { llmAuthKindSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
+import { secretKeySchema } from "./ids.ts";
+import { llmAuthKindSchema, llmProviderSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
 
 export const modelRefSchema = z
   .object({

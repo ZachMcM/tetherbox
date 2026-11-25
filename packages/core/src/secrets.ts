@@ -1,5 +1,6 @@
 import { z } from "zod";
-import { llmProviderSchema, secretKeySchema } from "./ids.ts";
+import { secretKeySchema } from "./ids.ts";
+import { llmProviderSchema } from "./llm-auth.ts";
 
 export const hostnameSchema = z
   .string()

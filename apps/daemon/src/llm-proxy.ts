@@ -42,7 +42,7 @@ const STRIPPED_RESPONSE_HEADERS = [
   "content-length",
 ] as const;
 
-const LLM_UPSTREAMS: Readonly<Record<string, LlmUpstream>> = {
+const LLM_UPSTREAMS: Readonly<Record<LlmProvider, LlmUpstream>> = {
   anthropic: { origin: "https://api.anthropic.com", auth: "x-api-key" },
   openai: { origin: "https://api.openai.com", auth: "bearer" },
   "openai-codex": { origin: "https://chatgpt.com", pathPrefix: "/backend-api", auth: "bearer" },
@@ -246,11 +246,6 @@ export async function proxyLlm(
   { provider, authKind, request }: ProxyLlmInput,
 ): Promise<Response> {
   const catalogUpstream = LLM_UPSTREAMS[provider];
-
-  if (catalogUpstream === undefined) {
-    return fail(404, `unsupported LLM provider "${provider}"`);
-  }
-
   const pathError = buildTargetUrl(request.url, provider, catalogUpstream);
 
   if (pathError instanceof Response) {
