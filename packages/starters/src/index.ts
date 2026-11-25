@@ -172,7 +172,8 @@ export const starters = [
       {
         key: "target",
         kind: "string",
-        prompt: "Rex remote target (Tailscale host or ssh://user@host)",
+        prompt:
+          "Rex remote target (Tailscale MagicDNS host from `tailscale status` or ssh://user@host)",
         placeholder: "workstation.tailnet.ts.net",
       },
     ],
@@ -194,7 +195,7 @@ export const starters = [
       {
         key: "host",
         kind: "host-port",
-        prompt: "Paseo daemon host:port over Tailscale",
+        prompt: "Paseo daemon host:port (Tailscale MagicDNS host from `tailscale status`)",
         placeholder: "workstation.tailnet.ts.net:6767",
       },
     ],
@@ -213,7 +214,7 @@ export const starters = [
       {
         key: "serverUrl",
         kind: "url",
-        prompt: "OpenCode server URL over Tailscale",
+        prompt: "OpenCode server URL (Tailscale MagicDNS host from `tailscale status`)",
         placeholder: "http://workstation.tailnet.ts.net:4096",
       },
     ],
@@ -244,15 +245,15 @@ export const starters = [
       {
         key: "endpointUrl",
         kind: "url",
-        prompt: "T3 Code /mcp endpoint URL",
-        placeholder: "https://workstation.tailnet.ts.net/mcp",
+        prompt: "T3 Code /mcp endpoint URL (from 'Use T3 Code in another app (MCP)')",
+        placeholder: "https://<environment-host>/mcp",
       },
     ],
     secrets: [
       promptDomainProxySecret({
         key: "T3CODE_TOKEN",
         domainPrompt: "Hostname for your T3 Code /mcp endpoint",
-        domainPlaceholder: "workstation.tailnet.ts.net",
+        domainPlaceholder: "<environment-host>",
         fromConfigUrl: { starterId: "t3code", key: "endpointUrl" },
       }),
     ],
