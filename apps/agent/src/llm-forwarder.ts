@@ -1,4 +1,4 @@
-import { connect, createServer, type AddressInfo, type Server } from "node:net";
+import { connect, createServer, type AddressInfo, type Server, type Socket } from "node:net";
 
 export interface LlmForwarder {
   baseUrl(provider: string, upstreamBaseUrl?: string): string;
@@ -24,12 +24,29 @@ function basePathFor(upstreamBaseUrl: string | undefined): string {
  * Unix socket. Requests still need the run token, which the session sends as its API key.
  */
 export async function startLlmForwarder(socketPath: string): Promise<LlmForwarder> {
+  const sockets = new Set<Socket>();
   const server: Server = createServer((client) => {
     const upstream = connect(socketPath);
 
+    sockets.add(client);
+    sockets.add(upstream);
     client.pipe(upstream).pipe(client);
-    client.on("error", () => upstream.destroy());
-    upstream.on("error", () => client.destroy());
+
+    const teardown = () => {
+      client.destroy();
+      upstream.destroy();
+    };
+
+    client.once("error", teardown);
+    upstream.once("error", teardown);
+    client.once("close", () => {
+      sockets.delete(client);
+      upstream.destroy();
+    });
+    upstream.once("close", () => {
+      sockets.delete(upstream);
+      client.destroy();
+    });
   });
 
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
@@ -39,6 +56,13 @@ export async function startLlmForwarder(socketPath: string): Promise<LlmForwarde
   return {
     baseUrl: (provider, upstreamBaseUrl) =>
       `http://127.0.0.1:${port}/llm/${encodeURIComponent(provider)}${basePathFor(upstreamBaseUrl)}`,
-    close: () => new Promise((resolve) => server.close(() => resolve())),
+    close: () =>
+      new Promise((resolve) => {
+        server.close(() => resolve());
+
+        for (const socket of sockets) {
+          socket.destroy();
+        }
+      }),
   };
 }

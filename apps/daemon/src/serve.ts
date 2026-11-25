@@ -124,14 +124,19 @@ export async function serveDaemon(config: DaemonConfig, secrets: SecretStore): P
 
   process.on("SIGHUP", onReload);
 
-  const shutdown = async () => {
-    process.off("SIGHUP", onReload);
-    scheduler.stopAll();
-    poller.stopAll();
-    await slack.stop();
-    internal.close();
-    publicServer.close();
-    await removePidFile(config.dataDir);
+  let shutdownPromise: Promise<void> | undefined;
+  const shutdown = () => {
+    shutdownPromise ??= (async () => {
+      process.off("SIGHUP", onReload);
+      scheduler.stopAll();
+      poller.stopAll();
+      await slack.stop();
+      internal.close();
+      publicServer.close();
+      await removePidFile(config.dataDir);
+    })();
+
+    return shutdownPromise;
   };
 
   process.once("SIGTERM", () => void shutdown());

@@ -31,14 +31,13 @@ export function registerAuth(program: Command): void {
     .argument("[args...]", "extra flags forwarded to the login command after --")
     .action(async (starterId: string | undefined, extraArgs: string[]) => {
       const { sshAlias } = await readConfig();
-      let entry: StarterCliAuthEntry | undefined;
+      let entry: StarterCliAuthEntry;
 
       if (starterId === undefined) {
-        const candidates = listCliAuthStarters();
         const picked = await p.select({
           message: "Select a CLI starter to authenticate",
-          options: candidates.map((candidate) => ({
-            value: candidate.starterId,
+          options: listCliAuthStarters().map((candidate) => ({
+            value: candidate,
             label: candidate.starterId,
             hint: candidate.cliAuth.loginCommand.join(" "),
           })),
@@ -50,18 +49,20 @@ export function registerAuth(program: Command): void {
           return;
         }
 
-        entry = resolveCliAuthEntry(picked);
+        entry = picked;
       } else {
-        entry = resolveCliAuthEntry(starterId);
-      }
+        const resolved = resolveCliAuthEntry(starterId);
 
-      if (entry === undefined) {
-        console.error(
-          `Unknown CLI auth starter "${starterId ?? ""}". Supported starters: ${supportedStarterIds()}. For custom CLIs, run: tetherbox auth exec -- <command...>`,
-        );
-        process.exitCode = 1;
+        if (resolved === undefined) {
+          console.error(
+            `Unknown CLI auth starter "${starterId}". Supported starters: ${supportedStarterIds()}. For custom CLIs, run: tetherbox auth exec -- <command...>`,
+          );
+          process.exitCode = 1;
 
-        return;
+          return;
+        }
+
+        entry = resolved;
       }
 
       process.exitCode = await runStarterLogin({ sshAlias, entry, extraArgs });
@@ -73,23 +74,26 @@ export function registerAuth(program: Command): void {
     .argument("[starter]", "limit status check to one starter")
     .action(async (starterId: string | undefined) => {
       const { sshAlias } = await readConfig();
-      const entries =
-        starterId === undefined ? listCliAuthStarters() : [resolveCliAuthEntry(starterId)];
+      let entries: StarterCliAuthEntry[];
 
-      if (entries.some((entry) => entry === undefined)) {
-        console.error(
-          `Unknown CLI auth starter "${starterId ?? ""}". Supported starters: ${supportedStarterIds()}.`,
-        );
-        process.exitCode = 1;
+      if (starterId === undefined) {
+        entries = listCliAuthStarters();
+      } else {
+        const resolved = resolveCliAuthEntry(starterId);
 
-        return;
+        if (resolved === undefined) {
+          console.error(
+            `Unknown CLI auth starter "${starterId}". Supported starters: ${supportedStarterIds()}.`,
+          );
+          process.exitCode = 1;
+
+          return;
+        }
+
+        entries = [resolved];
       }
 
       for (const entry of entries) {
-        if (entry === undefined) {
-          continue;
-        }
-
         const status = await inspectCliAuth(sshAlias, entry.cliAuth);
 
         console.log(`${pc.bold(entry.starterId)}\t${formatCliAuthStatus(status)}`);

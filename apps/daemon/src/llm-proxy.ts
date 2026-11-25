@@ -1,22 +1,13 @@
 import { RUN_TOKEN_HEADER, SECRET_KEY_HEADER, type LlmProvider } from "@tetherbox/core";
 import type { SecretStore } from "./secret-store.ts";
 
-type RequestAuthSlot = "bearer" | "x-api-key" | "x-goog-api-key";
+type AuthScheme = "bearer" | "x-api-key" | "x-goog-api-key";
+type LlmAuth = AuthScheme | "match-request";
 
-export type LlmAuth =
-  | { readonly kind: "bearer" }
-  | { readonly kind: "header"; readonly name: string }
-  | { readonly kind: "match-request"; readonly fallback: RequestAuthSlot };
-
-export interface LlmUpstream {
+interface LlmUpstream {
   readonly origin: `https://${string}`;
   readonly pathPrefix?: `/${string}`;
   readonly auth: LlmAuth;
-}
-
-export interface ProxyLlmOptions {
-  readonly fetch?: typeof fetch;
-  readonly upstreams?: Readonly<Record<string, LlmUpstream>>;
 }
 
 const HOP_BY_HOP_HEADERS = [
@@ -45,61 +36,59 @@ const STRIPPED_RESPONSE_HEADERS = [
   "content-length",
 ] as const;
 
-const BEARER: LlmAuth = { kind: "bearer" };
-const ANTHROPIC_KEY: LlmAuth = { kind: "header", name: "x-api-key" };
-const GOOGLE_KEY: LlmAuth = { kind: "header", name: "x-goog-api-key" };
-const MATCH_REQUEST_BEARER: LlmAuth = { kind: "match-request", fallback: "bearer" };
-
-export const LLM_UPSTREAMS: Readonly<Record<string, LlmUpstream>> = {
-  anthropic: { origin: "https://api.anthropic.com", auth: ANTHROPIC_KEY },
-  openai: { origin: "https://api.openai.com", auth: BEARER },
-  "openai-codex": { origin: "https://chatgpt.com", pathPrefix: "/backend-api", auth: BEARER },
-  google: { origin: "https://generativelanguage.googleapis.com", auth: GOOGLE_KEY },
-  openrouter: { origin: "https://openrouter.ai", pathPrefix: "/api", auth: MATCH_REQUEST_BEARER },
-  opencode: { origin: "https://opencode.ai", pathPrefix: "/inference", auth: MATCH_REQUEST_BEARER },
+const LLM_UPSTREAMS: Readonly<Record<string, LlmUpstream>> = {
+  anthropic: { origin: "https://api.anthropic.com", auth: "x-api-key" },
+  openai: { origin: "https://api.openai.com", auth: "bearer" },
+  google: { origin: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key" },
+  openrouter: { origin: "https://openrouter.ai", pathPrefix: "/api", auth: "match-request" },
+  opencode: { origin: "https://opencode.ai", pathPrefix: "/inference", auth: "match-request" },
   "opencode-go": {
     origin: "https://opencode.ai",
     pathPrefix: "/inference/go",
-    auth: MATCH_REQUEST_BEARER,
+    auth: "match-request",
   },
-  xai: { origin: "https://api.x.ai", auth: BEARER },
-  deepseek: { origin: "https://api.deepseek.com", auth: BEARER },
-  groq: { origin: "https://api.groq.com", pathPrefix: "/openai", auth: BEARER },
-  mistral: { origin: "https://api.mistral.ai", auth: BEARER },
-  together: { origin: "https://api.together.ai", auth: BEARER },
-  cerebras: { origin: "https://api.cerebras.ai", auth: BEARER },
+  xai: { origin: "https://api.x.ai", auth: "bearer" },
+  deepseek: { origin: "https://api.deepseek.com", auth: "bearer" },
+  groq: { origin: "https://api.groq.com", pathPrefix: "/openai", auth: "bearer" },
+  mistral: { origin: "https://api.mistral.ai", auth: "bearer" },
+  together: { origin: "https://api.together.ai", auth: "bearer" },
+  cerebras: { origin: "https://api.cerebras.ai", auth: "bearer" },
   fireworks: {
     origin: "https://api.fireworks.ai",
     pathPrefix: "/inference",
-    auth: MATCH_REQUEST_BEARER,
+    auth: "match-request",
   },
-  minimax: { origin: "https://api.minimax.io", pathPrefix: "/anthropic", auth: ANTHROPIC_KEY },
+  minimax: { origin: "https://api.minimax.io", pathPrefix: "/anthropic", auth: "x-api-key" },
   "minimax-cn": {
     origin: "https://api.minimaxi.com",
     pathPrefix: "/anthropic",
-    auth: ANTHROPIC_KEY,
+    auth: "x-api-key",
   },
-  moonshotai: { origin: "https://api.moonshot.ai", auth: BEARER },
-  "moonshotai-cn": { origin: "https://api.moonshot.cn", auth: BEARER },
-  baseten: { origin: "https://inference.baseten.co", auth: BEARER },
-  huggingface: { origin: "https://router.huggingface.co", auth: BEARER },
-  nvidia: { origin: "https://integrate.api.nvidia.com", auth: BEARER },
-  "kimi-coding": { origin: "https://api.kimi.com", pathPrefix: "/coding", auth: BEARER },
-  meta: { origin: "https://api.meta.ai", auth: BEARER },
-  "vercel-ai-gateway": { origin: "https://ai-gateway.vercel.sh", auth: MATCH_REQUEST_BEARER },
+  moonshotai: { origin: "https://api.moonshot.ai", auth: "bearer" },
+  "moonshotai-cn": { origin: "https://api.moonshot.cn", auth: "bearer" },
+  baseten: { origin: "https://inference.baseten.co", auth: "bearer" },
+  huggingface: { origin: "https://router.huggingface.co", auth: "bearer" },
+  nvidia: { origin: "https://integrate.api.nvidia.com", auth: "bearer" },
+  "kimi-coding": { origin: "https://api.kimi.com", pathPrefix: "/coding", auth: "bearer" },
+  meta: { origin: "https://api.meta.ai", auth: "bearer" },
+  "vercel-ai-gateway": { origin: "https://ai-gateway.vercel.sh", auth: "match-request" },
   "github-copilot": {
     origin: "https://api.individual.githubcopilot.com",
-    auth: MATCH_REQUEST_BEARER,
+    auth: "match-request",
   },
-  zai: { origin: "https://api.z.ai", pathPrefix: "/api/coding", auth: BEARER },
-  "zai-coding-cn": { origin: "https://open.bigmodel.cn", pathPrefix: "/api/coding", auth: BEARER },
+  zai: { origin: "https://api.z.ai", pathPrefix: "/api/coding", auth: "bearer" },
+  "zai-coding-cn": {
+    origin: "https://open.bigmodel.cn",
+    pathPrefix: "/api/coding",
+    auth: "bearer",
+  },
 };
 
 function fail(status: number, error: string): Response {
   return Response.json({ error }, { status });
 }
 
-function detectRequestAuthSlot(headers: Headers, fallback: RequestAuthSlot): RequestAuthSlot {
+function detectRequestAuth(headers: Headers): AuthScheme {
   if (headers.has("x-api-key")) {
     return "x-api-key";
   }
@@ -108,28 +97,7 @@ function detectRequestAuthSlot(headers: Headers, fallback: RequestAuthSlot): Req
     return "x-goog-api-key";
   }
 
-  if (headers.has("authorization")) {
-    return "bearer";
-  }
-
-  return fallback;
-}
-
-function applySlot(headers: Headers, slot: RequestAuthSlot, secretValue: string): void {
-  switch (slot) {
-    case "bearer":
-      headers.set("authorization", `Bearer ${secretValue}`);
-      break;
-    case "x-api-key":
-    case "x-goog-api-key":
-      headers.set(slot, secretValue);
-      break;
-    default: {
-      const exhaustive: never = slot;
-
-      return exhaustive;
-    }
-  }
+  return "bearer";
 }
 
 function applyAuth(
@@ -138,18 +106,18 @@ function applyAuth(
   originalHeaders: Headers,
   secretValue: string,
 ): void {
-  switch (auth.kind) {
+  const scheme = auth === "match-request" ? detectRequestAuth(originalHeaders) : auth;
+
+  switch (scheme) {
     case "bearer":
       headers.set("authorization", `Bearer ${secretValue}`);
       break;
-    case "header":
-      headers.set(auth.name, secretValue);
-      break;
-    case "match-request":
-      applySlot(headers, detectRequestAuthSlot(originalHeaders, auth.fallback), secretValue);
+    case "x-api-key":
+    case "x-goog-api-key":
+      headers.set(scheme, secretValue);
       break;
     default: {
-      const exhaustive: never = auth;
+      const exhaustive: never = scheme;
 
       return exhaustive;
     }
@@ -166,9 +134,9 @@ function buildTargetUrl(
   upstream: LlmUpstream,
 ): URL | Response {
   const url = new URL(requestUrl);
-  const routePrefix = `/llm/${provider}`;
+  const routePrefix: `/${string}` = `/llm/${provider}`;
 
-  if (url.pathname !== routePrefix && !url.pathname.startsWith(`${routePrefix}/`)) {
+  if (!matchesPathPrefix(url.pathname, routePrefix)) {
     return fail(400, `expected ${routePrefix}/<path>`);
   }
 
@@ -207,10 +175,8 @@ export async function proxyLlm(
   store: SecretStore,
   provider: LlmProvider,
   request: Request,
-  options: ProxyLlmOptions = {},
 ): Promise<Response> {
-  const upstreams = options.upstreams ?? LLM_UPSTREAMS;
-  const upstream = upstreams[provider];
+  const upstream = LLM_UPSTREAMS[provider];
 
   if (upstream === undefined) {
     return fail(404, `unsupported LLM provider "${provider}"`);
@@ -239,11 +205,10 @@ export async function proxyLlm(
   applyAuth(headers, upstream.auth, request.headers, secret.value);
 
   const hasBody = request.body !== null && request.method !== "GET" && request.method !== "HEAD";
-  const fetchFn = options.fetch ?? fetch;
   let response: Response;
 
   try {
-    response = await fetchFn(target, {
+    response = await fetch(target, {
       method: request.method,
       headers,
       redirect: "manual",

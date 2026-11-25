@@ -120,13 +120,33 @@ export async function loadProfile(id: ProfileId, dir: string): Promise<ProfileLo
  */
 export class ProfileRegistry {
   readonly #profilesDir: string;
-  readonly #profiles = new Map<ProfileId, LoadedProfile>();
+  #profiles = new Map<ProfileId, LoadedProfile>();
+  #queue: Promise<void> = Promise.resolve();
 
   constructor(profilesDir: string) {
     this.#profilesDir = profilesDir;
   }
 
-  async loadAll(): Promise<ProfileIssue[]> {
+  #serialize<T>(task: () => Promise<T>): Promise<T> {
+    const next = this.#queue.then(task, task);
+
+    this.#queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
+
+    return next;
+  }
+
+  loadAll(): Promise<ProfileIssue[]> {
+    return this.#serialize(() => this.#loadAll());
+  }
+
+  reload(id: ProfileId): Promise<ProfileLoad> {
+    return this.#serialize(() => this.#reload(id));
+  }
+
+  async #loadAll(): Promise<ProfileIssue[]> {
     const issues: ProfileIssue[] = [];
     let dirs;
 
@@ -134,7 +154,7 @@ export class ProfileRegistry {
       dirs = await readdir(this.#profilesDir, { withFileTypes: true });
     } catch (error) {
       if (isMissing(error)) {
-        this.#profiles.clear();
+        this.#profiles = new Map();
 
         return issues;
       }
@@ -142,9 +162,11 @@ export class ProfileRegistry {
       throw error;
     }
 
-    this.#profiles.clear();
+    const candidates: { id: ProfileId; load: ProfileLoad }[] = [];
 
-    for (const entry of dirs.filter((dirent) => dirent.isDirectory())) {
+    for (const entry of dirs
+      .filter((dirent) => dirent.isDirectory())
+      .toSorted((a, b) => a.name.localeCompare(b.name))) {
       const id = profileIdSchema.safeParse(entry.name);
 
       if (!id.success) {
@@ -152,15 +174,56 @@ export class ProfileRegistry {
         continue;
       }
 
-      const load = await this.reload(id.data);
+      const load = await loadProfile(id.data, join(this.#profilesDir, id.data));
+
+      candidates.push({ id: id.data, load });
+    }
+
+    const next = new Map<ProfileId, LoadedProfile>();
+    const channels = new Map<string, ProfileId>();
+    const failedIds: ProfileId[] = [];
+
+    for (const { id, load } of candidates) {
+      if (load.kind === "invalid") {
+        issues.push(...load.issues);
+        failedIds.push(id);
+        continue;
+      }
+
+      const owner = channels.get(load.profile.config.slackChannelId);
+
+      if (owner !== undefined) {
+        issues.push(
+          {
+            file: join(load.profile.dir, profileLayout.config),
+            message: `Slack channel ${load.profile.config.slackChannelId} already belongs to profile ${owner}`,
+          },
+          ...load.issues,
+        );
+        failedIds.push(id);
+        continue;
+      }
 
       issues.push(...load.issues);
+      next.set(id, load.profile);
+      channels.set(load.profile.config.slackChannelId, id);
     }
+
+    for (const id of failedIds) {
+      const previous = this.#profiles.get(id);
+
+      if (previous !== undefined && !channels.has(previous.config.slackChannelId)) {
+        next.set(id, previous);
+        channels.set(previous.config.slackChannelId, id);
+      }
+    }
+
+    this.#profiles = next;
 
     return issues;
   }
 
-  async reload(id: ProfileId): Promise<ProfileLoad> {
+  async #reload(id: ProfileId): Promise<ProfileLoad> {
     const load = await loadProfile(id, join(this.#profilesDir, id));
 
     if (load.kind === "invalid") {

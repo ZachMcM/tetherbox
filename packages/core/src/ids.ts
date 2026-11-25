@@ -19,6 +19,6 @@ export type SecretKey = z.infer<typeof secretKeySchema>;
 
 export const llmProviderSchema = z
   .string()
-  .regex(/^[a-z0-9][a-z0-9_-]{0,62}$/)
+  .regex(/^[a-z][a-z0-9_-]{0,62}$/)
   .brand<"LlmProvider">();
 export type LlmProvider = z.infer<typeof llmProviderSchema>;

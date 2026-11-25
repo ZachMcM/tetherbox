@@ -13,7 +13,7 @@ export interface RemoteOptions {
   interactive?: boolean;
 }
 
-export interface CaptureResult {
+interface CaptureResult {
   code: number;
   stdout: string;
   stderr: string;
@@ -36,7 +36,7 @@ export function runRemote(
   args: readonly string[],
   options: RemoteOptions = {},
 ): Promise<number> {
-  const sshArgs = options.interactive ? ["-t", alias] : [alias];
+  const sshArgs = options.interactive ? ["-t", "--", alias] : ["--", alias];
   const child = spawn("ssh", [...sshArgs, ...args.map(shellQuote)], {
     stdio: [options.input === undefined ? "inherit" : "pipe", "inherit", "inherit"],
   });
@@ -51,25 +51,15 @@ export function runRemote(
   });
 }
 
-export function captureRemote(
-  alias: string,
-  args: readonly string[],
-  options: Pick<RemoteOptions, "input"> = {},
-): Promise<CaptureResult> {
-  const child = spawn("ssh", [alias, ...args.map(shellQuote)], {
-    stdio: ["pipe", "pipe", "pipe"],
+function captureRemote(alias: string, args: readonly string[]): Promise<CaptureResult> {
+  const child = spawn("ssh", ["--", alias, ...args.map(shellQuote)], {
+    stdio: ["ignore", "pipe", "pipe"],
   });
   const stdout: Buffer[] = [];
   const stderr: Buffer[] = [];
 
   child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
   child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
-
-  if (options.input !== undefined) {
-    child.stdin.end(options.input);
-  } else {
-    child.stdin.end();
-  }
 
   return new Promise((resolve, reject) => {
     child.once("error", reject);
@@ -91,12 +81,8 @@ export function runDaemonCommand(
   return runRemote(alias, daemonCommandArgs(args), options);
 }
 
-export function captureDaemonCommand(
-  alias: string,
-  args: readonly string[],
-  options: Pick<RemoteOptions, "input"> = {},
-) {
-  return captureRemote(alias, daemonCommandArgs(args), options);
+export function captureDaemonCommand(alias: string, args: readonly string[]) {
+  return captureRemote(alias, daemonCommandArgs(args));
 }
 
 export function runAgentCommand(
@@ -107,10 +93,6 @@ export function runAgentCommand(
   return runRemote(alias, agentCommandArgs(args, !options.interactive), options);
 }
 
-export function captureAgentCommand(
-  alias: string,
-  args: readonly string[],
-  options: Pick<RemoteOptions, "input"> = {},
-) {
-  return captureRemote(alias, agentCommandArgs(args, true), options);
+export function captureAgentCommand(alias: string, args: readonly string[]) {
+  return captureRemote(alias, agentCommandArgs(args, true));
 }

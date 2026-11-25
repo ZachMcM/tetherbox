@@ -13,7 +13,7 @@ import {
   secretKeySchema,
   type SecretBinding,
 } from "@tetherbox/core";
-import { getStarter, templatesDir, type Starter } from "@tetherbox/starters";
+import { resolveStarters, templatesDir } from "@tetherbox/starters";
 import type { DaemonConfig } from "./config.ts";
 import { signalDaemonReload } from "./pid.ts";
 import { ProfileRegistry } from "./profiles.ts";
@@ -29,28 +29,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function resolveStarters(rawIds: readonly string[]): Starter[] {
-  const seen = new Set<string>();
-  const resolved: Starter[] = [];
-
-  for (const id of rawIds) {
-    if (seen.has(id)) {
-      continue;
-    }
-
-    const starter = getStarter(id);
-
-    if (starter === undefined) {
-      throw new Error(`unknown starter "${id}"`);
-    }
-
-    seen.add(id);
-    resolved.push(starter);
-  }
-
-  return resolved;
 }
 
 function formatBinding(binding: SecretBinding): string {

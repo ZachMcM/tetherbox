@@ -133,29 +133,39 @@ export function getStarter(id: string): Starter | undefined {
   return startersById.get(id);
 }
 
-export function listCliAuthStarters(): StarterCliAuthEntry[] {
-  const entries: StarterCliAuthEntry[] = [];
-
-  for (const starter of startersById.values()) {
-    if (starter.cliAuth !== undefined) {
-      entries.push({ starterId: starter.id, cliAuth: starter.cliAuth });
-    }
-  }
-
-  return entries;
-}
-
-export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
-  const seen = new Set<SecretKey>();
-  const required: StarterSecret[] = [];
+export function resolveStarters(ids: readonly string[]): Starter[] {
+  const seen = new Set<string>();
+  const resolved: Starter[] = [];
 
   for (const id of ids) {
+    if (seen.has(id)) {
+      continue;
+    }
+
     const starter = startersById.get(id);
 
     if (starter === undefined) {
       throw new Error(`unknown starter "${id}"`);
     }
 
+    seen.add(id);
+    resolved.push(starter);
+  }
+
+  return resolved;
+}
+
+export function listCliAuthStarters(): StarterCliAuthEntry[] {
+  return starters.flatMap((starter) =>
+    "cliAuth" in starter ? [{ starterId: starter.id, cliAuth: starter.cliAuth }] : [],
+  );
+}
+
+export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
+  const seen = new Set<SecretKey>();
+  const required: StarterSecret[] = [];
+
+  for (const starter of resolveStarters(ids)) {
     for (const secret of starter.secrets) {
       if (!seen.has(secret.key)) {
         seen.add(secret.key);
@@ -168,21 +178,7 @@ export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
 }
 
 export function collectStarterCliAuth(ids: readonly string[]): StarterCliAuthEntry[] {
-  const seen = new Set<string>();
-  const required: StarterCliAuthEntry[] = [];
-
-  for (const id of ids) {
-    const starter = startersById.get(id);
-
-    if (starter === undefined) {
-      throw new Error(`unknown starter "${id}"`);
-    }
-
-    if (starter.cliAuth !== undefined && !seen.has(starter.id)) {
-      seen.add(starter.id);
-      required.push({ starterId: starter.id, cliAuth: starter.cliAuth });
-    }
-  }
-
-  return required;
+  return resolveStarters(ids).flatMap((starter) =>
+    starter.cliAuth !== undefined ? [{ starterId: starter.id, cliAuth: starter.cliAuth }] : [],
+  );
 }

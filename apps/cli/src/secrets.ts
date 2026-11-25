@@ -11,7 +11,7 @@ import {
 import type { StarterSecret } from "@tetherbox/starters";
 import { captureDaemonCommand, runDaemonCommand } from "./remote.ts";
 
-export function toDaemonBindingArgs(binding: SecretBinding): string[] {
+function toDaemonBindingArgs(binding: SecretBinding): string[] {
   switch (binding.kind) {
     case "daemon":
       return [];
@@ -31,7 +31,7 @@ export function toDaemonBindingArgs(binding: SecretBinding): string[] {
   }
 }
 
-export function describeBinding(binding: SecretBinding): string {
+function describeBinding(binding: SecretBinding): string {
   switch (binding.kind) {
     case "daemon":
       return "daemon-only";
@@ -66,7 +66,7 @@ function parseBindingColumns(columns: readonly string[]): SecretBinding {
   }
 }
 
-export function parseRemoteSecrets(stdout: string): Map<SecretKey, SecretBinding> {
+function parseRemoteSecrets(stdout: string): Map<SecretKey, SecretBinding> {
   const result = new Map<SecretKey, SecretBinding>();
 
   for (const rawLine of stdout.split("\n")) {
@@ -95,15 +95,7 @@ export async function listRemoteSecrets(sshAlias: string): Promise<Map<SecretKey
   return parseRemoteSecrets(result.stdout);
 }
 
-function sameInjection(a: SecretBinding, b: SecretBinding): boolean {
-  if (a.kind !== "proxy" || b.kind !== "proxy") {
-    return false;
-  }
-
-  return formatSecretInjection(a.inject) === formatSecretInjection(b.inject);
-}
-
-export function bindingSatisfies(existing: SecretBinding, required: SecretBinding): boolean {
+function bindingSatisfies(existing: SecretBinding, required: SecretBinding): boolean {
   if (existing.kind !== required.kind) {
     return false;
   }
@@ -116,7 +108,7 @@ export function bindingSatisfies(existing: SecretBinding, required: SecretBindin
     case "proxy":
       return (
         existing.kind === "proxy" &&
-        sameInjection(existing, required) &&
+        formatSecretInjection(existing.inject) === formatSecretInjection(required.inject) &&
         required.domains.every((domain) => existing.domains.includes(domain))
       );
     default: {
@@ -134,7 +126,7 @@ function mergeRequiredBinding(
   if (
     existing?.kind === "proxy" &&
     required.kind === "proxy" &&
-    sameInjection(existing, required)
+    formatSecretInjection(existing.inject) === formatSecretInjection(required.inject)
   ) {
     const mergedDomains = [...new Set([...existing.domains, ...required.domains])];
 
@@ -183,7 +175,7 @@ export async function promptAndSetSecret({
 export interface EnsureRequiredSecretsOptions {
   sshAlias: string;
   required: readonly StarterSecret[];
-  existing?: Map<SecretKey, SecretBinding>;
+  existing: Map<SecretKey, SecretBinding>;
 }
 
 export async function ensureRequiredSecrets({
@@ -191,14 +183,8 @@ export async function ensureRequiredSecrets({
   required,
   existing,
 }: EnsureRequiredSecretsOptions): Promise<"ok" | "cancelled"> {
-  if (required.length === 0) {
-    return "ok";
-  }
-
-  const secrets = existing ?? (await listRemoteSecrets(sshAlias));
-
   for (const entry of required) {
-    const current = secrets.get(entry.key);
+    const current = existing.get(entry.key);
 
     if (current !== undefined && bindingSatisfies(current, entry.binding)) {
       continue;
@@ -225,7 +211,7 @@ export async function ensureRequiredSecrets({
       return "cancelled";
     }
 
-    secrets.set(entry.key, nextBinding);
+    existing.set(entry.key, nextBinding);
   }
 
   return "ok";
@@ -234,7 +220,7 @@ export async function ensureRequiredSecrets({
 export interface EnsureLlmProviderSecretOptions {
   sshAlias: string;
   provider: LlmProvider;
-  existing?: Map<SecretKey, SecretBinding>;
+  existing: Map<SecretKey, SecretBinding>;
 }
 
 export async function ensureLlmProviderSecret({
@@ -242,9 +228,7 @@ export async function ensureLlmProviderSecret({
   provider,
   existing,
 }: EnsureLlmProviderSecretOptions): Promise<"ok" | "cancelled"> {
-  const secrets = existing ?? (await listRemoteSecrets(sshAlias));
-
-  for (const binding of secrets.values()) {
+  for (const binding of existing.values()) {
     if (binding.kind === "llm" && binding.provider === provider) {
       return "ok";
     }
@@ -252,8 +236,15 @@ export async function ensureLlmProviderSecret({
 
   const key = secretKeySchema.parse(`${provider.toUpperCase().replaceAll("-", "_")}_API_KEY`);
   const binding: SecretBinding = { kind: "llm", provider };
+  const current = existing.get(key);
 
-  p.log.info(`No LLM credential is stored for provider "${provider}".`);
+  if (current !== undefined) {
+    p.log.warn(
+      `Secret ${key} is currently ${describeBinding(current)}; continuing will overwrite it as ${describeBinding(binding)}.`,
+    );
+  } else {
+    p.log.info(`No LLM credential is stored for provider "${provider}".`);
+  }
 
   const status = await promptAndSetSecret({
     sshAlias,
@@ -266,7 +257,7 @@ export async function ensureLlmProviderSecret({
     return "cancelled";
   }
 
-  secrets.set(key, binding);
+  existing.set(key, binding);
 
   return "ok";
 }

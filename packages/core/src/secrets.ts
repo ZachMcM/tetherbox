@@ -5,10 +5,13 @@ const hostnameSchema = z
   .string()
   .regex(/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/);
 
+const headerNameSchema = z.string().regex(/^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/);
+const queryNameSchema = z.string().regex(/^[!-~]+$/);
+
 export const secretInjectionSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("bearer") }),
-  z.object({ kind: z.literal("header"), name: z.string().min(1) }),
-  z.object({ kind: z.literal("query"), name: z.string().min(1) }),
+  z.object({ kind: z.literal("header"), name: headerNameSchema }),
+  z.object({ kind: z.literal("query"), name: queryNameSchema }),
 ]);
 export type SecretInjection = z.infer<typeof secretInjectionSchema>;
 
@@ -30,14 +33,23 @@ export type SecretKind = SecretBinding["kind"];
 export type SecretCheckResult = { exists: false } | { exists: true; kind: SecretKind };
 
 export function parseSecretInjection(spec: string): SecretInjection {
-  const [kind, name] = spec.split(":", 2);
-
-  if (kind === "bearer" && name === undefined) {
+  if (spec === "bearer") {
     return { kind: "bearer" };
   }
 
-  if ((kind === "header" || kind === "query") && name !== undefined && name !== "") {
-    return { kind, name };
+  const separator = spec.indexOf(":");
+
+  if (separator !== -1 && spec.indexOf(":", separator + 1) === -1) {
+    const kind = spec.slice(0, separator);
+    const name = spec.slice(separator + 1);
+
+    if (kind === "header" || kind === "query") {
+      const parsed = secretInjectionSchema.safeParse({ kind, name });
+
+      if (parsed.success) {
+        return parsed.data;
+      }
+    }
   }
 
   throw new Error(`invalid --inject "${spec}", expected bearer, header:<name>, or query:<name>`);

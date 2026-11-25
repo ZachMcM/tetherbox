@@ -159,19 +159,15 @@ export function registerProfiles(program: Command): void {
         return;
       }
 
-      const starterArgs = selectedStarters.flatMap((starterId) => ["--starter", starterId]);
+      const starterArgs = selectedStarters.map((starterId) => `--starter=${starterId}`);
       const code = await runDaemonCommand(sshAlias, [
         "profiles",
         "create",
         id,
-        "--name",
-        name.trim(),
-        "--channel",
-        channel.trim(),
-        "--provider",
-        provider,
-        "--model",
-        modelId.trim(),
+        `--name=${name.trim()}`,
+        `--channel=${channel.trim()}`,
+        `--provider=${provider}`,
+        `--model=${modelId.trim()}`,
         ...starterArgs,
       ]);
 

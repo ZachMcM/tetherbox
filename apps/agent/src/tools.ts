@@ -3,6 +3,7 @@ import type { InternalClient, ModuleContext } from "@tetherbox/core";
 import { Type } from "typebox";
 
 const SLUG_PATTERN = "^[a-z0-9][a-z0-9-]{0,62}$";
+const SECRET_KEY_PATTERN = "^[A-Z][A-Z0-9_]{0,127}$";
 const MAX_PROXY_BODY_CHARS = 32 * 1024;
 
 async function failure(response: Response, action: string): Promise<Error> {
@@ -63,7 +64,7 @@ function createProfileTools(
     label: "Check secret",
     description:
       "Report whether a secret key (such as LINEAR_API_KEY) is stored and its binding kind, without revealing its value. If it is missing or has the wrong binding kind, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key (adding `--inject header:<name>` or `--inject query:<name>` if not bearer auth) or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
-    parameters: Type.Object({ key: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }) }),
+    parameters: Type.Object({ key: Type.String({ pattern: SECRET_KEY_PATTERN }) }),
     async execute(_toolCallId, params) {
       const response = await client.rpc.secrets[":key"].$get({ param: { key: params.key } });
 
@@ -84,7 +85,7 @@ function createProfileTools(
     description:
       "Send an HTTPS request through the daemon's domain-pinned secret proxy, injecting the named proxy-bound secret without exposing its value. Use this to probe APIs while reverse-engineering or testing an integration before writing a module.",
     parameters: Type.Object({
-      secretKey: Type.String({ pattern: "^[A-Z][A-Z0-9_]{0,127}$" }),
+      secretKey: Type.String({ pattern: SECRET_KEY_PATTERN }),
       url: Type.String({ minLength: 1 }),
       method: Type.Optional(
         Type.Union([

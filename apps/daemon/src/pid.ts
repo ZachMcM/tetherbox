@@ -13,7 +13,23 @@ export async function writePidFile(dataDir: string): Promise<void> {
 }
 
 export async function removePidFile(dataDir: string): Promise<void> {
-  await rm(join(dataDir, PID_FILE), { force: true });
+  const path = join(dataDir, PID_FILE);
+
+  try {
+    const raw = await readFile(path, "utf8");
+
+    if (raw.trim() !== String(process.pid)) {
+      return;
+    }
+  } catch (error) {
+    if (hasErrorCode(error, "ENOENT")) {
+      return;
+    }
+
+    throw error;
+  }
+
+  await rm(path, { force: true });
 }
 
 /**
