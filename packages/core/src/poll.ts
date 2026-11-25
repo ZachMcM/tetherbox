@@ -18,5 +18,6 @@ export const registeredPollJobSchema = z.object({
   name: entryNameSchema,
   job: pollJobSchema,
   registeredAt: z.iso.datetime(),
+  threadTs: z.string().min(1).optional(),
 });
 export type RegisteredPollJob = z.infer<typeof registeredPollJobSchema>;

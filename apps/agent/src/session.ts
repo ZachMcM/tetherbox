@@ -22,6 +22,7 @@ import { startLlmForwarder } from "./llm-forwarder.ts";
 import { loadProfileModules } from "./modules.ts";
 import { formatTrigger, loadSystemPromptAppendix, readStarterConfig } from "./prompt.ts";
 import { createBuiltinTools } from "./tools.ts";
+import { createWebSearchExtension, resolveWebSearchMode } from "./web-search.ts";
 
 const builtinSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
 const PLACEHOLDER_OAUTH_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
@@ -69,6 +70,14 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       throw new Error(`unknown model ${input.model.provider}/${input.model.id}`);
     }
 
+    const webSearchMode = resolveWebSearchMode(input.model.provider, catalogModel.api);
+
+    if (webSearchMode === undefined) {
+      throw new Error(
+        `model ${input.model.provider}/${input.model.id} (${catalogModel.api}) does not support built-in web search`,
+      );
+    }
+
     // TODO: Confirm every provider Pi supports honors a baseUrl override, and register custom
     // providers for BYO subscriptions that are not in Pi's catalog.
     const model = {
@@ -91,9 +100,12 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       cwd: profileDir,
       agentDir,
       settingsManager,
-      extensionFactories: [createCodemodeExtension({ mode: "on" })],
+      extensionFactories: [
+        createCodemodeExtension({ mode: "on" }),
+        createWebSearchExtension(webSearchMode),
+      ],
       additionalSkillPaths: [builtinSkillsDir, join(profileDir, profileLayout.skillsDir)],
-      appendSystemPrompt: await loadSystemPromptAppendix(profileDir, starterConfig),
+      appendSystemPrompt: await loadSystemPromptAppendix(profileDir, starterConfig, input.threadTs),
     });
 
     await resourceLoader.reload();

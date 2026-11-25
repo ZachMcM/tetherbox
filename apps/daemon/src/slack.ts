@@ -4,10 +4,19 @@ import { z } from "zod";
 
 export type ReplyTarget =
   | { kind: "channel"; channelId: string }
-  | { kind: "thread"; channelId: string; threadTs: string; sourceTs: string };
+  | { kind: "thread"; channelId: string; threadTs: string }
+  | { kind: "message"; channelId: string; threadTs: string; sourceTs: string };
+
+export interface SlackFileUpload {
+  filename: string;
+  content: Buffer;
+  title?: string;
+  initialComment?: string;
+}
 
 export interface SlackTransport {
   postMessage(target: ReplyTarget, text: string): Promise<{ ts: string }>;
+  uploadFile(target: ReplyTarget, file: SlackFileUpload): Promise<void>;
   addReaction(channelId: string, messageTs: string, emoji: string): Promise<void>;
 }
 
@@ -72,7 +81,7 @@ export function createSlack({ appToken, botToken, onMessage }: SlackOptions): Sl
         const response = await web.chat.postMessage({
           channel: target.channelId,
           text,
-          ...(target.kind === "thread" && { thread_ts: target.threadTs }),
+          ...(target.kind !== "channel" && { thread_ts: target.threadTs }),
         });
 
         if (response.ts === undefined) {
@@ -80,6 +89,21 @@ export function createSlack({ appToken, botToken, onMessage }: SlackOptions): Sl
         }
 
         return { ts: response.ts };
+      },
+      async uploadFile(target, file) {
+        const base = {
+          channel_id: target.channelId,
+          filename: file.filename,
+          file: file.content,
+          ...(file.title !== undefined ? { title: file.title } : {}),
+          ...(file.initialComment !== undefined ? { initial_comment: file.initialComment } : {}),
+        };
+
+        if (target.kind !== "channel") {
+          await web.filesUploadV2({ ...base, thread_ts: target.threadTs });
+        } else {
+          await web.filesUploadV2(base);
+        }
       },
       async addReaction(channelId, messageTs, emoji) {
         await web.reactions.add({ channel: channelId, timestamp: messageTs, name: emoji });

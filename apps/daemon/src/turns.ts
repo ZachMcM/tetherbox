@@ -1,5 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
+  MAX_UPLOAD_FILE_BYTES,
   runIdSchema,
   type AddReactionInput,
   type ModelRef,
@@ -7,6 +8,7 @@ import {
   type ProfileIssue,
   type RunContext,
   type RunId,
+  type SendFileInput,
   type SendMessageInput,
   type TurnModelAuth,
   type TurnTrigger,
@@ -68,6 +70,12 @@ export class TurnRunner {
     return this.#runsByToken.get(token)?.context;
   }
 
+  replyThreadTs(context: RunContext): string | undefined {
+    const run = this.#active(context);
+
+    return run.replyTarget.kind === "channel" ? undefined : run.replyTarget.threadTs;
+  }
+
   async sendMessage(context: RunContext, input: SendMessageInput): Promise<{ ts: string }> {
     const run = this.#active(context);
     const result = await this.#deps.slack.postMessage(run.replyTarget, input.text);
@@ -77,10 +85,29 @@ export class TurnRunner {
     return result;
   }
 
+  async sendFile(context: RunContext, input: SendFileInput): Promise<void> {
+    const run = this.#active(context);
+    const content = Buffer.from(input.contentBase64, "base64");
+
+    if (content.byteLength === 0 || content.byteLength > MAX_UPLOAD_FILE_BYTES) {
+      throw new Error(
+        `File "${input.filename}" must be between 1 and ${MAX_UPLOAD_FILE_BYTES} bytes`,
+      );
+    }
+
+    await this.#deps.slack.uploadFile(run.replyTarget, {
+      filename: input.filename,
+      content,
+      ...(input.title !== undefined ? { title: input.title } : {}),
+      ...(input.initialComment !== undefined ? { initialComment: input.initialComment } : {}),
+    });
+    run.sentMessage = true;
+  }
+
   async addReaction(context: RunContext, input: AddReactionInput): Promise<void> {
     const run = this.#active(context);
 
-    if (run.replyTarget.kind !== "thread") {
+    if (run.replyTarget.kind !== "message") {
       throw new Error(
         "this run was not started by a Slack message, so there is nothing to react to",
       );
@@ -157,6 +184,7 @@ export class TurnRunner {
     this.#runsById.set(runId, run);
 
     try {
+      const threadTs = replyTarget.kind === "channel" ? undefined : replyTarget.threadTs;
       const result = await runAgent(config.agent, {
         runId,
         runToken,
@@ -166,6 +194,7 @@ export class TurnRunner {
         model,
         modelAuth,
         trigger,
+        ...(threadTs !== undefined ? { threadTs } : {}),
       });
 
       if (!run.sentMessage && result.finalText !== null && result.finalText.trim() !== "") {

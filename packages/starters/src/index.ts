@@ -152,6 +152,37 @@ export const starters = [
   },
   {
     kind: "skill",
+    id: "browser",
+    category: "cli",
+    path: "skills/browser",
+    secrets: [],
+    cli: {
+      binary: "agent-browser",
+      install: npmUserInstall("agent-browser"),
+    },
+    setupNote:
+      "Run `agent-browser install` as the agent user on the VM if headless Chromium is not yet downloaded.",
+  },
+  {
+    kind: "skill",
+    id: "orca",
+    category: "harness",
+    path: "skills/orca",
+    secrets: [],
+    configFields: [
+      {
+        key: "target",
+        kind: "string",
+        prompt:
+          "Orca workstation SSH target (Tailscale MagicDNS host from `tailscale status` or user@host)",
+        placeholder: "workstation.tailnet.ts.net",
+      },
+    ],
+    setupNote:
+      "Keep either the Orca desktop app or `orca serve` running on your workstation, and ensure `tetherbox-agent` on the VM can SSH into it over Tailscale.",
+  },
+  {
+    kind: "skill",
     id: "rex",
     category: "harness",
     path: "skills/rex",
@@ -284,7 +315,62 @@ export const starters = [
     secrets: [proxySecret("SLACK_BOT_TOKEN", ["slack.com"])],
   },
   { kind: "module", id: "gcal", category: "integration", path: "modules/gcal", secrets: [] },
+  { kind: "module", id: "gdrive", category: "integration", path: "modules/gdrive", secrets: [] },
   { kind: "module", id: "gmail", category: "integration", path: "modules/gmail", secrets: [] },
+  {
+    kind: "module",
+    id: "sentry",
+    category: "integration",
+    path: "modules/sentry",
+    configFields: [
+      {
+        key: "apiBaseUrl",
+        kind: "url",
+        prompt:
+          "Sentry base URL (https://sentry.io, https://de.sentry.io, or your self-hosted URL)",
+        placeholder: "https://sentry.io",
+      },
+      {
+        key: "orgSlug",
+        kind: "string",
+        prompt: "Sentry organization slug",
+        placeholder: "my-org",
+      },
+    ],
+    secrets: [
+      promptDomainProxySecret({
+        key: "SENTRY_AUTH_TOKEN",
+        domainPrompt: "Hostname for your Sentry instance",
+        domainPlaceholder: "sentry.io",
+        fromConfigUrl: { starterId: "sentry", key: "apiBaseUrl" },
+      }),
+    ],
+  },
+  {
+    kind: "module",
+    id: "jira",
+    category: "integration",
+    path: "modules/jira",
+    configFields: [
+      {
+        key: "siteUrl",
+        kind: "url",
+        prompt: "Jira site URL",
+        placeholder: "https://your-site.atlassian.net",
+      },
+    ],
+    secrets: [
+      promptDomainProxySecret({
+        key: "JIRA_AUTH",
+        inject: { kind: "header", name: "Authorization" },
+        domainPrompt: "Hostname for your Jira site",
+        domainPlaceholder: "your-site.atlassian.net",
+        fromConfigUrl: { starterId: "jira", key: "siteUrl" },
+      }),
+    ],
+    setupNote:
+      "Store `JIRA_AUTH` as the full Authorization header value, such as `Basic <base64(email:api_token)>` for Jira Cloud or `Bearer <token>` for Data Center.",
+  },
   {
     kind: "module",
     id: "linear",

@@ -16,11 +16,15 @@
   },
   "dependencies": {
     "@earendil-works/pi-coding-agent": "catalog:",
+    "@mozilla/readability": "catalog:",
     "@tetherbox/core": "workspace:*",
+    "linkedom": "catalog:",
+    "turndown": "catalog:",
     "typebox": "catalog:"
   },
   "devDependencies": {
     "@types/node": "catalog:",
+    "@types/turndown": "catalog:",
     "tsdown": "catalog:",
     "typescript": "catalog:"
   }

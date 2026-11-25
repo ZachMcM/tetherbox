@@ -1,6 +1,9 @@
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { InternalClient, ModuleContext } from "@tetherbox/core";
+import { MAX_UPLOAD_FILE_BYTES, type InternalClient, type ModuleContext } from "@tetherbox/core";
 import { Type } from "typebox";
+import { fetchWebPage } from "./web-fetch.ts";
 
 const SLUG_PATTERN = "^[a-z0-9][a-z0-9-]{0,62}$";
 const SECRET_KEY_PATTERN = "^[A-Z][A-Z0-9_]{0,127}$";
@@ -35,6 +38,47 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
       return text("Sent.");
     },
   });
+  const sendFile = defineTool({
+    name: "send_file",
+    label: "Send file",
+    description:
+      "Upload a local file (such as a CSV, chart, diff, log, or screenshot) to the Slack conversation that started this turn.",
+    parameters: Type.Object({
+      path: Type.String({ minLength: 1 }),
+      filename: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+      title: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
+      comment: Type.Optional(Type.String({ minLength: 1 })),
+    }),
+    async execute(_toolCallId, params) {
+      const content = await readFile(params.path);
+
+      if (content.byteLength === 0) {
+        throw new Error(`File "${params.path}" is empty`);
+      }
+
+      if (content.byteLength > MAX_UPLOAD_FILE_BYTES) {
+        throw new Error(
+          `File "${params.path}" is ${content.byteLength} bytes, exceeding the ${MAX_UPLOAD_FILE_BYTES} byte upload limit`,
+        );
+      }
+
+      const filename = params.filename ?? basename(params.path);
+      const response = await client.rpc.files.$post({
+        json: {
+          filename,
+          contentBase64: content.toString("base64"),
+          ...(params.title !== undefined ? { title: params.title } : {}),
+          ...(params.comment !== undefined ? { initialComment: params.comment } : {}),
+        },
+      });
+
+      if (!response.ok) {
+        throw await failure(response, "send_file");
+      }
+
+      return text(`Uploaded ${filename}.`);
+    },
+  });
   const addReaction = defineTool({
     name: "add_reaction",
     label: "Add reaction",
@@ -52,7 +96,7 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
     },
   });
 
-  return [sendMessage, addReaction];
+  return [sendMessage, sendFile, addReaction];
 }
 
 function createProfileTools(
@@ -215,13 +259,120 @@ function createPollTools(client: InternalClient): ToolDefinition[] {
   return [registerPollJob, listPollJobs, cancelPollJob];
 }
 
+function createWebTools(): ToolDefinition[] {
+  const webFetch = defineTool({
+    name: "web_fetch",
+    label: "Fetch web page",
+    description:
+      "Fetch an http or https URL and return clean markdown for HTML pages or raw text for plain text, markdown, and JSON responses (capped at 32 KB). Prefer this over curl for reading docs and articles.",
+    parameters: Type.Object({
+      url: Type.String({ minLength: 1 }),
+      timeoutMs: Type.Optional(Type.Integer({ minimum: 1000, maximum: 60000 })),
+    }),
+    async execute(_toolCallId, params) {
+      return json(
+        await fetchWebPage({
+          url: params.url,
+          ...(params.timeoutMs !== undefined ? { timeoutMs: params.timeoutMs } : {}),
+        }),
+      );
+    },
+  });
+
+  return [webFetch];
+}
+
+function createReminderTools(client: InternalClient): ToolDefinition[] {
+  const scheduleReminder = defineTool({
+    name: "schedule_reminder",
+    label: "Schedule reminder",
+    description:
+      "Schedule a one-shot reminder that wakes a new turn at a future time (provide either fireAt as an ISO-8601 timestamp or delaySeconds). Registering an existing name replaces it. Use cron/ files for recurring schedules instead.",
+    parameters: Type.Object({
+      name: Type.String({ pattern: SLUG_PATTERN }),
+      fireAt: Type.Optional(Type.String({ minLength: 1 })),
+      delaySeconds: Type.Optional(Type.Integer({ minimum: 1 })),
+      prompt: Type.String({ minLength: 1 }),
+    }),
+    async execute(_toolCallId, params) {
+      let jsonBody:
+        | { kind: "at"; name: string; fireAt: string; prompt: string }
+        | { kind: "in"; name: string; delaySeconds: number; prompt: string };
+
+      if (params.fireAt !== undefined && params.delaySeconds === undefined) {
+        jsonBody = {
+          kind: "at",
+          name: params.name,
+          fireAt: params.fireAt,
+          prompt: params.prompt,
+        };
+      } else if (params.delaySeconds !== undefined && params.fireAt === undefined) {
+        jsonBody = {
+          kind: "in",
+          name: params.name,
+          delaySeconds: params.delaySeconds,
+          prompt: params.prompt,
+        };
+      } else {
+        throw new Error("Provide exactly one of fireAt or delaySeconds");
+      }
+
+      const response = await client.rpc.reminders.$post({ json: jsonBody });
+
+      if (!response.ok) {
+        throw await failure(response, "schedule_reminder");
+      }
+
+      return json(await response.json());
+    },
+  });
+  const listReminders = defineTool({
+    name: "list_reminders",
+    label: "List reminders",
+    description: "List this profile's pending one-shot reminders.",
+    parameters: Type.Object({}),
+    async execute() {
+      const response = await client.rpc.reminders.$get();
+
+      if (!response.ok) {
+        throw await failure(response, "list_reminders");
+      }
+
+      return json((await response.json()).reminders);
+    },
+  });
+  const cancelReminder = defineTool({
+    name: "cancel_reminder",
+    label: "Cancel reminder",
+    description: "Cancel a pending one-shot reminder by name.",
+    parameters: Type.Object({ name: Type.String({ pattern: SLUG_PATTERN }) }),
+    async execute(_toolCallId, params) {
+      const response = await client.rpc.reminders[":name"].$delete({
+        param: { name: params.name },
+      });
+
+      if (!response.ok) {
+        throw await failure(response, "cancel_reminder");
+      }
+
+      const { cancelled } = await response.json();
+
+      return text(cancelled ? `Cancelled ${params.name}.` : `No reminder named ${params.name}.`);
+    },
+  });
+
+  return [scheduleReminder, listReminders, cancelReminder];
+}
+
 export function createBuiltinTools(
   client: InternalClient,
   fetchWithSecret: ModuleContext["fetchWithSecret"],
 ): ToolDefinition[] {
   return [
     ...createMessagingTools(client),
+    ...createWebTools(),
     ...createProfileTools(client, fetchWithSecret),
     ...createPollTools(client),
+    ...createReminderTools(client),
   ];
 }

@@ -5,6 +5,7 @@ export * from "./module.ts";
 export * from "./paths.ts";
 export * from "./poll.ts";
 export * from "./profile.ts";
+export * from "./reminder.ts";
 export * from "./rpc/api.ts";
 export * from "./rpc/client.ts";
 export * from "./rpc/headers.ts";

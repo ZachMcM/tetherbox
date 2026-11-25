@@ -82,6 +82,7 @@ export type ProfileConfig = z.infer<typeof profileConfigSchema>;
 export const cronJobSchema = z.object({
   schedule: z.string().min(1),
   timezone: z.string().min(1).optional(),
+  threadTs: z.string().min(1).optional(),
   prompt: z.string().min(1),
 });
 export type CronJob = z.infer<typeof cronJobSchema>;

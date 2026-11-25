@@ -7,6 +7,7 @@ import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./poller.ts";
 import { ProfileRegistry, type LoadedProfile } from "./profiles.ts";
 import { createPublicServer } from "./public-server.ts";
+import { ReminderStore } from "./reminders.ts";
 import { Scheduler } from "./scheduler.ts";
 import type { SecretStore } from "./secret-store.ts";
 import { createSlack, type ReplyTarget } from "./slack.ts";
@@ -32,8 +33,10 @@ async function requireSecret(
   return secret.value;
 }
 
-function channelOf(profile: LoadedProfile): ReplyTarget {
-  return { kind: "channel", channelId: profile.config.slackChannelId };
+function targetOf(profile: LoadedProfile, threadTs?: string): ReplyTarget {
+  return threadTs !== undefined
+    ? { kind: "thread", channelId: profile.config.slackChannelId, threadTs }
+    : { kind: "channel", channelId: profile.config.slackChannelId };
 }
 
 export interface DaemonStores {
@@ -47,16 +50,31 @@ export async function serveDaemon(
 ): Promise<void> {
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) =>
-    turns.enqueue(profile.id, { kind: "cron", job: name, prompt: job.prompt }, channelOf(profile)),
+    turns.enqueue(
+      profile.id,
+      { kind: "cron", job: name, prompt: job.prompt },
+      targetOf(profile, job.threadTs),
+    ),
   );
-  const poller = new Poller(config.dataDir, (profileId, { name, job }, outcome) => {
+  const poller = new Poller(config.dataDir, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
       turns.enqueue(
         profileId,
-        { kind: "poll", job: name, prompt: job.prompt, ...outcome },
-        channelOf(profile),
+        { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
+        targetOf(profile, registered.threadTs),
+      );
+    }
+  });
+  const reminders = new ReminderStore(config.dataDir, (profileId, reminder) => {
+    const profile = registry.get(profileId);
+
+    if (profile !== undefined) {
+      turns.enqueue(
+        profileId,
+        { kind: "reminder", name: reminder.name, prompt: reminder.prompt },
+        targetOf(profile, reminder.threadTs),
       );
     }
   });
@@ -74,7 +92,7 @@ export async function serveDaemon(
         profile.id,
         { kind: "slack", userId: message.userId, text: message.text },
         {
-          kind: "thread",
+          kind: "message",
           channelId: message.channelId,
           threadTs: message.threadTs ?? message.ts,
           sourceTs: message.ts,
@@ -102,6 +120,7 @@ export async function serveDaemon(
 
   await reloadAll();
   await poller.loadAll();
+  await reminders.loadAll();
 
   const internal = await startInternalServer({
     socketPath: config.socketPath,
@@ -110,6 +129,7 @@ export async function serveDaemon(
     llmOAuth,
     turns,
     poller,
+    reminders,
   });
   const publicServer = serve({
     fetch: createPublicServer({ registry, secrets, turns }).fetch,
@@ -141,6 +161,7 @@ export async function serveDaemon(
       process.off("SIGHUP", onReload);
       scheduler.stopAll();
       poller.stopAll();
+      reminders.stopAll();
       await slack.stop();
       internal.close();
       publicServer.close();

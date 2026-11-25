@@ -27,6 +27,11 @@ export const turnTriggerSchema = z.discriminatedUnion("kind", [
     status: z.enum(["done", "stalled"]),
     output: z.string(),
   }),
+  z.object({
+    kind: z.literal("reminder"),
+    name: z.string(),
+    prompt: z.string(),
+  }),
 ]);
 export type TurnTrigger = z.infer<typeof turnTriggerSchema>;
 
@@ -39,6 +44,7 @@ export const turnInputSchema = z.object({
   model: modelRefSchema,
   modelAuth: turnModelAuthSchema,
   trigger: turnTriggerSchema,
+  threadTs: z.string().min(1).optional(),
 });
 export type TurnInput = z.infer<typeof turnInputSchema>;
 

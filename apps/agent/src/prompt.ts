@@ -65,8 +65,14 @@ function formatStarterConfig(starterConfig: StarterConfig): string | undefined {
 export async function loadSystemPromptAppendix(
   profileDir: string,
   starterConfig: StarterConfig,
+  threadTs?: string,
 ): Promise<string[]> {
   const sections = [RUNTIME_PROMPT];
+
+  if (threadTs !== undefined) {
+    sections.push(`# Active Slack thread\n\n- threadTs: ${threadTs}`);
+  }
+
   const starterConfigSection = formatStarterConfig(starterConfig);
 
   if (starterConfigSection !== undefined) {
@@ -92,5 +98,7 @@ export function formatTrigger(trigger: TurnTrigger): string {
       return `Webhook "${trigger.hook}" received a payload.\n\n${trigger.prompt}\n\n\`\`\`json\n${JSON.stringify(trigger.payload, null, 2)}\n\`\`\``;
     case "poll":
       return `Poll job "${trigger.job}" is ${trigger.status}.\n\n${trigger.prompt}\n\n${trigger.output}`;
+    case "reminder":
+      return `Reminder "${trigger.name}" fired.\n\n${trigger.prompt}`;
   }
 }

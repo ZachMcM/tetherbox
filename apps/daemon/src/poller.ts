@@ -63,9 +63,18 @@ export class Poller {
     // TODO: Start each loaded job's check loop.
   }
 
-  async register(profileId: ProfileId, input: RegisterPollJobInput): Promise<RegisteredPollJob> {
+  async register(
+    profileId: ProfileId,
+    input: RegisterPollJobInput,
+    threadTs?: string,
+  ): Promise<RegisteredPollJob> {
     const { name, ...job } = input;
-    const registered: RegisteredPollJob = { name, job, registeredAt: new Date().toISOString() };
+    const registered: RegisteredPollJob = {
+      name,
+      job,
+      registeredAt: new Date().toISOString(),
+      ...(threadTs !== undefined ? { threadTs } : {}),
+    };
 
     await mkdir(join(this.#dir, profileId), { recursive: true, mode: 0o700 });
     await writeFile(this.#fileFor(profileId, name), JSON.stringify(registered), { mode: 0o600 });

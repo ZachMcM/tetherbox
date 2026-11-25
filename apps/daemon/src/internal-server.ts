@@ -6,6 +6,7 @@ import type { LlmOAuth } from "./llm-oauth.ts";
 import { proxyLlm } from "./llm-proxy.ts";
 import type { Poller } from "./poller.ts";
 import { loadProfile, type ProfileRegistry } from "./profiles.ts";
+import type { ReminderStore } from "./reminders.ts";
 import { proxyWithSecret } from "./secret-proxy.ts";
 import type { SecretStore } from "./secret-store.ts";
 import type { TurnRunner } from "./turns.ts";
@@ -17,6 +18,7 @@ export interface InternalServerDeps {
   llmOAuth: LlmOAuth;
   turns: TurnRunner;
   poller: Poller;
+  reminders: ReminderStore;
 }
 
 export async function startInternalServer({
@@ -26,10 +28,12 @@ export async function startInternalServer({
   llmOAuth,
   turns,
   poller,
+  reminders,
 }: InternalServerDeps) {
   const app = createInternalApi({
     resolveRun: (token) => turns.resolveRun(token),
     sendMessage: (run, input) => turns.sendMessage(run, input),
+    sendFile: (run, input) => turns.sendFile(run, input),
     addReaction: (run, input) => turns.addReaction(run, input),
     async checkSecret(key) {
       const secret = await secrets.get(key);
@@ -47,9 +51,16 @@ export async function startInternalServer({
 
       return load.issues.length === 0 ? { ok: true } : { ok: false, issues: load.issues };
     },
-    registerPollJob: (run, input) => poller.register(run.profileId, input),
+    registerPollJob: (run, input) =>
+      poller.register(run.profileId, input, turns.replyThreadTs(run)),
     listPollJobs: (run) => poller.list(run.profileId),
     cancelPollJob: async (run, name) => ({ cancelled: await poller.cancel(run.profileId, name) }),
+    scheduleReminder: (run, input) =>
+      reminders.schedule(run.profileId, input, turns.replyThreadTs(run)),
+    listReminders: (run) => reminders.list(run.profileId),
+    cancelReminder: async (run, name) => ({
+      cancelled: await reminders.cancel(run.profileId, name),
+    }),
     proxyWithSecret: (_run, request) => proxyWithSecret(secrets, request),
     proxyLlm(run, provider, request) {
       const model = registry.get(run.profileId)?.config.model;

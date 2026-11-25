@@ -9,7 +9,6 @@ import type {
 } from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
-import { kimiCodingProvider } from "@earendil-works/pi-ai/providers/kimi-coding";
 import { metaProvider } from "@earendil-works/pi-ai/providers/meta";
 import { openaiCodexProvider } from "@earendil-works/pi-ai/providers/openai-codex";
 import { openrouterProvider } from "@earendil-works/pi-ai/providers/openrouter";
@@ -95,7 +94,6 @@ const OAUTH_FLOW_SOURCES: Readonly<
   "openai-codex": [openaiCodexProvider, codexAgentAuth],
   "github-copilot": [githubCopilotProvider, () => ({ kind: "run-token-key" })],
   xai: [xaiProvider, placeholder("tetherbox-placeholder")],
-  "kimi-coding": [kimiCodingProvider, placeholder("tetherbox-placeholder")],
   meta: [metaProvider, placeholder("tetherbox-placeholder")],
   openrouter: [openrouterProvider, placeholder("tetherbox-placeholder")],
 };
