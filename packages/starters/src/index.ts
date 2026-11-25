@@ -65,14 +65,18 @@ export interface StarterCliAuthEntry {
   readonly cli: StarterCli & { readonly auth: StarterCliAuth };
 }
 
-function proxySecret(key: string, domains: [string, ...string[]]): StarterSecret {
+function proxySecret(
+  key: string,
+  domains: [string, ...string[]],
+  inject: SecretInjection = { kind: "bearer" },
+): StarterSecret {
   return {
     kind: "fixed",
     key: secretKeySchema.parse(key),
     binding: secretBindingSchema.parse({
       kind: "proxy",
       domains,
-      inject: { kind: "bearer" },
+      inject,
     }),
   };
 }
@@ -132,14 +136,6 @@ export type Starter =
 export const templatesDir = fileURLToPath(new URL("../templates", import.meta.url));
 
 export const starters = [
-  {
-    kind: "skill",
-    id: "git",
-    category: "cli",
-    path: "skills/git",
-    secrets: [],
-    cli: { binary: "git" },
-  },
   {
     kind: "skill",
     id: "gh",
@@ -270,6 +266,14 @@ export const starters = [
     id: "devin",
     category: "harness",
     path: "modules/devin",
+    configFields: [
+      {
+        key: "orgId",
+        kind: "string",
+        prompt: "Devin organization ID (for /v3/organizations/{org_id}/sessions)",
+        placeholder: "org-xxxxxxxxxxxxxxxx",
+      },
+    ],
     secrets: [proxySecret("DEVIN_API_KEY", ["api.devin.ai"])],
   },
   {
@@ -286,7 +290,12 @@ export const starters = [
     id: "linear",
     category: "integration",
     path: "modules/linear",
-    secrets: [proxySecret("LINEAR_API_KEY", ["api.linear.app"])],
+    secrets: [
+      proxySecret("LINEAR_API_KEY", ["api.linear.app"], {
+        kind: "header",
+        name: "Authorization",
+      }),
+    ],
   },
   {
     kind: "module",

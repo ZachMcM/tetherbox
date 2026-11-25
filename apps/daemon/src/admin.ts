@@ -287,6 +287,19 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
         }
 
         await execFileAsync("git", ["init", "-q"], { cwd: profileDir });
+        await execFileAsync("git", ["config", "user.name", "Tetherbox"], { cwd: profileDir });
+        await execFileAsync("git", ["config", "user.email", "tetherbox@localhost"], {
+          cwd: profileDir,
+        });
+        await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: profileDir });
+        await execFileAsync("git", ["add", "-A"], { cwd: profileDir });
+        await execFileAsync(
+          "git",
+          ["commit", "-q", "--no-verify", "--no-gpg-sign", "-m", "Initialize profile"],
+          {
+            cwd: profileDir,
+          },
+        );
       } catch (error) {
         await rm(profileDir, { recursive: true, force: true });
         throw error;
