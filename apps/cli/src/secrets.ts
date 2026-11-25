@@ -217,33 +217,42 @@ export async function ensureRequiredSecrets({
   return "ok";
 }
 
-export interface EnsureLlmProviderSecretOptions {
+export function findLlmProviderKey(
+  existing: Map<SecretKey, SecretBinding>,
+  provider: LlmProvider,
+): SecretKey | undefined {
+  for (const [key, binding] of existing) {
+    if (binding.kind === "llm" && binding.provider === provider) {
+      return key;
+    }
+  }
+
+  return undefined;
+}
+
+export interface LlmProviderSecretOptions {
   sshAlias: string;
   provider: LlmProvider;
   existing: Map<SecretKey, SecretBinding>;
 }
 
-export async function ensureLlmProviderSecret({
+export async function setLlmProviderSecret({
   sshAlias,
   provider,
   existing,
-}: EnsureLlmProviderSecretOptions): Promise<"ok" | "cancelled"> {
-  for (const binding of existing.values()) {
-    if (binding.kind === "llm" && binding.provider === provider) {
-      return "ok";
-    }
-  }
-
-  const key = secretKeySchema.parse(`${provider.toUpperCase().replaceAll("-", "_")}_API_KEY`);
+}: LlmProviderSecretOptions): Promise<"ok" | "cancelled"> {
   const binding: SecretBinding = { kind: "llm", provider };
+  const boundKey = findLlmProviderKey(existing, provider);
+  const key =
+    boundKey ?? secretKeySchema.parse(`${provider.toUpperCase().replaceAll("-", "_")}_API_KEY`);
   const current = existing.get(key);
 
-  if (current !== undefined) {
+  if (boundKey !== undefined) {
+    p.log.info(`Replacing ${key}, the API key for ${provider}.`);
+  } else if (current !== undefined) {
     p.log.warn(
       `Secret ${key} is currently ${describeBinding(current)}; continuing will overwrite it as ${describeBinding(binding)}.`,
     );
-  } else {
-    p.log.info(`No LLM credential is stored for provider "${provider}".`);
   }
 
   const status = await promptAndSetSecret({
@@ -260,4 +269,16 @@ export async function ensureLlmProviderSecret({
   existing.set(key, binding);
 
   return "ok";
+}
+
+export async function ensureLlmProviderSecret(
+  options: LlmProviderSecretOptions,
+): Promise<"ok" | "cancelled"> {
+  if (findLlmProviderKey(options.existing, options.provider) !== undefined) {
+    return "ok";
+  }
+
+  p.log.info(`No API key is stored for provider "${options.provider}".`);
+
+  return setLlmProviderSecret(options);
 }

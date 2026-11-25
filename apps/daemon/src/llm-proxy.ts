@@ -1,4 +1,10 @@
-import { RUN_TOKEN_HEADER, SECRET_KEY_HEADER, type LlmProvider } from "@tetherbox/core";
+import {
+  RUN_TOKEN_HEADER,
+  SECRET_KEY_HEADER,
+  type LlmAuthKind,
+  type LlmProvider,
+} from "@tetherbox/core";
+import type { LlmAccess, LlmOAuth } from "./llm-oauth.ts";
 import type { SecretStore } from "./secret-store.ts";
 
 type AuthScheme = "bearer" | "x-api-key" | "x-goog-api-key";
@@ -39,6 +45,7 @@ const STRIPPED_RESPONSE_HEADERS = [
 const LLM_UPSTREAMS: Readonly<Record<string, LlmUpstream>> = {
   anthropic: { origin: "https://api.anthropic.com", auth: "x-api-key" },
   openai: { origin: "https://api.openai.com", auth: "bearer" },
+  "openai-codex": { origin: "https://chatgpt.com", pathPrefix: "/backend-api", auth: "bearer" },
   google: { origin: "https://generativelanguage.googleapis.com", auth: "x-goog-api-key" },
   openrouter: { origin: "https://openrouter.ai", pathPrefix: "/api", auth: "match-request" },
   opencode: { origin: "https://opencode.ai", pathPrefix: "/inference", auth: "match-request" },
@@ -167,19 +174,99 @@ function buildTargetUrl(
   return target;
 }
 
+export interface LlmCredentialSources {
+  secrets: SecretStore;
+  oauth: LlmOAuth;
+}
+
+export interface ProxyLlmInput {
+  provider: LlmProvider;
+  authKind: LlmAuthKind;
+  request: Request;
+}
+
+async function resolveAccess(
+  sources: LlmCredentialSources,
+  provider: LlmProvider,
+  authKind: LlmAuthKind,
+): Promise<LlmAccess | Response> {
+  switch (authKind) {
+    case "api-key": {
+      const secret = await sources.secrets.getLlm(provider);
+
+      return secret === undefined
+        ? fail(404, `no LLM secret configured for provider "${provider}"`)
+        : { token: secret.value, baseUrl: undefined };
+    }
+    case "oauth": {
+      try {
+        const access = await sources.oauth.access(provider);
+
+        return access ?? fail(404, `no OAuth login for provider "${provider}"`);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+
+        return fail(502, `could not refresh the ${provider} OAuth login: ${message}`);
+      }
+    }
+    default: {
+      const exhaustive: never = authKind;
+
+      return exhaustive;
+    }
+  }
+}
+
+function withCredentialOrigin(
+  upstream: LlmUpstream,
+  baseUrl: string | undefined,
+): LlmUpstream | Response {
+  if (baseUrl === undefined) {
+    return upstream;
+  }
+
+  const parsed = URL.parse(baseUrl);
+
+  if (parsed === null || parsed.protocol !== "https:") {
+    return fail(502, "the OAuth login returned a base URL that is not https");
+  }
+
+  return { ...upstream, origin: `https://${parsed.host}` };
+}
+
 /**
- * The agent's Pi session points every provider's base URL at `/llm/<provider>` and uses its run
- * token as the API key, so provider credentials never leave the daemon.
+ * The agent's Pi session points every provider's base URL at `/llm/<provider>` and authenticates
+ * with its run token, so provider credentials never leave the daemon. An OAuth token goes in
+ * whichever auth header the request used, since Pi already formatted the request for it. A base
+ * URL from an OAuth login, such as a Copilot account's endpoint, comes from the daemon's own
+ * credential, so it replaces the upstream origin.
  */
 export async function proxyLlm(
-  store: SecretStore,
-  provider: LlmProvider,
-  request: Request,
+  sources: LlmCredentialSources,
+  { provider, authKind, request }: ProxyLlmInput,
 ): Promise<Response> {
-  const upstream = LLM_UPSTREAMS[provider];
+  const catalogUpstream = LLM_UPSTREAMS[provider];
 
-  if (upstream === undefined) {
+  if (catalogUpstream === undefined) {
     return fail(404, `unsupported LLM provider "${provider}"`);
+  }
+
+  const pathError = buildTargetUrl(request.url, provider, catalogUpstream);
+
+  if (pathError instanceof Response) {
+    return pathError;
+  }
+
+  const access = await resolveAccess(sources, provider, authKind);
+
+  if (access instanceof Response) {
+    return access;
+  }
+
+  const upstream = withCredentialOrigin(catalogUpstream, access.baseUrl);
+
+  if (upstream instanceof Response) {
+    return upstream;
   }
 
   const target = buildTargetUrl(request.url, provider, upstream);
@@ -188,21 +275,18 @@ export async function proxyLlm(
     return target;
   }
 
-  // TODO: Support OAuth token refresh for BYO subscriptions (such as OpenCode Go and Codex) once
-  // the daemon's OAuth store lands.
-  const secret = await store.getLlm(provider);
-
-  if (secret === undefined) {
-    return fail(404, `no LLM secret configured for provider "${provider}"`);
-  }
-
   const headers = new Headers(request.headers);
 
   for (const name of STRIPPED_REQUEST_HEADERS) {
     headers.delete(name);
   }
 
-  applyAuth(headers, upstream.auth, request.headers, secret.value);
+  applyAuth(
+    headers,
+    authKind === "oauth" ? "match-request" : upstream.auth,
+    request.headers,
+    access.token,
+  );
 
   const hasBody = request.body !== null && request.method !== "GET" && request.method !== "HEAD";
   let response: Response;

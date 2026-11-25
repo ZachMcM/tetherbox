@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +14,7 @@ import {
   createInternalClient,
   createSecretProxyFetch,
   profileLayout,
+  RUN_TOKEN_HEADER,
   type TurnInput,
   type TurnResult,
 } from "@tetherbox/core";
@@ -23,6 +24,28 @@ import { formatTrigger, loadSystemPromptAppendix } from "./prompt.ts";
 import { createBuiltinTools } from "./tools.ts";
 
 const builtinSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
+const PLACEHOLDER_OAUTH_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
+
+/**
+ * A placeholder OAuth credential never expires, so Pi formats requests for the subscription API
+ * and never tries to refresh. The daemon swaps in the real token.
+ */
+async function seedModelAuth(input: TurnInput, authPath: string): Promise<void> {
+  if (input.modelAuth.kind !== "placeholder-oauth") {
+    return;
+  }
+
+  const credential = {
+    type: "oauth",
+    access: input.modelAuth.access,
+    refresh: "tetherbox",
+    expires: Date.now() + PLACEHOLDER_OAUTH_LIFETIME_MS,
+  };
+
+  await writeFile(authPath, JSON.stringify({ [input.model.provider]: credential }), {
+    mode: 0o600,
+  });
+}
 
 export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const { profileDir, socketPath, runToken } = input;
@@ -32,8 +55,12 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const agentDir = await mkdtemp(join(tmpdir(), "tetherbox-run-"));
 
   try {
+    const authPath = join(agentDir, "auth.json");
+
+    await seedModelAuth(input, authPath);
+
     const modelRuntime = await ModelRuntime.create({
-      authPath: join(agentDir, "auth.json"),
+      authPath,
       modelsPath: join(agentDir, "models.json"),
     });
     const catalogModel = modelRuntime.getModel(input.model.provider, input.model.id);
@@ -47,13 +74,17 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     const model = {
       ...catalogModel,
       baseUrl: forwarder.baseUrl(input.model.provider, catalogModel.baseUrl),
+      headers: { ...catalogModel.headers, [RUN_TOKEN_HEADER]: runToken },
     };
 
-    await modelRuntime.setRuntimeApiKey(input.model.provider, runToken);
+    if (input.modelAuth.kind === "run-token-key") {
+      await modelRuntime.setRuntimeApiKey(input.model.provider, runToken);
+    }
 
     const settingsManager = SettingsManager.inMemory();
 
-    settingsManager.applyOverrides({ defaultTools: ["+codemode"] });
+    // The daemon's LLM proxy relays HTTP only, so Pi must not open WebSocket streams.
+    settingsManager.applyOverrides({ defaultTools: ["+codemode"], transport: "sse" });
 
     const resourceLoader = new DefaultResourceLoader({
       cwd: profileDir,

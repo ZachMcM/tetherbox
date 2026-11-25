@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { secretKeySchema, type SecretKind } from "@tetherbox/core";
 import type { DaemonConfig } from "./config.ts";
 import { startInternalServer } from "./internal-server.ts";
+import type { LlmOAuth } from "./llm-oauth.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./poller.ts";
 import { ProfileRegistry, type LoadedProfile } from "./profiles.ts";
@@ -35,7 +36,15 @@ function channelOf(profile: LoadedProfile): ReplyTarget {
   return { kind: "channel", channelId: profile.config.slackChannelId };
 }
 
-export async function serveDaemon(config: DaemonConfig, secrets: SecretStore): Promise<void> {
+export interface DaemonStores {
+  secrets: SecretStore;
+  llmOAuth: LlmOAuth;
+}
+
+export async function serveDaemon(
+  config: DaemonConfig,
+  { secrets, llmOAuth }: DaemonStores,
+): Promise<void> {
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) =>
     turns.enqueue(profile.id, { kind: "cron", job: name, prompt: job.prompt }, channelOf(profile)),
@@ -76,6 +85,7 @@ export async function serveDaemon(config: DaemonConfig, secrets: SecretStore): P
   const turns = new TurnRunner({
     config,
     registry,
+    llmOAuth,
     slack: slack.transport,
     onProfileReloaded: (profile) => scheduler.sync(profile),
   });
@@ -97,6 +107,7 @@ export async function serveDaemon(config: DaemonConfig, secrets: SecretStore): P
     socketPath: config.socketPath,
     registry,
     secrets,
+    llmOAuth,
     turns,
     poller,
   });

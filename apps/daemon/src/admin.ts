@@ -1,23 +1,28 @@
 import { execFile } from "node:child_process";
-import { access, cp, mkdir, rm, writeFile } from "node:fs/promises";
+import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { text } from "node:stream/consumers";
 import { parseArgs, promisify } from "node:util";
 import {
   formatSecretInjection,
+  getLlmOAuthProvider,
   llmProviderSchema,
+  modelRefSchema,
   profileConfigSchema,
   profileIdSchema,
   profileLayout,
   resolveSecretBinding,
   secretKeySchema,
+  type ProfileConfig,
   type SecretBinding,
 } from "@tetherbox/core";
 import { resolveStarters, templatesDir } from "@tetherbox/starters";
 import type { DaemonConfig } from "./config.ts";
+import type { LlmOAuth } from "./llm-oauth.ts";
 import { signalDaemonReload } from "./pid.ts";
 import { ProfileRegistry } from "./profiles.ts";
 import type { SecretStore } from "./secret-store.ts";
+import { withTerminalAuth } from "./terminal-auth.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -100,6 +105,81 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
   }
 }
 
+function formatExpiry(expires: number): string {
+  const date = new Date(expires);
+
+  return Number.isNaN(date.getTime()) ? "never" : date.toISOString();
+}
+
+export async function runLlmCommand(llmOAuth: LlmOAuth, args: string[]): Promise<void> {
+  const [action, rawProvider] = args;
+
+  switch (action) {
+    case "login": {
+      const provider = llmProviderSchema.parse(rawProvider);
+      const oauthProvider = getLlmOAuthProvider(provider);
+
+      if (oauthProvider === undefined) {
+        throw new Error(`provider "${provider}" has no OAuth login`);
+      }
+
+      console.log(`Logging in to ${oauthProvider.label}...`);
+
+      const login = await withTerminalAuth((interaction) => llmOAuth.login(provider, interaction));
+
+      console.log(`stored ${provider} OAuth login`);
+      console.log(`access token expires ${formatExpiry(login.expires)}`);
+
+      return;
+    }
+    case "logout":
+      await llmOAuth.logout(llmProviderSchema.parse(rawProvider));
+
+      return;
+    case "status":
+      for (const login of await llmOAuth.list()) {
+        console.log(`${login.provider}\t${formatExpiry(login.expires)}`);
+      }
+
+      return;
+    default:
+      throw new Error("usage: tetherbox-daemon llm <login|logout|status> [provider]");
+  }
+}
+
+const MODEL_ARG_OPTIONS = {
+  provider: { type: "string" },
+  model: { type: "string" },
+  auth: { type: "string" },
+} as const;
+
+interface ModelArgs {
+  provider?: string | undefined;
+  model?: string | undefined;
+  auth?: string | undefined;
+}
+
+function modelInput(values: ModelArgs) {
+  return {
+    provider: llmProviderSchema.parse(values.provider),
+    id: values.model,
+    auth: values.auth,
+  };
+}
+
+async function writeProfileConfig(profileDir: string, profileConfig: ProfileConfig): Promise<void> {
+  await writeFile(
+    join(profileDir, profileLayout.config),
+    `${JSON.stringify(profileConfig, null, 2)}\n`,
+  );
+}
+
+async function reportReload(config: DaemonConfig, message: string): Promise<void> {
+  const reloaded = await signalDaemonReload(config.dataDir);
+
+  console.log(reloaded ? `${message} (reloaded daemon)` : message);
+}
+
 export async function runProfilesCommand(config: DaemonConfig, args: string[]): Promise<void> {
   const [action, rawId, ...rest] = args;
   const registry = new ProfileRegistry(config.profilesDir);
@@ -134,8 +214,7 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
         options: {
           name: { type: "string" },
           channel: { type: "string" },
-          provider: { type: "string" },
-          model: { type: "string" },
+          ...MODEL_ARG_OPTIONS,
           starter: { type: "string", multiple: true, default: [] },
         },
       });
@@ -143,10 +222,7 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       const profileConfig = profileConfigSchema.parse({
         name: values.name ?? id,
         slackChannelId: values.channel,
-        model: {
-          provider: llmProviderSchema.parse(values.provider),
-          id: values.model,
-        },
+        model: modelInput(values),
         starters: selectedStarters.map((starter) => starter.id),
       });
       const profileDir = join(config.profilesDir, id);
@@ -168,10 +244,7 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       await mkdir(profileDir, { recursive: true });
 
       try {
-        await writeFile(
-          join(profileDir, profileLayout.config),
-          `${JSON.stringify(profileConfig, null, 2)}\n`,
-        );
+        await writeProfileConfig(profileDir, profileConfig);
         await writeFile(join(profileDir, profileLayout.memory), `# ${profileConfig.name}\n`);
 
         for (const starter of selectedStarters) {
@@ -188,9 +261,27 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
 
       // TODO: Set profileDir ownership to config.agent.user once the VM installer configures a
       // shared group or chown rule for the daemon user.
-      const reloaded = await signalDaemonReload(config.dataDir);
+      await reportReload(config, `created ${id}`);
 
-      console.log(reloaded ? `created ${id} (reloaded daemon)` : `created ${id}`);
+      return;
+    }
+    case "set-model": {
+      const id = profileIdSchema.parse(rawId);
+      const { values } = parseArgs({
+        args: rest,
+        options: MODEL_ARG_OPTIONS,
+      });
+      const profileDir = join(config.profilesDir, id);
+      const current = profileConfigSchema.parse(
+        JSON.parse(await readFile(join(profileDir, profileLayout.config), "utf8")),
+      );
+      const model = modelRefSchema.parse(modelInput(values));
+
+      await writeProfileConfig(profileDir, { ...current, model });
+      await reportReload(
+        config,
+        `set ${id} model to ${model.provider}/${model.id} (${model.auth})`,
+      );
 
       return;
     }
@@ -206,6 +297,8 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       return;
     }
     default:
-      throw new Error("usage: tetherbox-daemon profiles <list|validate|create|reload> [id]");
+      throw new Error(
+        "usage: tetherbox-daemon profiles <list|validate|create|set-model|reload> [id]",
+      );
   }
 }

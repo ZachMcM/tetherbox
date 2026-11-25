@@ -17,7 +17,7 @@ Tetherbox is a self-hosted personal assistant for engineers. It runs on a user's
 - The daemon runs as the `tetherbox` OS user and is the only process that can read secrets, OAuth tokens, or provider credentials.
 - Agent runs get their input as JSON on stdin and print one `TurnResult` JSON document on stdout. Nothing secret goes through their environment.
 - Agent runs reach the daemon only through the internal Unix socket, authenticated by a per-run token. `createInternalApi` in `packages/core` defines those routes, and the daemon supplies the handlers.
-- Secrets leave the daemon only through the secret proxy (`/proxy/<host>/...`), which injects a secret when the target host is one of its pinned domains. LLM calls go through `/llm/<provider>/...` the same way.
+- Secrets leave the daemon only through the secret proxy (`/proxy/<host>/...`), which injects a secret when the target host is one of its pinned domains. LLM calls go through `/llm/<provider>/...` the same way, using either an API key or an OAuth login that the daemon refreshes (both set with `tetherbox llm login`). For OAuth, the agent gets only a placeholder token shaped like the real one.
 - The public server listens on localhost and is exposed through Tailscale Funnel. Treat every route on it as internet-facing.
 - The daemon never imports or runs code from a profile. Profile modules load only inside agent runs.
 

@@ -1,12 +1,13 @@
 import * as p from "@clack/prompts";
-import { llmProviderSchema, profileConfigSchema, profileIdSchema } from "@tetherbox/core";
+import { profileConfigSchema, profileIdSchema } from "@tetherbox/core";
 import { collectStarterCliAuth, collectStarterSecrets, starters } from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
 import { ensureStarterCliAuth } from "../auth.ts";
 import { readConfig } from "../config.ts";
+import { ensureModelAuth, modelRefArgs, promptModelRef } from "../llm.ts";
 import { runDaemonCommand } from "../remote.ts";
-import { ensureLlmProviderSecret, ensureRequiredSecrets, listRemoteSecrets } from "../secrets.ts";
+import { ensureRequiredSecrets, listRemoteSecrets } from "../secrets.ts";
 
 const slackChannelSchema = profileConfigSchema.shape.slackChannelId;
 
@@ -79,29 +80,9 @@ export function registerProfiles(program: Command): void {
         return;
       }
 
-      const rawProvider = await p.text({
-        message: "Model provider",
-        placeholder: "anthropic",
-        validate: (value) =>
-          llmProviderSchema.safeParse(value?.trim()).success
-            ? undefined
-            : "Use a lowercase provider slug such as anthropic or openai",
-      });
+      const model = await promptModelRef();
 
-      if (p.isCancel(rawProvider)) {
-        p.cancel("Profile creation cancelled.");
-
-        return;
-      }
-
-      const provider = llmProviderSchema.parse(rawProvider.trim());
-      const modelId = await p.text({
-        message: "Model ID",
-        placeholder: "claude-sonnet-4-5",
-        validate: (value) => (value?.trim() ? undefined : "A model ID is required"),
-      });
-
-      if (p.isCancel(modelId)) {
+      if (model === undefined) {
         p.cancel("Profile creation cancelled.");
 
         return;
@@ -124,11 +105,7 @@ export function registerProfiles(program: Command): void {
       }
 
       const existingSecrets = await listRemoteSecrets(sshAlias);
-      const llmStatus = await ensureLlmProviderSecret({
-        sshAlias,
-        provider,
-        existing: existingSecrets,
-      });
+      const llmStatus = await ensureModelAuth({ sshAlias, model, existingSecrets });
 
       if (llmStatus === "cancelled") {
         p.cancel("Profile creation cancelled.");
@@ -166,8 +143,7 @@ export function registerProfiles(program: Command): void {
         id,
         `--name=${name.trim()}`,
         `--channel=${channel.trim()}`,
-        `--provider=${provider}`,
-        `--model=${modelId.trim()}`,
+        ...modelRefArgs(model),
         ...starterArgs,
       ]);
 
@@ -175,6 +151,50 @@ export function registerProfiles(program: Command): void {
 
       if (code === 0) {
         p.outro(`Created profile ${pc.cyan(id)}.`);
+      }
+    });
+
+  profiles
+    .command("set-model")
+    .description("Change a profile's model and how it authenticates")
+    .argument("<id>", "profile id")
+    .action(async (rawId: string) => {
+      const id = profileIdSchema.parse(rawId);
+      const { sshAlias } = await readConfig();
+
+      p.intro(pc.bold(`tetherbox profiles set-model ${id}`));
+
+      const model = await promptModelRef();
+
+      if (model === undefined) {
+        p.cancel("Model change cancelled.");
+
+        return;
+      }
+
+      const authStatus = await ensureModelAuth({
+        sshAlias,
+        model,
+        existingSecrets: await listRemoteSecrets(sshAlias),
+      });
+
+      if (authStatus === "cancelled") {
+        p.cancel("Model change cancelled.");
+
+        return;
+      }
+
+      const code = await runDaemonCommand(sshAlias, [
+        "profiles",
+        "set-model",
+        id,
+        ...modelRefArgs(model),
+      ]);
+
+      process.exitCode = code;
+
+      if (code === 0) {
+        p.outro(`Profile ${pc.cyan(id)} now uses ${model.provider}/${model.id}.`);
       }
     });
 }

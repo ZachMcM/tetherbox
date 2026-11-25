@@ -2,6 +2,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createAdaptorServer } from "@hono/node-server";
 import { createInternalApi, type ProfileValidation } from "@tetherbox/core";
+import type { LlmOAuth } from "./llm-oauth.ts";
 import { proxyLlm } from "./llm-proxy.ts";
 import type { Poller } from "./poller.ts";
 import { loadProfile, type ProfileRegistry } from "./profiles.ts";
@@ -13,6 +14,7 @@ export interface InternalServerDeps {
   socketPath: string;
   registry: ProfileRegistry;
   secrets: SecretStore;
+  llmOAuth: LlmOAuth;
   turns: TurnRunner;
   poller: Poller;
 }
@@ -21,6 +23,7 @@ export async function startInternalServer({
   socketPath,
   registry,
   secrets,
+  llmOAuth,
   turns,
   poller,
 }: InternalServerDeps) {
@@ -48,7 +51,12 @@ export async function startInternalServer({
     listPollJobs: (run) => poller.list(run.profileId),
     cancelPollJob: async (run, name) => ({ cancelled: await poller.cancel(run.profileId, name) }),
     proxyWithSecret: (_run, request) => proxyWithSecret(secrets, request),
-    proxyLlm: (_run, provider, request) => proxyLlm(secrets, provider, request),
+    proxyLlm(run, provider, request) {
+      const model = registry.get(run.profileId)?.config.model;
+      const authKind = model?.provider === provider ? model.auth : "api-key";
+
+      return proxyLlm({ secrets, oauth: llmOAuth }, { provider, authKind, request });
+    },
   });
   const server = createAdaptorServer({ fetch: app.fetch });
 

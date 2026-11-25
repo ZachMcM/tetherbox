@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { profileIdSchema, runIdSchema } from "./ids.ts";
+import { turnModelAuthSchema } from "./llm-auth.ts";
 import { modelRefSchema } from "./profile.ts";
 
 export const turnTriggerSchema = z.discriminatedUnion("kind", [
@@ -36,6 +37,7 @@ export const turnInputSchema = z.object({
   profileDir: z.string().min(1),
   socketPath: z.string().min(1),
   model: modelRefSchema,
+  modelAuth: turnModelAuthSchema,
   trigger: turnTriggerSchema,
 });
 export type TurnInput = z.infer<typeof turnInputSchema>;

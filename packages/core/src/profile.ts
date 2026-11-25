@@ -1,10 +1,17 @@
 import { z } from "zod";
 import { secretKeySchema } from "./ids.ts";
+import { llmAuthKindSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
 
-export const modelRefSchema = z.object({
-  provider: z.string().min(1),
-  id: z.string().min(1),
-});
+export const modelRefSchema = z
+  .object({
+    provider: z.string().min(1),
+    id: z.string().min(1),
+    auth: llmAuthKindSchema.default("api-key"),
+  })
+  .refine((model) => supportedLlmAuthKinds(model.provider).includes(model.auth), {
+    message: "this provider does not support that auth kind",
+    path: ["auth"],
+  });
 export type ModelRef = z.infer<typeof modelRefSchema>;
 
 export const profileConfigSchema = z.object({

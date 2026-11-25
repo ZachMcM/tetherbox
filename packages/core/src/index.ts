@@ -1,4 +1,5 @@
 export * from "./ids.ts";
+export * from "./llm-auth.ts";
 export * from "./module.ts";
 export * from "./paths.ts";
 export * from "./poll.ts";

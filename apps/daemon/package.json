@@ -12,6 +12,7 @@
     "dev": "node --watch src/main.ts serve"
   },
   "dependencies": {
+    "@earendil-works/pi-ai": "catalog:",
     "@hono/node-server": "catalog:",
     "@slack/socket-mode": "catalog:",
     "@slack/web-api": "catalog:",

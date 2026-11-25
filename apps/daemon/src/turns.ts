@@ -1,16 +1,20 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   runIdSchema,
+  llmProviderSchema,
   type AddReactionInput,
+  type ModelRef,
   type ProfileId,
   type ProfileIssue,
   type RunContext,
   type RunId,
   type SendMessageInput,
+  type TurnModelAuth,
   type TurnTrigger,
 } from "@tetherbox/core";
 import { runAgent } from "./agent-spawner.ts";
 import type { DaemonConfig } from "./config.ts";
+import type { LlmOAuth } from "./llm-oauth.ts";
 import type { LoadedProfile, ProfileRegistry } from "./profiles.ts";
 import type { ReplyTarget, SlackTransport } from "./slack.ts";
 
@@ -23,6 +27,7 @@ interface ActiveRun {
 export interface TurnRunnerDeps {
   config: DaemonConfig;
   registry: ProfileRegistry;
+  llmOAuth: LlmOAuth;
   slack: SlackTransport;
   onProfileReloaded(profile: LoadedProfile): ProfileIssue[];
 }
@@ -51,7 +56,11 @@ export class TurnRunner {
 
   enqueue(profileId: ProfileId, trigger: TurnTrigger, replyTarget: ReplyTarget): void {
     const previous = this.#queues.get(profileId) ?? Promise.resolve();
-    const next = previous.then(() => this.#run(profileId, trigger, replyTarget));
+    const next = previous
+      .then(() => this.#run(profileId, trigger, replyTarget))
+      .catch((error: unknown) => {
+        console.error(`turn for profile ${profileId} failed`, error);
+      });
 
     this.#queues.set(profileId, next);
   }
@@ -95,11 +104,49 @@ export class TurnRunner {
     return run;
   }
 
+  async #modelAuth(model: ModelRef): Promise<TurnModelAuth | undefined> {
+    switch (model.auth) {
+      case "api-key":
+        return { kind: "run-token-key" };
+      case "oauth":
+        return this.#deps.llmOAuth.agentAuth(llmProviderSchema.parse(model.provider));
+      default: {
+        const exhaustive: never = model.auth;
+
+        return exhaustive;
+      }
+    }
+  }
+
   async #run(profileId: ProfileId, trigger: TurnTrigger, replyTarget: ReplyTarget): Promise<void> {
     const { config, registry, slack } = this.#deps;
     const profile = registry.get(profileId);
 
     if (profile === undefined) {
+      return;
+    }
+
+    const { model } = profile.config;
+    let modelAuth: TurnModelAuth | undefined;
+
+    try {
+      modelAuth = await this.#modelAuth(model);
+    } catch (error) {
+      console.error(`could not resolve model auth for profile ${profileId}`, error);
+      await slack.postMessage(
+        replyTarget,
+        `Could not load the ${model.provider} login for this profile. Check the daemon logs.`,
+      );
+
+      return;
+    }
+
+    if (modelAuth === undefined) {
+      await slack.postMessage(
+        replyTarget,
+        `This profile signs in to ${model.provider} with OAuth, but the daemon has no login for it. Run: tetherbox llm login ${model.provider}`,
+      );
+
       return;
     }
 
@@ -117,7 +164,8 @@ export class TurnRunner {
         profileId,
         profileDir: profile.dir,
         socketPath: config.socketPath,
-        model: profile.config.model,
+        model,
+        modelAuth,
         trigger,
       });
 

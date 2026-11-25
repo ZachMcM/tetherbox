@@ -11,6 +11,7 @@ function shellQuote(arg: string): string {
 export interface RemoteOptions {
   input?: string;
   interactive?: boolean;
+  forwardPorts?: readonly number[];
 }
 
 interface CaptureResult {
@@ -36,7 +37,11 @@ export function runRemote(
   args: readonly string[],
   options: RemoteOptions = {},
 ): Promise<number> {
-  const sshArgs = options.interactive ? ["-t", "--", alias] : ["--", alias];
+  const forwards = (options.forwardPorts ?? []).flatMap((port) => [
+    "-L",
+    `${port}:127.0.0.1:${port}`,
+  ]);
+  const sshArgs = [...(options.interactive ? ["-t"] : []), ...forwards, "--", alias];
   const child = spawn("ssh", [...sshArgs, ...args.map(shellQuote)], {
     stdio: [options.input === undefined ? "inherit" : "pipe", "inherit", "inherit"],
   });
