@@ -3,9 +3,12 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ToolDefinition } from "@earendil-works/pi-coding-agent";
 import {
+  moduleToolResultSchema,
   profileLayout,
+  tetherboxModuleSchema,
   type ModuleContext,
   type ModuleToolResult,
+  type StarterConfig,
   type TetherboxModule,
 } from "@tetherbox/core";
 import type { TSchema } from "typebox";
@@ -21,19 +24,22 @@ function adaptModule(module: TetherboxModule, ctx: ModuleContext): ToolDefinitio
     description: tool.description,
     parameters: tool.parameters as unknown as TSchema,
     async execute(_toolCallId, params) {
-      const result = await tool.execute(params, ctx);
+      const result = moduleToolResultSchema.parse(await tool.execute(params, ctx));
 
       return { content: [{ type: "text", text: toText(result) }], details: {} };
     },
   }));
 }
 
+export type BaseModuleContext = Omit<ModuleContext, "config">;
+
 /**
  * Imports `modules/<name>/index.ts` from the profile with Node's built-in type stripping.
  */
 export async function loadProfileModules(
   profileDir: string,
-  ctx: ModuleContext,
+  baseCtx: BaseModuleContext,
+  starterConfig: StarterConfig,
 ): Promise<ToolDefinition[]> {
   const modulesDir = join(profileDir, profileLayout.modulesDir);
   let names: string[];
@@ -52,10 +58,19 @@ export async function loadProfileModules(
     const entry = pathToFileURL(join(modulesDir, name, profileLayout.moduleEntry)).href;
 
     try {
-      const loaded = (await import(entry)) as { default: TetherboxModule };
+      const imported: unknown = await import(entry);
+      const defaultExport =
+        typeof imported === "object" && imported !== null && "default" in imported
+          ? imported.default
+          : undefined;
+      const loaded = tetherboxModuleSchema.parse(defaultExport);
+      const ctx: ModuleContext = {
+        ...baseCtx,
+        config: starterConfig[loaded.name] ?? {},
+      };
 
-      // TODO: Validate the default export's shape and report requiredSecrets that are missing.
-      tools.push(...adaptModule(loaded.default, ctx));
+      // TODO: Report requiredSecrets that are missing.
+      tools.push(...adaptModule(loaded, ctx));
     } catch (error) {
       // TODO: Surface module load errors to the agent so it can fix modules it wrote.
       console.error(`failed to load module ${name}`, error);

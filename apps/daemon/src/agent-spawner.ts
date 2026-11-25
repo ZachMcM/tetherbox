@@ -1,17 +1,26 @@
 import { spawn } from "node:child_process";
-import { turnResultSchema, type TurnInput, type TurnResult } from "@tetherbox/core";
+import {
+  AGENT_SYSTEM_PATH,
+  buildAgentSudoCommand,
+  localAgentPath,
+  turnResultSchema,
+  type TurnInput,
+  type TurnResult,
+} from "@tetherbox/core";
 import type { DaemonConfig } from "./config.ts";
 
-const AGENT_PATH = "/usr/local/bin:/usr/bin:/bin";
-
-function agentCommand(agent: DaemonConfig["agent"]): [string, string[]] {
+function agentCommand(agent: DaemonConfig["agent"]): readonly [string, string[]] {
   if (agent.user === undefined) {
     return [process.execPath, [agent.entry]];
   }
 
   // TODO: Install a sudoers rule letting the daemon user run only this command as the agent user,
   // or switch to `systemd-run --uid` so a run gets its own cgroup with memory and CPU limits.
-  return ["sudo", ["-n", "-H", "-u", agent.user, "--", process.execPath, agent.entry]];
+  return buildAgentSudoCommand({
+    user: agent.user,
+    command: [process.execPath, agent.entry],
+    nonInteractive: true,
+  });
 }
 
 /**
@@ -22,7 +31,7 @@ export function runAgent(agent: DaemonConfig["agent"], input: TurnInput): Promis
   const [command, args] = agentCommand(agent);
   const child = spawn(command, args, {
     env: {
-      PATH: AGENT_PATH,
+      PATH: agent.user === undefined ? localAgentPath(process.env.HOME) : AGENT_SYSTEM_PATH,
       LANG: "C.UTF-8",
       ...(agent.user === undefined && { HOME: process.env.HOME }),
     },

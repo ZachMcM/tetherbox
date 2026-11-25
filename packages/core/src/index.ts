@@ -1,3 +1,4 @@
+export * from "./agent-command.ts";
 export * from "./ids.ts";
 export * from "./llm-auth.ts";
 export * from "./module.ts";

@@ -1,12 +1,14 @@
 import * as p from "@clack/prompts";
 import {
   formatSecretInjection,
-  parseSecretInjection,
+  hostnameSchema,
   secretBindingSchema,
   secretKeySchema,
+  secretListSchema,
   type LlmProvider,
   type SecretBinding,
   type SecretKey,
+  type StarterConfig,
 } from "@tetherbox/core";
 import type { StarterSecret } from "@tetherbox/starters";
 import { captureDaemonCommand, runDaemonCommand } from "./remote.ts";
@@ -47,52 +49,16 @@ function describeBinding(binding: SecretBinding): string {
   }
 }
 
-function parseBindingColumns(columns: readonly string[]): SecretBinding {
-  const [kind, target, injectSpec] = columns;
-
-  switch (kind) {
-    case "daemon":
-      return { kind: "daemon" };
-    case "llm":
-      return secretBindingSchema.parse({ kind: "llm", provider: target });
-    case "proxy":
-      return secretBindingSchema.parse({
-        kind: "proxy",
-        domains: target === undefined || target === "" ? [] : target.split(","),
-        inject: parseSecretInjection(injectSpec ?? "bearer"),
-      });
-    default:
-      throw new Error(`unexpected secret binding kind "${kind ?? ""}"`);
-  }
-}
-
-function parseRemoteSecrets(stdout: string): Map<SecretKey, SecretBinding> {
-  const result = new Map<SecretKey, SecretBinding>();
-
-  for (const rawLine of stdout.split("\n")) {
-    const line = rawLine.trim();
-
-    if (line === "") {
-      continue;
-    }
-
-    const [rawKey, ...columns] = line.split("\t");
-    const key = secretKeySchema.parse(rawKey);
-
-    result.set(key, parseBindingColumns(columns));
-  }
-
-  return result;
-}
-
 export async function listRemoteSecrets(sshAlias: string): Promise<Map<SecretKey, SecretBinding>> {
-  const result = await captureDaemonCommand(sshAlias, ["secrets", "list"]);
+  const result = await captureDaemonCommand(sshAlias, ["secrets", "list", "--json"]);
 
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || "failed to list secrets on the VM");
   }
 
-  return parseRemoteSecrets(result.stdout);
+  const entries = secretListSchema.parse(JSON.parse(result.stdout));
+
+  return new Map(entries.map((entry) => [entry.key, entry.binding]));
 }
 
 function bindingSatisfies(existing: SecretBinding, required: SecretBinding): boolean {
@@ -176,34 +142,130 @@ export interface EnsureRequiredSecretsOptions {
   sshAlias: string;
   required: readonly StarterSecret[];
   existing: Map<SecretKey, SecretBinding>;
+  starterConfig?: StarterConfig;
+}
+
+function domainFromConfigUrl(
+  starterConfig: StarterConfig | undefined,
+  ref: { readonly starterId: string; readonly key: string } | undefined,
+): string | undefined {
+  if (starterConfig === undefined || ref === undefined) {
+    return undefined;
+  }
+
+  const rawUrl = starterConfig[ref.starterId]?.[ref.key];
+
+  if (rawUrl === undefined) {
+    return undefined;
+  }
+
+  const parsed = URL.parse(rawUrl);
+
+  if (parsed === null) {
+    return undefined;
+  }
+
+  const hostname = parsed.hostname.toLowerCase();
+
+  return hostnameSchema.safeParse(hostname).success ? hostname : undefined;
+}
+
+async function resolveRequiredBinding(
+  entry: StarterSecret,
+  current: SecretBinding | undefined,
+  starterConfig: StarterConfig | undefined,
+): Promise<SecretBinding | "satisfied" | "cancelled"> {
+  switch (entry.kind) {
+    case "fixed": {
+      if (current !== undefined && bindingSatisfies(current, entry.binding)) {
+        return "satisfied";
+      }
+
+      return mergeRequiredBinding(current, entry.binding);
+    }
+    case "prompt-domain": {
+      const derivedDomain = domainFromConfigUrl(starterConfig, entry.fromConfigUrl);
+
+      if (derivedDomain !== undefined) {
+        const requiredBinding = secretBindingSchema.parse({
+          kind: "proxy",
+          domains: [derivedDomain],
+          inject: entry.inject,
+        });
+
+        if (current !== undefined && bindingSatisfies(current, requiredBinding)) {
+          return "satisfied";
+        }
+
+        return mergeRequiredBinding(current, requiredBinding);
+      }
+
+      if (
+        current?.kind === "proxy" &&
+        formatSecretInjection(current.inject) === formatSecretInjection(entry.inject)
+      ) {
+        return "satisfied";
+      }
+
+      const rawDomain = await p.text({
+        message: entry.domainPrompt,
+        placeholder: entry.domainPlaceholder,
+        validate: (value) =>
+          hostnameSchema.safeParse(value?.trim().toLowerCase()).success
+            ? undefined
+            : "Enter a valid hostname without scheme or path",
+      });
+
+      if (p.isCancel(rawDomain)) {
+        return "cancelled";
+      }
+
+      const binding = secretBindingSchema.parse({
+        kind: "proxy",
+        domains: [rawDomain.trim().toLowerCase()],
+        inject: entry.inject,
+      });
+
+      return mergeRequiredBinding(current, binding);
+    }
+    default: {
+      const exhaustive: never = entry;
+
+      return exhaustive;
+    }
+  }
 }
 
 export async function ensureRequiredSecrets({
   sshAlias,
   required,
   existing,
+  starterConfig,
 }: EnsureRequiredSecretsOptions): Promise<"ok" | "cancelled"> {
   for (const entry of required) {
     const current = existing.get(entry.key);
+    const resolved = await resolveRequiredBinding(entry, current, starterConfig);
 
-    if (current !== undefined && bindingSatisfies(current, entry.binding)) {
+    if (resolved === "satisfied") {
       continue;
     }
 
-    const nextBinding = mergeRequiredBinding(current, entry.binding);
+    if (resolved === "cancelled") {
+      return "cancelled";
+    }
 
     if (current === undefined) {
-      p.log.info(`Missing secret ${entry.key} (${describeBinding(nextBinding)}).`);
+      p.log.info(`Missing secret ${entry.key} (${describeBinding(resolved)}).`);
     } else {
       p.log.info(
-        `Secret ${entry.key} is currently ${describeBinding(current)}, updating to ${describeBinding(nextBinding)}.`,
+        `Secret ${entry.key} is currently ${describeBinding(current)}, updating to ${describeBinding(resolved)}.`,
       );
     }
 
     const status = await promptAndSetSecret({
       sshAlias,
       key: entry.key,
-      binding: nextBinding,
+      binding: resolved,
       message: `Enter ${entry.key}`,
     });
 
@@ -211,7 +273,7 @@ export async function ensureRequiredSecrets({
       return "cancelled";
     }
 
-    existing.set(entry.key, nextBinding);
+    existing.set(entry.key, resolved);
   }
 
   return "ok";

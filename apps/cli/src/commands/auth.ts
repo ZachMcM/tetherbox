@@ -1,5 +1,9 @@
 import * as p from "@clack/prompts";
-import { getStarter, listCliAuthStarters, type StarterCliAuthEntry } from "@tetherbox/starters";
+import {
+  getCliAuthStarter,
+  listCliAuthStarters,
+  type StarterCliAuthEntry,
+} from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
 import { formatCliAuthStatus, inspectCliAuth, runStarterLogin } from "../auth.ts";
@@ -10,16 +14,6 @@ function supportedStarterIds(): string {
   return listCliAuthStarters()
     .map((entry) => entry.starterId)
     .join(", ");
-}
-
-function resolveCliAuthEntry(starterId: string): StarterCliAuthEntry | undefined {
-  const starter = getStarter(starterId);
-
-  if (starter?.cliAuth === undefined) {
-    return undefined;
-  }
-
-  return { starterId: starter.id, cliAuth: starter.cliAuth };
 }
 
 export function registerAuth(program: Command): void {
@@ -39,7 +33,7 @@ export function registerAuth(program: Command): void {
           options: listCliAuthStarters().map((candidate) => ({
             value: candidate,
             label: candidate.starterId,
-            hint: candidate.cliAuth.loginCommand.join(" "),
+            hint: candidate.cli.auth.loginCommand.join(" "),
           })),
         });
 
@@ -51,7 +45,7 @@ export function registerAuth(program: Command): void {
 
         entry = picked;
       } else {
-        const resolved = resolveCliAuthEntry(starterId);
+        const resolved = getCliAuthStarter(starterId);
 
         if (resolved === undefined) {
           console.error(
@@ -79,7 +73,7 @@ export function registerAuth(program: Command): void {
       if (starterId === undefined) {
         entries = listCliAuthStarters();
       } else {
-        const resolved = resolveCliAuthEntry(starterId);
+        const resolved = getCliAuthStarter(starterId);
 
         if (resolved === undefined) {
           console.error(
@@ -94,7 +88,7 @@ export function registerAuth(program: Command): void {
       }
 
       for (const entry of entries) {
-        const status = await inspectCliAuth(sshAlias, entry.cliAuth);
+        const status = await inspectCliAuth(sshAlias, entry.cli);
 
         console.log(`${pc.bold(entry.starterId)}\t${formatCliAuthStatus(status)}`);
       }

@@ -1,7 +1,14 @@
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { z } from "zod";
 
 const PID_FILE = "daemon.pid";
+const pidSchema = z
+  .string()
+  .trim()
+  .regex(/^\d+$/)
+  .transform(Number)
+  .pipe(z.number().int().positive());
 
 function hasErrorCode(error: unknown, code: string): boolean {
   return error instanceof Error && "code" in error && error.code === code;
@@ -49,14 +56,14 @@ export async function signalDaemonReload(dataDir: string): Promise<boolean> {
     throw error;
   }
 
-  const pid = Number.parseInt(raw.trim(), 10);
+  const pid = pidSchema.safeParse(raw);
 
-  if (!Number.isInteger(pid) || pid <= 0) {
+  if (!pid.success) {
     return false;
   }
 
   try {
-    process.kill(pid, "SIGHUP");
+    process.kill(pid.data, "SIGHUP");
 
     return true;
   } catch (error) {

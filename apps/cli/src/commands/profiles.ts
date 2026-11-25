@@ -1,13 +1,13 @@
 import * as p from "@clack/prompts";
 import { profileConfigSchema, profileIdSchema } from "@tetherbox/core";
-import { collectStarterCliAuth, collectStarterSecrets, starters } from "@tetherbox/starters";
+import { starters } from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
-import { ensureStarterCliAuth } from "../auth.ts";
 import { readConfig } from "../config.ts";
 import { ensureModelAuth, modelRefArgs, promptModelRef } from "../llm.ts";
 import { runDaemonCommand } from "../remote.ts";
-import { ensureRequiredSecrets, listRemoteSecrets } from "../secrets.ts";
+import { listRemoteSecrets } from "../secrets.ts";
+import { ensureStarterSetup, starterConfigArgs } from "../starters.ts";
 
 const slackChannelSchema = profileConfigSchema.shape.slackChannelId;
 
@@ -27,7 +27,8 @@ export function registerProfiles(program: Command): void {
     .command("validate")
     .description("Check a profile's config, cron, webhook, and poll files")
     .argument("<id>", "profile id")
-    .action(async (id: string) => {
+    .action(async (rawId: string) => {
+      const id = profileIdSchema.parse(rawId);
       const { sshAlias } = await readConfig();
 
       process.exitCode = await runDaemonCommand(sshAlias, ["profiles", "validate", id]);
@@ -113,24 +114,13 @@ export function registerProfiles(program: Command): void {
         return;
       }
 
-      const starterStatus = await ensureRequiredSecrets({
+      const starterSetup = await ensureStarterSetup({
         sshAlias,
-        required: collectStarterSecrets(selectedStarters),
-        existing: existingSecrets,
+        starterIds: selectedStarters,
+        existingSecrets,
       });
 
-      if (starterStatus === "cancelled") {
-        p.cancel("Profile creation cancelled.");
-
-        return;
-      }
-
-      const cliAuthStatus = await ensureStarterCliAuth({
-        sshAlias,
-        entries: collectStarterCliAuth(selectedStarters),
-      });
-
-      if (cliAuthStatus === "cancelled") {
+      if (starterSetup.kind === "cancelled") {
         p.cancel("Profile creation cancelled.");
 
         return;
@@ -145,6 +135,7 @@ export function registerProfiles(program: Command): void {
         `--channel=${channel.trim()}`,
         ...modelRefArgs(model),
         ...starterArgs,
+        ...starterConfigArgs(starterSetup.starterConfig),
       ]);
 
       process.exitCode = code;

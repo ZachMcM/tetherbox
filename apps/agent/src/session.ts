@@ -20,7 +20,7 @@ import {
 } from "@tetherbox/core";
 import { startLlmForwarder } from "./llm-forwarder.ts";
 import { loadProfileModules } from "./modules.ts";
-import { formatTrigger, loadSystemPromptAppendix } from "./prompt.ts";
+import { formatTrigger, loadSystemPromptAppendix, readStarterConfig } from "./prompt.ts";
 import { createBuiltinTools } from "./tools.ts";
 
 const builtinSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
@@ -86,27 +86,32 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     // The daemon's LLM proxy relays HTTP only, so Pi must not open WebSocket streams.
     settingsManager.applyOverrides({ defaultTools: ["+codemode"], transport: "sse" });
 
+    const starterConfig = await readStarterConfig(profileDir);
     const resourceLoader = new DefaultResourceLoader({
       cwd: profileDir,
       agentDir,
       settingsManager,
       extensionFactories: [createCodemodeExtension({ mode: "on" })],
       additionalSkillPaths: [builtinSkillsDir, join(profileDir, profileLayout.skillsDir)],
-      appendSystemPrompt: await loadSystemPromptAppendix(profileDir),
+      appendSystemPrompt: await loadSystemPromptAppendix(profileDir, starterConfig),
     });
 
     await resourceLoader.reload();
 
     const fetchWithSecret = createSecretProxyFetch({ socketPath, runToken });
-    const moduleTools = await loadProfileModules(profileDir, {
-      profileId: input.profileId,
-      fetchWithSecret,
-      async hasSecret(secretKey) {
-        const response = await client.rpc.secrets[":key"].$get({ param: { key: secretKey } });
+    const moduleTools = await loadProfileModules(
+      profileDir,
+      {
+        profileId: input.profileId,
+        fetchWithSecret,
+        async hasSecret(secretKey) {
+          const response = await client.rpc.secrets[":key"].$get({ param: { key: secretKey } });
 
-        return response.ok && (await response.json()).exists;
+          return response.ok && (await response.json()).exists;
+        },
       },
-    });
+      starterConfig,
+    );
     const { session } = await createAgentSession({
       cwd: profileDir,
       agentDir,

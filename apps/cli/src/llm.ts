@@ -1,6 +1,7 @@
 import * as p from "@clack/prompts";
 import {
   getLlmOAuthProvider,
+  llmOAuthStatusListSchema,
   llmProviderSchema,
   modelRefSchema,
   supportedLlmAuthKinds,
@@ -87,24 +88,16 @@ export function modelRefArgs(model: ModelRef): string[] {
   return [`--provider=${model.provider}`, `--model=${model.id}`, `--auth=${model.auth}`];
 }
 
-export async function listOAuthLogins(sshAlias: string): Promise<Map<string, string>> {
-  const result = await captureDaemonCommand(sshAlias, ["llm", "status"]);
+export async function listOAuthLogins(sshAlias: string): Promise<Map<LlmProvider, string>> {
+  const result = await captureDaemonCommand(sshAlias, ["llm", "status", "--json"]);
 
   if (result.code !== 0) {
     throw new Error(result.stderr.trim() || "failed to list OAuth logins on the VM");
   }
 
-  const logins = new Map<string, string>();
+  const entries = llmOAuthStatusListSchema.parse(JSON.parse(result.stdout));
 
-  for (const line of result.stdout.split("\n")) {
-    const [provider, expires] = line.trim().split("\t");
-
-    if (provider !== undefined && provider !== "") {
-      logins.set(provider, expires ?? "");
-    }
-  }
-
-  return logins;
+  return new Map(entries.map((entry) => [entry.provider, entry.expires]));
 }
 
 /**
@@ -171,7 +164,7 @@ export async function ensureModelAuth({
   model,
   existingSecrets,
 }: EnsureModelAuthOptions): Promise<"ok" | "cancelled"> {
-  const provider = llmProviderSchema.parse(model.provider);
+  const { provider } = model;
 
   switch (model.auth) {
     case "api-key":

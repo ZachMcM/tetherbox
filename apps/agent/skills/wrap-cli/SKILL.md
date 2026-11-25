@@ -11,20 +11,21 @@ If credentials must stay hidden from the agent process behind the daemon's domai
 
 ## Inspect the CLI first
 
-1. Confirm the binary is available on `PATH` with `command -v <bin>`. If it is missing, tell the user what to install on the VM before continuing.
+1. Confirm the binary is available on `PATH` with `command -v <bin>`. If it is missing and can be installed in user space (such as `npm install -g --prefix "$HOME/.local" <pkg>` or placing a binary in `~/.local/bin`, which is on `PATH`), install it yourself. Only ask the user to install it on the VM when the tool requires root or a system package.
 2. Read `<bin> --help` and each subcommand's `--help` instead of guessing flags.
 3. Prefer non-interactive and machine-readable flags (`--json`, `--format json`, `--yes`, `--no-input`, `--non-interactive`). Avoid commands that open a pager or editor; pass `--no-pager` or set `PAGER=cat` when needed.
 
-## Authentication boundaries
+## Authentication and connection boundaries
 
 External CLIs manage their own auth state under the `tetherbox-agent` user's home directory, separate from the daemon's secret store.
 
 - Never ask the user to paste tokens, API keys, cookies, or passwords in chat.
-- Never store credentials in `SKILL.md`, profile files, or memory.
+- Never store credentials in `SKILL.md`, `profile.json`, or memory.
 - Document the CLI's non-interactive status check (such as `gh auth status` or `claude auth status`) in the skill and run it when commands fail with auth errors.
 - When authentication is missing or expired, give the user the exact command to run on their laptop:
-  - For built-in CLI starters (`gh`, `claude`, `opencode`): `tetherbox auth <starter>`
+  - For built-in CLI starters (`gh`, `claude`, `paseo`): `tetherbox auth <starter>`
   - For any other wrapped CLI: `tetherbox auth exec -- <login command>`
+- Some CLIs (such as Tailscale- or SSH-connected tools like `rex`, `paseo`, or `opencode`) have no login step and only need a remote host or URL. Ask the user for that non-secret host or URL once, store it in `profile.json` under `starterConfig.<name>` (not in `MEMORY.md`, which gets summarized), and reference that config key in `skills/<name>/SKILL.md`.
 
 `tetherbox auth` runs the login interactively over SSH as `tetherbox-agent` with `HOME` set to the agent user's directory, so credentials land where future turns can use them.
 

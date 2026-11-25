@@ -13,6 +13,7 @@ import {
   profileLayout,
   resolveSecretBinding,
   secretKeySchema,
+  starterConfigFlagsSchema,
   type ProfileConfig,
   type SecretBinding,
 } from "@tetherbox/core";
@@ -94,12 +95,25 @@ export async function runSecretsCommand(store: SecretStore, args: string[]): Pro
       await store.delete(secretKeySchema.parse(rawKey));
 
       return;
-    case "list":
-      for (const entry of await store.list()) {
+    case "list": {
+      const { values } = parseArgs({
+        args: args.slice(1),
+        options: { json: { type: "boolean", default: false } },
+      });
+      const entries = await store.list();
+
+      if (values.json) {
+        console.log(JSON.stringify(entries));
+
+        return;
+      }
+
+      for (const entry of entries) {
         console.log(`${entry.key}\t${formatBinding(entry.binding)}`);
       }
 
       return;
+    }
     default:
       throw new Error("usage: tetherbox-daemon secrets <set|has|delete|list> [key]");
   }
@@ -136,12 +150,28 @@ export async function runLlmCommand(llmOAuth: LlmOAuth, args: string[]): Promise
       await llmOAuth.logout(llmProviderSchema.parse(rawProvider));
 
       return;
-    case "status":
-      for (const login of await llmOAuth.list()) {
-        console.log(`${login.provider}\t${formatExpiry(login.expires)}`);
+    case "status": {
+      const { values } = parseArgs({
+        args: args.slice(1),
+        options: { json: { type: "boolean", default: false } },
+      });
+      const logins = (await llmOAuth.list()).map((login) => ({
+        provider: login.provider,
+        expires: formatExpiry(login.expires),
+      }));
+
+      if (values.json) {
+        console.log(JSON.stringify(logins));
+
+        return;
+      }
+
+      for (const login of logins) {
+        console.log(`${login.provider}\t${login.expires}`);
       }
 
       return;
+    }
     default:
       throw new Error("usage: tetherbox-daemon llm <login|logout|status> [provider]");
   }
@@ -161,7 +191,7 @@ interface ModelArgs {
 
 function modelInput(values: ModelArgs) {
   return {
-    provider: llmProviderSchema.parse(values.provider),
+    provider: values.provider,
     id: values.model,
     auth: values.auth,
   };
@@ -216,14 +246,17 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
           channel: { type: "string" },
           ...MODEL_ARG_OPTIONS,
           starter: { type: "string", multiple: true, default: [] },
+          "starter-config": { type: "string", multiple: true, default: [] },
         },
       });
       const selectedStarters = resolveStarters(values.starter);
+      const starterConfig = starterConfigFlagsSchema.parse(values["starter-config"]);
       const profileConfig = profileConfigSchema.parse({
         name: values.name ?? id,
         slackChannelId: values.channel,
         model: modelInput(values),
         starters: selectedStarters.map((starter) => starter.id),
+        starterConfig,
       });
       const profileDir = join(config.profilesDir, id);
 

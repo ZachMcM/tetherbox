@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { buildAgentSudoCommand } from "@tetherbox/core";
 
 const DAEMON_USER = "tetherbox";
 const DAEMON_BIN = "tetherbox-daemon";
@@ -25,7 +26,13 @@ function daemonCommandArgs(args: readonly string[]): string[] {
 }
 
 function agentCommandArgs(args: readonly string[], nonInteractive: boolean): string[] {
-  return ["sudo", ...(nonInteractive ? ["-n"] : []), "-H", "-u", AGENT_USER, "--", ...args];
+  const [binary, sudoArgs] = buildAgentSudoCommand({
+    user: AGENT_USER,
+    command: args,
+    nonInteractive,
+  });
+
+  return [binary, ...sudoArgs];
 }
 
 /**

@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { llmProviderSchema } from "./ids.ts";
+import { llmProviderSchema, secretKeySchema } from "./ids.ts";
 
-const hostnameSchema = z
+export const hostnameSchema = z
   .string()
   .regex(/^(?=.{1,253}$)([a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/);
 
@@ -29,6 +29,13 @@ export const secretBindingSchema = z.discriminatedUnion("kind", [
 ]);
 export type SecretBinding = z.infer<typeof secretBindingSchema>;
 export type SecretKind = SecretBinding["kind"];
+
+export const secretListEntrySchema = z.object({
+  key: secretKeySchema,
+  binding: secretBindingSchema,
+});
+export const secretListSchema = z.array(secretListEntrySchema);
+export type SecretListEntry = z.infer<typeof secretListEntrySchema>;
 
 export type SecretCheckResult = { exists: false } | { exists: true; kind: SecretKind };
 

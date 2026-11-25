@@ -81,3 +81,10 @@ export const turnModelAuthSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("placeholder-oauth"), access: z.string().min(1) }),
 ]);
 export type TurnModelAuth = z.infer<typeof turnModelAuthSchema>;
+
+export const llmOAuthStatusEntrySchema = z.object({
+  provider: llmProviderSchema,
+  expires: z.string().min(1),
+});
+export const llmOAuthStatusListSchema = z.array(llmOAuthStatusEntrySchema);
+export type LlmOAuthStatusEntry = z.infer<typeof llmOAuthStatusEntrySchema>;

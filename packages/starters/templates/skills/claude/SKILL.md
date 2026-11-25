@@ -1,37 +1,25 @@
 ---
 name: claude
-description: Dispatch and monitor Claude Code sessions headlessly.
+description: Dispatch and monitor persistent Claude Code Cloud sessions.
 ---
 
 # claude
 
-Use the `claude` CLI to run headless coding sessions on repositories on the VM.
+Use the `claude` CLI with `--cloud` to dispatch persistent coding sessions to Anthropic's cloud infrastructure. Cloud sessions stay viewable and interactive at `claude.ai/code` and in the Claude desktop and mobile apps instead of running headlessly on the Tetherbox VM.
 
 ## Auth
 
-Claude Code manages its own login in the `tetherbox-agent` user's home directory, not in the daemon's secret store.
+Claude Code Cloud requires a Claude subscription login stored under `tetherbox-agent`'s home directory, not a raw API key.
 
 - Check auth with `claude auth status`.
-- If `loggedIn` is `false` or a session fails with an authentication error, never ask for credentials or tokens in chat. Tell the user to run `tetherbox auth claude` on their laptop.
-- For Anthropic Console API billing instead of a Claude subscription, tell the user to run `tetherbox auth claude -- --console`.
-- If `claude` is not installed on the VM, tell the user to install Claude Code and then run `tetherbox auth claude`.
+- If `loggedIn` is `false` or a command fails with an auth error, never ask for tokens in chat. Tell the user to run `tetherbox auth claude` on their laptop.
 
-## Headless dispatch
+## Dispatching cloud sessions
 
-Run non-interactive sessions with `-p` and structured streaming output:
+Check `claude --help` for the exact `--cloud` and session flags on the installed version:
 
 ```sh
-claude -p "<prompt>" --output-format stream-json --verbose
+claude --cloud "<prompt>"
 ```
 
-To continue an existing session:
-
-```sh
-claude -p "<follow-up prompt>" --resume "<session-id>" --output-format stream-json --verbose
-```
-
-Check `claude --help` for permission or workspace flags needed by the task (such as working directory and allowed tools).
-
-## Monitoring long runs
-
-Do not block a turn waiting on a long Claude Code run. Launch the session in the background writing its output and exit status to a log file, then immediately call `register_poll_job` with a fast status-check command that inspects whether the process finished or produced new output. When the poll job triggers on completion or stall, summarize the result and send it with `send_message`.
+Do not block a turn waiting on a cloud session to finish. After dispatching a session, call `register_poll_job` with a fast status check so a new turn wakes on completion, then share the session link or summary with `send_message`.

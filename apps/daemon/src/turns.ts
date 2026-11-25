@@ -1,7 +1,6 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import {
   runIdSchema,
-  llmProviderSchema,
   type AddReactionInput,
   type ModelRef,
   type ProfileId,
@@ -109,7 +108,7 @@ export class TurnRunner {
       case "api-key":
         return { kind: "run-token-key" };
       case "oauth":
-        return this.#deps.llmOAuth.agentAuth(llmProviderSchema.parse(model.provider));
+        return this.#deps.llmOAuth.agentAuth(model.provider);
       default: {
         const exhaustive: never = model.auth;
 

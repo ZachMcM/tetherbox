@@ -1,10 +1,10 @@
 import { z } from "zod";
-import { secretKeySchema } from "./ids.ts";
+import { llmProviderSchema, secretKeySchema } from "./ids.ts";
 import { llmAuthKindSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
 
 export const modelRefSchema = z
   .object({
-    provider: z.string().min(1),
+    provider: llmProviderSchema,
     id: z.string().min(1),
     auth: llmAuthKindSchema.default("api-key"),
   })
@@ -14,11 +14,68 @@ export const modelRefSchema = z
   });
 export type ModelRef = z.infer<typeof modelRefSchema>;
 
+export const starterConfigSchema = z.record(
+  z.string().min(1),
+  z.record(z.string().min(1), z.string().min(1)),
+);
+export type StarterConfig = z.infer<typeof starterConfigSchema>;
+
+export type StarterConfigFieldKind = "string" | "host-port" | "url";
+
+export const starterConfigFieldSchemas: Readonly<
+  Record<StarterConfigFieldKind, z.ZodType<string>>
+> = {
+  string: z.string().trim().min(1, "A value is required"),
+  "host-port": z
+    .string()
+    .trim()
+    .min(1, "A host or host:port is required")
+    .refine((value) => {
+      if (/[/?#@\\]/.test(value)) {
+        return false;
+      }
+
+      const parsed = URL.parse(`http://${value}`);
+
+      return parsed !== null && parsed.hostname !== "" && parsed.pathname === "/";
+    }, "Enter a valid host or host:port (for example workstation.tailnet.ts.net:6767)"),
+  url: z
+    .string()
+    .trim()
+    .pipe(z.url({ protocol: /^https?$/, error: "Enter a valid http:// or https:// URL" })),
+};
+
+const STARTER_CONFIG_FLAG_PATTERN = /^([a-z0-9-]+)\.([A-Za-z0-9_-]+)=(.+)$/;
+
+export const starterConfigFlagSchema = z
+  .string()
+  .regex(STARTER_CONFIG_FLAG_PATTERN, "invalid --starter-config, expected <starter>.<key>=<value>")
+  .transform((entry) => {
+    const [, starterId = "", key = "", value = ""] = STARTER_CONFIG_FLAG_PATTERN.exec(entry) ?? [];
+
+    return { starterId, key, value };
+  });
+
+export const starterConfigFlagsSchema = z
+  .array(starterConfigFlagSchema)
+  .transform((entries) => {
+    const config: Record<string, Record<string, string>> = {};
+
+    for (const { starterId, key, value } of entries) {
+      config[starterId] ??= {};
+      config[starterId][key] = value;
+    }
+
+    return config;
+  })
+  .pipe(starterConfigSchema);
+
 export const profileConfigSchema = z.object({
   name: z.string().min(1),
   slackChannelId: z.string().regex(/^[CDG][A-Z0-9]+$/),
   model: modelRefSchema,
   starters: z.array(z.string().min(1)).default([]),
+  starterConfig: starterConfigSchema.default({}),
 });
 export type ProfileConfig = z.infer<typeof profileConfigSchema>;
 

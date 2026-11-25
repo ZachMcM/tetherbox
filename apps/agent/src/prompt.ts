@@ -1,6 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
-import { profileLayout, type TurnTrigger } from "@tetherbox/core";
+import {
+  profileConfigSchema,
+  profileLayout,
+  type StarterConfig,
+  type TurnTrigger,
+} from "@tetherbox/core";
 
 const MEMORY_PROMPT_BYTES = 8 * 1024;
 
@@ -31,14 +36,50 @@ function capMemory(memory: string): string {
   return `${kept}\n\n[${profileLayout.memory} is ${bytes.length} bytes and was cut at ${MEMORY_PROMPT_BYTES}. Consolidate it: move details into ${profileLayout.memoryDir}/ and keep one index line per topic.]`;
 }
 
-export async function loadSystemPromptAppendix(profileDir: string): Promise<string[]> {
-  const memory = await readMemory(profileDir);
+export async function readStarterConfig(profileDir: string): Promise<StarterConfig> {
+  try {
+    const raw = await readFile(join(profileDir, profileLayout.config), "utf8");
 
-  if (memory === undefined) {
-    return [RUNTIME_PROMPT];
+    return profileConfigSchema.parse(JSON.parse(raw)).starterConfig;
+  } catch {
+    return {};
+  }
+}
+
+function formatStarterConfig(starterConfig: StarterConfig): string | undefined {
+  const entries = Object.entries(starterConfig).filter(
+    ([, fields]) => Object.keys(fields).length > 0,
+  );
+
+  if (entries.length === 0) {
+    return undefined;
   }
 
-  return [RUNTIME_PROMPT, `# Memory (${profileLayout.memory})\n\n${capMemory(memory)}`];
+  const lines = entries.flatMap(([starterId, fields]) =>
+    Object.entries(fields).map(([key, value]) => `- ${starterId}.${key}: ${value}`),
+  );
+
+  return `# Starter config (${profileLayout.config})\n\n${lines.join("\n")}`;
+}
+
+export async function loadSystemPromptAppendix(
+  profileDir: string,
+  starterConfig: StarterConfig,
+): Promise<string[]> {
+  const sections = [RUNTIME_PROMPT];
+  const starterConfigSection = formatStarterConfig(starterConfig);
+
+  if (starterConfigSection !== undefined) {
+    sections.push(starterConfigSection);
+  }
+
+  const memory = await readMemory(profileDir);
+
+  if (memory !== undefined) {
+    sections.push(`# Memory (${profileLayout.memory})\n\n${capMemory(memory)}`);
+  }
+
+  return sections;
 }
 
 export function formatTrigger(trigger: TurnTrigger): string {

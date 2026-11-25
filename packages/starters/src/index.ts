@@ -1,31 +1,73 @@
 import { fileURLToPath } from "node:url";
 import {
   secretBindingSchema,
+  secretInjectionSchema,
   secretKeySchema,
   type SecretBinding,
+  type SecretInjection,
   type SecretKey,
+  type StarterConfigFieldKind,
 } from "@tetherbox/core";
 
 export type StarterCategory = "cli" | "harness" | "integration";
 
-export interface StarterSecret {
-  readonly key: SecretKey;
-  readonly binding: SecretBinding;
+export interface StarterConfigField {
+  readonly key: string;
+  readonly kind: StarterConfigFieldKind;
+  readonly prompt: string;
+  readonly placeholder: string;
+}
+
+export interface StarterConfigEntry {
+  readonly starterId: string;
+  readonly field: StarterConfigField;
+}
+
+export type StarterSecret =
+  | {
+      readonly kind: "fixed";
+      readonly key: SecretKey;
+      readonly binding: SecretBinding;
+    }
+  | {
+      readonly kind: "prompt-domain";
+      readonly key: SecretKey;
+      readonly inject: SecretInjection;
+      readonly domainPrompt: string;
+      readonly domainPlaceholder: string;
+      readonly fromConfigUrl?: { readonly starterId: string; readonly key: string };
+    };
+
+export interface StarterCliInstall {
+  readonly target: "agent" | "system";
+  readonly description: string;
+  readonly command: readonly [string, ...string[]];
 }
 
 export interface StarterCliAuth {
-  readonly binary: string;
   readonly checkCommand?: readonly [string, ...string[]];
   readonly loginCommand: readonly [string, ...string[]];
 }
 
+export interface StarterCli {
+  readonly binary: string;
+  readonly install?: StarterCliInstall;
+  readonly auth?: StarterCliAuth;
+}
+
+export interface StarterCliEntry {
+  readonly starterId: string;
+  readonly cli: StarterCli;
+}
+
 export interface StarterCliAuthEntry {
   readonly starterId: string;
-  readonly cliAuth: StarterCliAuth;
+  readonly cli: StarterCli & { readonly auth: StarterCliAuth };
 }
 
 function proxySecret(key: string, domains: [string, ...string[]]): StarterSecret {
   return {
+    kind: "fixed",
     key: secretKeySchema.parse(key),
     binding: secretBindingSchema.parse({
       kind: "proxy",
@@ -35,11 +77,46 @@ function proxySecret(key: string, domains: [string, ...string[]]): StarterSecret
   };
 }
 
+interface PromptDomainProxySecretInput {
+  readonly key: string;
+  readonly inject?: SecretInjection;
+  readonly domainPrompt: string;
+  readonly domainPlaceholder: string;
+  readonly fromConfigUrl?: { readonly starterId: string; readonly key: string };
+}
+
+function promptDomainProxySecret({
+  key,
+  inject = { kind: "bearer" },
+  domainPrompt,
+  domainPlaceholder,
+  fromConfigUrl,
+}: PromptDomainProxySecretInput): StarterSecret {
+  return {
+    kind: "prompt-domain",
+    key: secretKeySchema.parse(key),
+    inject: secretInjectionSchema.parse(inject),
+    domainPrompt,
+    domainPlaceholder,
+    ...(fromConfigUrl !== undefined ? { fromConfigUrl } : {}),
+  };
+}
+
+function npmUserInstall(packageName: string): StarterCliInstall {
+  return {
+    target: "agent",
+    description: `Install ${packageName} into ~/.local`,
+    command: ["sh", "-c", `npm install -g --prefix "$HOME/.local" ${packageName}`],
+  };
+}
+
 interface StarterBase {
   readonly id: string;
   readonly category: StarterCategory;
   readonly secrets: readonly StarterSecret[];
-  readonly cliAuth?: StarterCliAuth;
+  readonly cli?: StarterCli;
+  readonly configFields?: readonly StarterConfigField[];
+  readonly setupNote?: string;
 }
 
 export type Starter =
@@ -55,30 +132,72 @@ export type Starter =
 export const templatesDir = fileURLToPath(new URL("../templates", import.meta.url));
 
 export const starters = [
-  { kind: "skill", id: "git", category: "cli", path: "skills/git", secrets: [] },
+  {
+    kind: "skill",
+    id: "git",
+    category: "cli",
+    path: "skills/git",
+    secrets: [],
+    cli: { binary: "git" },
+  },
   {
     kind: "skill",
     id: "gh",
     category: "cli",
     path: "skills/gh",
     secrets: [],
-    cliAuth: {
+    cli: {
       binary: "gh",
-      checkCommand: ["gh", "auth", "status"],
-      loginCommand: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
+      auth: {
+        checkCommand: ["gh", "auth", "status"],
+        loginCommand: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
+      },
     },
   },
   {
     kind: "skill",
-    id: "claude",
+    id: "rex",
     category: "harness",
-    path: "skills/claude",
+    path: "skills/rex",
     secrets: [],
-    cliAuth: {
-      binary: "claude",
-      checkCommand: ["claude", "auth", "status"],
-      loginCommand: ["claude", "auth", "login"],
+    cli: {
+      binary: "rex",
+      install: {
+        target: "system",
+        description: "Install Rex via pkgs.superlogical.com/rex/install.sh",
+        command: ["sh", "-c", "curl -fsSL https://pkgs.superlogical.com/rex/install.sh | sh"],
+      },
     },
+    configFields: [
+      {
+        key: "target",
+        kind: "string",
+        prompt: "Rex remote target (Tailscale host or ssh://user@host)",
+        placeholder: "workstation.tailnet.ts.net",
+      },
+    ],
+  },
+  {
+    kind: "skill",
+    id: "paseo",
+    category: "harness",
+    path: "skills/paseo",
+    secrets: [],
+    cli: {
+      binary: "paseo",
+      install: npmUserInstall("@getpaseo/cli"),
+      auth: {
+        loginCommand: ["paseo", "hub", "login"],
+      },
+    },
+    configFields: [
+      {
+        key: "host",
+        kind: "host-port",
+        prompt: "Paseo daemon host:port over Tailscale",
+        placeholder: "workstation.tailnet.ts.net:6767",
+      },
+    ],
   },
   {
     kind: "skill",
@@ -86,20 +205,72 @@ export const starters = [
     category: "harness",
     path: "skills/opencode",
     secrets: [],
-    cliAuth: {
+    cli: {
       binary: "opencode",
-      loginCommand: ["opencode", "auth", "login"],
+      install: npmUserInstall("opencode-ai"),
     },
+    configFields: [
+      {
+        key: "serverUrl",
+        kind: "url",
+        prompt: "OpenCode server URL over Tailscale",
+        placeholder: "http://workstation.tailnet.ts.net:4096",
+      },
+    ],
+    setupNote:
+      "Keep `opencode serve` running on your workstation over Tailscale (for example via launchd on macOS or systemd --user on Linux) so Tetherbox can reach it.",
   },
-  { kind: "skill", id: "t3code", category: "harness", path: "skills/t3code", secrets: [] },
   {
     kind: "skill",
-    id: "antigravity",
+    id: "claude",
     category: "harness",
-    path: "skills/antigravity",
+    path: "skills/claude",
     secrets: [],
+    cli: {
+      binary: "claude",
+      install: npmUserInstall("@anthropic-ai/claude-code"),
+      auth: {
+        checkCommand: ["claude", "auth", "status"],
+        loginCommand: ["claude", "auth", "login"],
+      },
+    },
   },
-  { kind: "module", id: "codex", category: "harness", path: "modules/codex", secrets: [] },
+  {
+    kind: "module",
+    id: "t3code",
+    category: "harness",
+    path: "modules/t3code",
+    configFields: [
+      {
+        key: "endpointUrl",
+        kind: "url",
+        prompt: "T3 Code /mcp endpoint URL",
+        placeholder: "https://workstation.tailnet.ts.net/mcp",
+      },
+    ],
+    secrets: [
+      promptDomainProxySecret({
+        key: "T3CODE_TOKEN",
+        domainPrompt: "Hostname for your T3 Code /mcp endpoint",
+        domainPlaceholder: "workstation.tailnet.ts.net",
+        fromConfigUrl: { starterId: "t3code", key: "endpointUrl" },
+      }),
+    ],
+  },
+  {
+    kind: "module",
+    id: "cursor",
+    category: "harness",
+    path: "modules/cursor",
+    secrets: [proxySecret("CURSOR_API_KEY", ["api.cursor.com"])],
+  },
+  {
+    kind: "module",
+    id: "devin",
+    category: "harness",
+    path: "modules/devin",
+    secrets: [proxySecret("DEVIN_API_KEY", ["api.devin.ai"])],
+  },
   {
     kind: "module",
     id: "slack",
@@ -155,10 +326,35 @@ export function resolveStarters(ids: readonly string[]): Starter[] {
   return resolved;
 }
 
+function toCliAuthEntry(starter: Starter): StarterCliAuthEntry | undefined {
+  if (starter.cli?.auth === undefined) {
+    return undefined;
+  }
+
+  return {
+    starterId: starter.id,
+    cli: { ...starter.cli, auth: starter.cli.auth },
+  };
+}
+
+export function getCliAuthStarter(id: string): StarterCliAuthEntry | undefined {
+  const starter = startersById.get(id);
+
+  return starter === undefined ? undefined : toCliAuthEntry(starter);
+}
+
 export function listCliAuthStarters(): StarterCliAuthEntry[] {
-  return starters.flatMap((starter) =>
-    "cliAuth" in starter ? [{ starterId: starter.id, cliAuth: starter.cliAuth }] : [],
-  );
+  const entries: StarterCliAuthEntry[] = [];
+
+  for (const starter of starters) {
+    const entry = toCliAuthEntry(starter);
+
+    if (entry !== undefined) {
+      entries.push(entry);
+    }
+  }
+
+  return entries;
 }
 
 export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
@@ -177,8 +373,14 @@ export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
   return required;
 }
 
-export function collectStarterCliAuth(ids: readonly string[]): StarterCliAuthEntry[] {
+export function collectStarterClis(ids: readonly string[]): StarterCliEntry[] {
   return resolveStarters(ids).flatMap((starter) =>
-    starter.cliAuth !== undefined ? [{ starterId: starter.id, cliAuth: starter.cliAuth }] : [],
+    starter.cli !== undefined ? [{ starterId: starter.id, cli: starter.cli }] : [],
+  );
+}
+
+export function collectStarterConfigFields(ids: readonly string[]): StarterConfigEntry[] {
+  return resolveStarters(ids).flatMap((starter) =>
+    (starter.configFields ?? []).map((field) => ({ starterId: starter.id, field })),
   );
 }

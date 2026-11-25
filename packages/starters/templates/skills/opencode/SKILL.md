@@ -1,24 +1,16 @@
 ---
 name: opencode
-description: Dispatch and monitor OpenCode sessions headlessly.
+description: Dispatch and monitor coding sessions on a remote OpenCode server over Tailscale.
 ---
 
 # opencode
 
-Use the `opencode` CLI to run headless coding sessions on the VM.
+Use the `opencode` CLI to talk to a persistent `opencode serve` instance running on the user's workstation or dev box over Tailscale. That keeps code execution off the Tetherbox VM and lets the user run `opencode attach <serverUrl>` to watch or take over any session.
 
-## Auth
+## Connecting to a remote server
 
-OpenCode stores its provider credentials in the `tetherbox-agent` user's home directory, not in the daemon's secret store.
-
-- Check configured accounts with `opencode auth list`.
-- If the needed provider is missing or expired, never ask for API keys or tokens in chat. Tell the user to run `tetherbox auth opencode` on their laptop.
-- If `opencode` is not installed on the VM, tell the user to install OpenCode and then run `tetherbox auth opencode`.
-
-## Headless dispatch
-
-Run non-interactive tasks with `opencode run` (check `opencode run --help` for model, session, and JSON output flags on the installed version).
+Use `starterConfig.opencode.serverUrl` from `profile.json` as the remote server URL. `opencode serve` runs in the foreground by default and must be active on the user's workstation (for example under `launchd` on macOS or `systemd --user` on Linux); if connection fails, tell the user to start `opencode serve` on their machine. Check `opencode --help` and `opencode run --help` on the installed version to verify the exact remote server flags (`--attach` or server URL options).
 
 ## Monitoring long runs
 
-Do not block a turn waiting on a long OpenCode session. Start the run in the background capturing logs and exit status, then call `register_poll_job` right away with a status-check command so a new turn wakes when the session finishes or stalls.
+Do not block a turn waiting on a coding session to finish. Dispatch the task against the remote OpenCode server and immediately call `register_poll_job` with a fast status check against that server so a new turn wakes when the session completes or stalls.
