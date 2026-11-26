@@ -69,11 +69,13 @@ export default {
 Secrets never enter the agent process. The daemon injects them on the Unix socket proxy only when the target host matches the secret's pinned domains.
 
 1. Call `check_secret` with the secret key before relying on it.
-2. Confirm both that the secret exists and that its binding kind is `proxy` (not `daemon` or `llm`).
+2. Confirm both that the secret exists and that its binding kind is `proxy` or `oauth` (not `daemon` or `llm`).
 3. If it is missing or has the wrong binding kind, never ask for the value in chat. Tell the user the exact command to run on their laptop:
    - Bearer token (default): `tetherbox secrets set <KEY> --domain <api.host>`
    - Custom header: `tetherbox secrets set <KEY> --domain <api.host> --inject header:<Header-Name>`
    - Query parameter: `tetherbox secrets set <KEY> --domain <api.host> --inject query:<param>`
+   - Built-in OAuth2 preset (`gcal`, `gdrive`, `gmail`): `tetherbox oauth login <preset>`
+   - Custom OAuth2 provider: `tetherbox oauth custom <KEY> --auth-url <https://...> --token-url <https://...> --domain <api.host> --scope <scope>`
 4. Pin the narrowest API hostname needed (for example `api.linear.app`, not `linear.app`).
 5. Inside tool handlers, call `ctx.fetchWithSecret(key, "https://<api.host>/...", init)` with an `https://` URL. Do not pass the secret manually in headers or query strings.
 

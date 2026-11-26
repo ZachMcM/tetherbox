@@ -2,6 +2,7 @@
 import { Command } from "commander";
 import { registerAuth } from "./commands/auth.ts";
 import { registerLlm } from "./commands/llm.ts";
+import { registerOAuth } from "./commands/oauth.ts";
 import { registerProfiles } from "./commands/profiles.ts";
 import { registerSecrets } from "./commands/secrets.ts";
 import { registerSetup } from "./commands/setup.ts";
@@ -15,6 +16,7 @@ registerSetup(program);
 registerSsh(program);
 registerAuth(program);
 registerLlm(program);
+registerOAuth(program);
 registerSecrets(program);
 registerProfiles(program);
 

@@ -2,6 +2,7 @@ export * from "./agent-command.ts";
 export * from "./ids.ts";
 export * from "./llm-auth.ts";
 export * from "./module.ts";
+export * from "./oauth.ts";
 export * from "./paths.ts";
 export * from "./poll.ts";
 export * from "./profile.ts";

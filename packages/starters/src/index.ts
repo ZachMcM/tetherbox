@@ -3,6 +3,7 @@ import {
   secretBindingSchema,
   secretInjectionSchema,
   secretKeySchema,
+  type OAuthPresetId,
   type SecretBinding,
   type SecretInjection,
   type SecretKey,
@@ -118,6 +119,7 @@ interface StarterBase {
   readonly id: string;
   readonly category: StarterCategory;
   readonly secrets: readonly StarterSecret[];
+  readonly oauthPreset?: OAuthPresetId;
   readonly cli?: StarterCli;
   readonly configFields?: readonly StarterConfigField[];
   readonly setupNote?: string;
@@ -314,9 +316,30 @@ export const starters = [
     path: "modules/slack",
     secrets: [proxySecret("SLACK_BOT_TOKEN", ["slack.com"])],
   },
-  { kind: "module", id: "gcal", category: "integration", path: "modules/gcal", secrets: [] },
-  { kind: "module", id: "gdrive", category: "integration", path: "modules/gdrive", secrets: [] },
-  { kind: "module", id: "gmail", category: "integration", path: "modules/gmail", secrets: [] },
+  {
+    kind: "module",
+    id: "gcal",
+    category: "integration",
+    path: "modules/gcal",
+    secrets: [],
+    oauthPreset: "gcal",
+  },
+  {
+    kind: "module",
+    id: "gdrive",
+    category: "integration",
+    path: "modules/gdrive",
+    secrets: [],
+    oauthPreset: "gdrive",
+  },
+  {
+    kind: "module",
+    id: "gmail",
+    category: "integration",
+    path: "modules/gmail",
+    secrets: [],
+    oauthPreset: "gmail",
+  },
   {
     kind: "module",
     id: "sentry",
@@ -479,4 +502,18 @@ export function collectStarterConfigFields(ids: readonly string[]): StarterConfi
   return resolveStarters(ids).flatMap((starter) =>
     (starter.configFields ?? []).map((field) => ({ starterId: starter.id, field })),
   );
+}
+
+export function collectStarterOAuthPresets(ids: readonly string[]): OAuthPresetId[] {
+  const seen = new Set<OAuthPresetId>();
+  const presets: OAuthPresetId[] = [];
+
+  for (const starter of resolveStarters(ids)) {
+    if (starter.oauthPreset !== undefined && !seen.has(starter.oauthPreset)) {
+      seen.add(starter.oauthPreset);
+      presets.push(starter.oauthPreset);
+    }
+  }
+
+  return presets;
 }

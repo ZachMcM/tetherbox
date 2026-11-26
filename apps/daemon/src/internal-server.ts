@@ -4,6 +4,7 @@ import { createAdaptorServer } from "@hono/node-server";
 import { createInternalApi, type ProfileValidation } from "@tetherbox/core";
 import type { LlmOAuth } from "./llm-oauth.ts";
 import { proxyLlm } from "./llm-proxy.ts";
+import type { OAuthStore } from "./oauth.ts";
 import type { Poller } from "./poller.ts";
 import { loadProfile, type ProfileRegistry } from "./profiles.ts";
 import type { ReminderStore } from "./reminders.ts";
@@ -16,6 +17,7 @@ export interface InternalServerDeps {
   registry: ProfileRegistry;
   secrets: SecretStore;
   llmOAuth: LlmOAuth;
+  oauth: OAuthStore;
   turns: TurnRunner;
   poller: Poller;
   reminders: ReminderStore;
@@ -26,6 +28,7 @@ export async function startInternalServer({
   registry,
   secrets,
   llmOAuth,
+  oauth,
   turns,
   poller,
   reminders,
@@ -38,7 +41,11 @@ export async function startInternalServer({
     async checkSecret(key) {
       const secret = await secrets.get(key);
 
-      return secret === undefined ? { exists: false } : { exists: true, kind: secret.binding.kind };
+      if (secret !== undefined) {
+        return { exists: true, kind: secret.binding.kind };
+      }
+
+      return (await oauth.has(key)) ? { exists: true, kind: "oauth" } : { exists: false };
     },
     async validateProfile(run): Promise<ProfileValidation> {
       const profile = registry.get(run.profileId);
@@ -61,7 +68,7 @@ export async function startInternalServer({
     cancelReminder: async (run, name) => ({
       cancelled: await reminders.cancel(run.profileId, name),
     }),
-    proxyWithSecret: (_run, request) => proxyWithSecret(secrets, request),
+    proxyWithSecret: (_run, request) => proxyWithSecret({ secrets, oauth }, request),
     proxyLlm(run, provider, request) {
       const model = registry.get(run.profileId)?.config.model;
       const authKind = model?.provider === provider ? model.auth : "api-key";

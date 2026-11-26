@@ -107,7 +107,7 @@ function createProfileTools(
     name: "check_secret",
     label: "Check secret",
     description:
-      "Report whether a secret key (such as LINEAR_API_KEY) is stored and its binding kind, without revealing its value. If it is missing or has the wrong binding kind, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key (adding `--inject header:<name>` or `--inject query:<name>` if not bearer auth) or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
+      "Report whether a secret key (such as LINEAR_API_KEY or GOOGLE_CALENDAR_OAUTH) is stored and its binding kind, without revealing its value. If it is missing or has the wrong binding kind, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key (adding `--inject header:<name>` or `--inject query:<name>` if not bearer auth), `tetherbox oauth login <preset>` or `tetherbox oauth custom <KEY> ...` for OAuth2, or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
     parameters: Type.Object({ key: Type.String({ pattern: SECRET_KEY_PATTERN }) }),
     async execute(_toolCallId, params) {
       const response = await client.rpc.secrets[":key"].$get({ param: { key: params.key } });

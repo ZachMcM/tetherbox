@@ -38,7 +38,8 @@ export const secretListEntrySchema = z.object({
 export const secretListSchema = z.array(secretListEntrySchema);
 export type SecretListEntry = z.infer<typeof secretListEntrySchema>;
 
-export type SecretCheckResult = { exists: false } | { exists: true; kind: SecretKind };
+export type SecretCheckKind = SecretKind | "oauth";
+export type SecretCheckResult = { exists: false } | { exists: true; kind: SecretCheckKind };
 
 export function parseSecretInjection(spec: string): SecretInjection {
   if (spec === "bearer") {

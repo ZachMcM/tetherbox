@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   secretBindingSchema,
@@ -9,6 +7,7 @@ import {
   type SecretKey,
 } from "@tetherbox/core";
 import { z } from "zod";
+import { createKeyedJsonStore } from "./file-store.ts";
 
 const storedSecretSchema = z.object({
   value: z.string().min(1),
@@ -36,75 +35,32 @@ export interface SecretStore {
   list(): Promise<SecretSummary[]>;
 }
 
-function isMissing(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
 /**
  * One JSON file per secret, readable only by the daemon's OS user.
  * TODO: Encrypt values at rest with a key outside the data dir (systemd-creds or a TPM-backed key).
  */
 export function createFileSecretStore(dataDir: string): SecretStore {
-  const dir = join(dataDir, "secrets");
-  const fileFor = (key: SecretKey) => join(dir, `${key}.json`);
+  const files = createKeyedJsonStore<SecretKey, StoredSecret>({
+    dir: join(dataDir, "secrets"),
+    keySchema: secretKeySchema,
+    valueSchema: storedSecretSchema,
+  });
 
-  const get = async (key: SecretKey) => {
-    try {
-      return storedSecretSchema.parse(JSON.parse(await readFile(fileFor(key), "utf8")));
-    } catch (error) {
-      if (isMissing(error)) {
-        return undefined;
-      }
-
-      throw error;
-    }
-  };
-
-  const readKeys = async (): Promise<SecretKey[]> => {
-    try {
-      const files = await readdir(dir);
-
-      return files
-        .filter((file) => file.endsWith(".json"))
-        .map((file) => secretKeySchema.parse(file.slice(0, -".json".length)))
-        .toSorted((a, b) => a.localeCompare(b));
-    } catch (error) {
-      if (isMissing(error)) {
-        return [];
-      }
-
-      throw error;
-    }
-  };
-
-  const list = async (): Promise<SecretSummary[]> => {
-    const entries: SecretSummary[] = [];
-
-    for (const key of await readKeys()) {
-      const secret = await get(key);
-
-      if (secret !== undefined) {
-        entries.push({ key, binding: secret.binding });
-      }
-    }
-
-    return entries;
-  };
+  const list = async (): Promise<SecretSummary[]> =>
+    (await files.entries()).map(({ key, value }) => ({ key, binding: value.binding }));
 
   return {
-    get,
+    get: files.read,
     async getLlm(provider) {
-      for (const key of await readKeys()) {
-        const secret = await get(key);
-
-        if (secret?.binding.kind === "llm" && secret.binding.provider === provider) {
-          return { key, value: secret.value, provider: secret.binding.provider };
+      for (const { key, value } of await files.entries()) {
+        if (value.binding.kind === "llm" && value.binding.provider === provider) {
+          return { key, value: value.value, provider: value.binding.provider };
         }
       }
 
       return undefined;
     },
-    has: async (key) => (await get(key)) !== undefined,
+    has: async (key) => (await files.read(key)) !== undefined,
     async set(key, secret) {
       if (secret.binding.kind === "llm") {
         const { provider } = secret.binding;
@@ -122,21 +78,9 @@ export function createFileSecretStore(dataDir: string): SecretStore {
         }
       }
 
-      await mkdir(dir, { recursive: true, mode: 0o700 });
-
-      const tmpPath = `${fileFor(key)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-
-      try {
-        await writeFile(tmpPath, JSON.stringify(secret), { mode: 0o600 });
-        await rename(tmpPath, fileFor(key));
-      } catch (error) {
-        await rm(tmpPath, { force: true });
-        throw error;
-      }
+      await files.write(key, secret);
     },
-    async delete(key) {
-      await rm(fileFor(key), { force: true });
-    },
+    delete: files.delete,
     list,
   };
 }

@@ -8,6 +8,7 @@ import {
 import {
   collectStarterClis,
   collectStarterConfigFields,
+  collectStarterOAuthPresets,
   collectStarterSecrets,
   resolveStarters,
   type StarterCliEntry,
@@ -16,6 +17,7 @@ import {
 } from "@tetherbox/starters";
 import { execLoginCommand, inspectCliAuth } from "./auth.ts";
 import { ensureCliInstalled } from "./cli-install.ts";
+import { ensureStarterOAuth } from "./oauth.ts";
 import { ensureRequiredSecrets } from "./secrets.ts";
 
 function validateStarterConfigValue(
@@ -163,6 +165,16 @@ export async function ensureStarterSetup({
   });
 
   if (secretStatus === "cancelled") {
+    return { kind: "cancelled" };
+  }
+
+  const oauthStatus = await ensureStarterOAuth({
+    sshAlias,
+    presetIds: collectStarterOAuthPresets(starterIds),
+    existingSecrets,
+  });
+
+  if (oauthStatus === "cancelled") {
     return { kind: "cancelled" };
   }
 

@@ -1,5 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type {
   ModelAuth,
@@ -21,6 +19,7 @@ import {
   type TurnModelAuth,
 } from "@tetherbox/core";
 import { z } from "zod";
+import { createKeyedJsonStore, createKeyedLock } from "./file-store.ts";
 
 const REFRESH_MARGIN_MS = 60_000;
 const REFRESH_TIMEOUT_MS = 30_000;
@@ -126,20 +125,19 @@ export interface LlmOAuth {
   access(provider: LlmProvider): Promise<LlmAccess | undefined>;
 }
 
-function isMissing(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
-
 /**
  * OAuth logins for LLM providers, one JSON file per provider and readable only by the
  * daemon's OS user. Writes for a provider are serialized, and a refresh re-reads the file first,
  * so a rotated refresh token is never used twice.
  */
 export function createLlmOAuth(dataDir: string): LlmOAuth {
-  const dir = join(dataDir, "llm-oauth");
-  const fileFor = (provider: LlmProvider) => join(dir, `${provider}.json`);
+  const files = createKeyedJsonStore<LlmProvider, OAuthCredential>({
+    dir: join(dataDir, "llm-oauth"),
+    keySchema: llmProviderSchema,
+    valueSchema: storedCredentialSchema,
+  });
   const flows = createOAuthFlows();
-  const locks = new Map<LlmProvider, Promise<unknown>>();
+  const { withLock } = createKeyedLock<LlmProvider>();
 
   const flowFor = (provider: LlmProvider): OAuthFlow => {
     const flow = flows.get(provider);
@@ -151,45 +149,9 @@ export function createLlmOAuth(dataDir: string): LlmOAuth {
     return flow;
   };
 
-  const read = async (provider: LlmProvider): Promise<OAuthCredential | undefined> => {
-    try {
-      return storedCredentialSchema.parse(JSON.parse(await readFile(fileFor(provider), "utf8")));
-    } catch (error) {
-      if (isMissing(error)) {
-        return undefined;
-      }
-
-      const message = error instanceof Error ? error.message : String(error);
-
-      throw new Error(`could not read ${fileFor(provider)}: ${message}`, { cause: error });
-    }
-  };
-
-  const write = async (provider: LlmProvider, credential: OAuthCredential): Promise<void> => {
-    await mkdir(dir, { recursive: true, mode: 0o700 });
-
-    const tmpPath = `${fileFor(provider)}.${process.pid}.${randomBytes(6).toString("hex")}.tmp`;
-
-    try {
-      await writeFile(tmpPath, JSON.stringify(credential), { mode: 0o600 });
-      await rename(tmpPath, fileFor(provider));
-    } catch (error) {
-      await rm(tmpPath, { force: true });
-      throw error;
-    }
-  };
-
-  const withLock = <T>(provider: LlmProvider, task: () => Promise<T>): Promise<T> => {
-    const next = (locks.get(provider) ?? Promise.resolve()).catch(() => undefined).then(task);
-
-    locks.set(provider, next);
-
-    return next;
-  };
-
   const refreshed = (provider: LlmProvider) =>
     withLock(provider, async () => {
-      const stored = await read(provider);
+      const stored = await files.read(provider);
 
       if (stored === undefined || isFresh(stored)) {
         return stored;
@@ -200,7 +162,7 @@ export function createLlmOAuth(dataDir: string): LlmOAuth {
         AbortSignal.timeout(REFRESH_TIMEOUT_MS),
       );
 
-      await write(provider, credential);
+      await files.write(provider, credential);
 
       return credential;
     });
@@ -209,46 +171,26 @@ export function createLlmOAuth(dataDir: string): LlmOAuth {
     async login(provider, interaction) {
       const credential = await flowFor(provider).oauth.login(interaction);
 
-      await withLock(provider, () => write(provider, credential));
+      await withLock(provider, () => files.write(provider, credential));
 
       return { provider, expires: credential.expires };
     },
     async logout(provider) {
-      await withLock(provider, () => rm(fileFor(provider), { force: true }));
+      await withLock(provider, () => files.delete(provider));
     },
     async list() {
-      let files: string[];
-
-      try {
-        files = await readdir(dir);
-      } catch (error) {
-        if (isMissing(error)) {
-          return [];
-        }
-
-        throw error;
-      }
-
-      const summaries: OAuthLoginSummary[] = [];
-
-      for (const file of files.filter((name) => name.endsWith(".json")).toSorted()) {
-        const provider = llmProviderSchema.parse(file.slice(0, -".json".length));
-        const credential = await read(provider);
-
-        if (credential !== undefined) {
-          summaries.push({ provider, expires: credential.expires });
-        }
-      }
-
-      return summaries;
+      return (await files.entries()).map(({ key, value }) => ({
+        provider: key,
+        expires: value.expires,
+      }));
     },
     async agentAuth(provider) {
-      const credential = await read(provider);
+      const credential = await files.read(provider);
 
       return credential === undefined ? undefined : flowFor(provider).agentAuth(credential);
     },
     async access(provider) {
-      const stored = await read(provider);
+      const stored = await files.read(provider);
       const credential =
         stored === undefined || isFresh(stored) ? stored : await refreshed(provider);
 

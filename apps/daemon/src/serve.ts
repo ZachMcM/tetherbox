@@ -3,6 +3,7 @@ import { secretKeySchema, type SecretKind } from "@tetherbox/core";
 import type { DaemonConfig } from "./config.ts";
 import { startInternalServer } from "./internal-server.ts";
 import type { LlmOAuth } from "./llm-oauth.ts";
+import type { OAuthStore } from "./oauth.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./poller.ts";
 import { ProfileRegistry, type LoadedProfile } from "./profiles.ts";
@@ -42,11 +43,12 @@ function targetOf(profile: LoadedProfile, threadTs?: string): ReplyTarget {
 export interface DaemonStores {
   secrets: SecretStore;
   llmOAuth: LlmOAuth;
+  oauth: OAuthStore;
 }
 
 export async function serveDaemon(
   config: DaemonConfig,
-  { secrets, llmOAuth }: DaemonStores,
+  { secrets, llmOAuth, oauth }: DaemonStores,
 ): Promise<void> {
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) =>
@@ -127,6 +129,7 @@ export async function serveDaemon(
     registry,
     secrets,
     llmOAuth,
+    oauth,
     turns,
     poller,
     reminders,

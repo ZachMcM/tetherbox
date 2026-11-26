@@ -1,7 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { entryNameSchema, profileIdSchema, type WebhookVerification } from "@tetherbox/core";
 import { Hono } from "hono";
-import { createOAuthRoutes } from "./oauth.ts";
 import type { ProfileRegistry } from "./profiles.ts";
 import type { SecretStore } from "./secret-store.ts";
 import type { TurnRunner } from "./turns.ts";
@@ -60,7 +59,6 @@ function parseBody(body: string): unknown {
 export function createPublicServer({ registry, secrets, turns }: PublicServerDeps) {
   return new Hono()
     .get("/health", (c) => c.json({ ok: true }))
-    .route("/oauth", createOAuthRoutes())
     .post("/hooks/:profileId/:name", async (c) => {
       const profileId = profileIdSchema.safeParse(c.req.param("profileId"));
       const name = entryNameSchema.safeParse(c.req.param("name"));
