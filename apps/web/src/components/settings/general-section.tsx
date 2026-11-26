@@ -1,5 +1,6 @@
 import { EyeIcon, LayersIcon, LogOutIcon, Minimize2Icon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
+import { Tabs, TabsList, TabsTrigger } from "@tetherbox/ui/components/tabs";
 import { ToggleGroup, ToggleGroupItem } from "@tetherbox/ui/components/toggle-group";
 import {
   usePreferences,
@@ -8,28 +9,28 @@ import {
 } from "../../lib/preferences.ts";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 
-const VERBOSITY_CARDS = [
+const VERBOSITY_OPTIONS = [
   {
     value: "compact",
-    title: "Compact",
+    label: "Compact",
     description: "Hide thinking blocks and keep tool traces collapsed.",
     Icon: Minimize2Icon,
   },
   {
     value: "standard",
-    title: "Standard",
+    label: "Standard",
     description: "Show thinking and tool traces collapsed by default.",
     Icon: LayersIcon,
   },
   {
     value: "verbose",
-    title: "Verbose",
+    label: "Verbose",
     description: "Expand thinking and tool output automatically.",
     Icon: EyeIcon,
   },
 ] as const satisfies readonly {
   value: TranscriptVerbosity;
-  title: string;
+  label: string;
   description: string;
   Icon: typeof EyeIcon;
 }[];
@@ -47,6 +48,9 @@ export function GeneralSection({
   loggingOut: boolean;
 }) {
   const { preferences, updatePreferences } = usePreferences();
+  const activeVerbosity =
+    VERBOSITY_OPTIONS.find((option) => option.value === preferences.verbosity) ??
+    VERBOSITY_OPTIONS[1];
 
   return (
     <div className="space-y-6">
@@ -59,31 +63,29 @@ export function GeneralSection({
         <h3 className="text-sm font-medium">Transcript verbosity</h3>
         <ToggleGroup
           variant="outline"
-          spacing={3}
+          spacing={2}
           value={[preferences.verbosity]}
           onValueChange={(values) => {
-            const next = VERBOSITY_CARDS.find((card) => card.value === values[0]);
+            const next = VERBOSITY_OPTIONS.find((option) => option.value === values[0]);
 
             if (next !== undefined) {
               updatePreferences({ verbosity: next.value });
             }
           }}
-          className="grid w-full grid-cols-1 sm:grid-cols-3"
         >
-          {VERBOSITY_CARDS.map(({ value, title, description, Icon }) => (
+          {VERBOSITY_OPTIONS.map(({ value, label, Icon }) => (
             <ToggleGroupItem
               key={value}
               value={value}
-              className="h-auto flex-col items-start justify-start rounded-xl bg-card/40 p-4 text-left whitespace-normal hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/8"
+              aria-label={label}
+              className="h-18 min-w-22 flex-col gap-1.5 rounded-xl px-3"
             >
-              <Icon className="mb-3 size-4 text-muted-foreground" />
-              <div className="text-sm font-medium">{title}</div>
-              <p className="mt-1 text-xs leading-relaxed font-normal text-muted-foreground">
-                {description}
-              </p>
+              <Icon className="size-5" />
+              <span className="text-xs font-normal text-muted-foreground">{label}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
+        <p className="text-xs text-muted-foreground">{activeVerbosity.description}</p>
       </section>
 
       <SettingGroup title="Input box">
@@ -91,25 +93,24 @@ export function GeneralSection({
           title="Send message"
           description="Choose which key sends a message in the chat composer."
           control={
-            <ToggleGroup
-              variant="outline"
-              size="sm"
-              spacing={0}
-              value={[preferences.sendShortcut]}
-              onValueChange={(values) => {
-                const next = SHORTCUT_OPTIONS.find((option) => option.value === values[0]);
+            <Tabs
+              value={preferences.sendShortcut}
+              onValueChange={(value) => {
+                const next = SHORTCUT_OPTIONS.find((option) => option.value === value);
 
                 if (next !== undefined) {
                   updatePreferences({ sendShortcut: next.value });
                 }
               }}
             >
-              {SHORTCUT_OPTIONS.map((option) => (
-                <ToggleGroupItem key={option.value} value={option.value} className="px-3 text-xs">
-                  {option.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
+              <TabsList>
+                {SHORTCUT_OPTIONS.map((option) => (
+                  <TabsTrigger key={option.value} value={option.value} className="px-2.5 text-xs">
+                    {option.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
           }
         />
       </SettingGroup>
@@ -119,7 +120,7 @@ export function GeneralSection({
           title="Browser authentication"
           description="Clear this browser's daemon auth cookie."
           control={
-            <Button variant="outline" size="sm" onClick={onLogout} disabled={loggingOut}>
+            <Button variant="destructive" size="sm" onClick={onLogout} disabled={loggingOut}>
               <LogOutIcon className="size-3.5" />
               <span>Sign out</span>
             </Button>

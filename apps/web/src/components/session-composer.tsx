@@ -6,7 +6,7 @@ import {
   InputGroupButton,
   InputGroupTextarea,
 } from "@tetherbox/ui/components/input-group";
-import { usePreferences } from "../lib/preferences.ts";
+import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
 
 export function SessionComposer({
   running,
@@ -42,30 +42,18 @@ export function SessionComposer({
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    const shouldSend =
-      preferences.sendShortcut === "enter"
-        ? !event.shiftKey && !event.metaKey && !event.ctrlKey
-        : event.metaKey || event.ctrlKey;
-
-    if (shouldSend) {
+    if (isSendShortcutEvent(event, preferences.sendShortcut)) {
       event.preventDefault();
       void submit();
     }
   };
 
-  const placeholder =
-    preferences.sendShortcut === "enter"
-      ? "Message this session… (Enter to send, Shift+Enter for newline)"
-      : "Message this session… (Cmd+Enter to send)";
+  const placeholder = `Message this session… (${sendShortcutHint(preferences.sendShortcut)})`;
 
   return (
     <div className="border-t border-border bg-background/80 px-4 py-3 backdrop-blur-sm sm:px-6">
       <div className="mx-auto w-full max-w-3xl">
-        <InputGroup className="rounded-3xl bg-muted/60">
+        <InputGroup className="rounded-xl">
           <InputGroupTextarea
             value={value}
             onChange={(event) => setValue(event.target.value)}

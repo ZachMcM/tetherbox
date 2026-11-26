@@ -206,23 +206,38 @@ export function SessionTranscript({
               </MessageScrollerItem>
             )}
 
-            {items.map((item) => (
-              <MessageScrollerItem key={item.id}>
-                {item.kind === "user" ? (
-                  <Message align="end">
-                    <MessageContent>
-                      <Bubble variant="secondary" align="end">
-                        <BubbleContent className="whitespace-pre-wrap">{item.text}</BubbleContent>
-                      </Bubble>
-                    </MessageContent>
-                  </Message>
-                ) : (
+            {items.map((item) => {
+              if (item.kind === "user") {
+                return (
+                  <MessageScrollerItem key={item.id}>
+                    <Message align="end">
+                      <MessageContent>
+                        <Bubble variant="secondary" align="end">
+                          <BubbleContent className="whitespace-pre-wrap">{item.text}</BubbleContent>
+                        </Bubble>
+                      </MessageContent>
+                    </Message>
+                  </MessageScrollerItem>
+                );
+              }
+
+              const visibleBlocks =
+                preferences.verbosity === "compact"
+                  ? item.blocks.filter((block) => block.kind !== "thinking")
+                  : item.blocks;
+
+              if (visibleBlocks.length === 0 && !item.streaming) {
+                return null;
+              }
+
+              return (
+                <MessageScrollerItem key={item.id}>
                   <Message align="start">
                     <MessageContent className="gap-3">
-                      {item.blocks.length === 0 && item.streaming ? (
+                      {visibleBlocks.length === 0 ? (
                         <RunningIndicator />
                       ) : (
-                        item.blocks.map((block, index) => (
+                        visibleBlocks.map((block, index) => (
                           <AssistantBlockView
                             key={
                               block.kind === "tool" ? block.toolCallId : `${block.kind}-${index}`
@@ -234,9 +249,9 @@ export function SessionTranscript({
                       )}
                     </MessageContent>
                   </Message>
-                )}
-              </MessageScrollerItem>
-            ))}
+                </MessageScrollerItem>
+              );
+            })}
 
             {session.status === "error" && session.errorMessage !== null && (
               <MessageScrollerItem>

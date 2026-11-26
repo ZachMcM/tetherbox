@@ -83,8 +83,12 @@ function SessionView({ sessionId }: { sessionId: string }) {
   if (sessionQuery.error !== null || session === undefined) {
     return (
       <div className="flex flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-          <SidebarTrigger />
+        <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+          <SidebarTrigger className="-ml-1" />
+          <Separator
+            orientation="vertical"
+            className="mr-2 data-vertical:h-4 data-vertical:self-center"
+          />
           <span className="text-sm font-medium">Session unavailable</span>
         </header>
         <div className="flex flex-1 items-center justify-center p-6 text-sm text-muted-foreground">
@@ -99,12 +103,12 @@ function SessionView({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-4">
+      <header className="flex h-16 shrink-0 items-center justify-between gap-3 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
         <div className="flex min-w-0 items-center gap-2">
-          <SidebarTrigger />
+          <SidebarTrigger className="-ml-1" />
           <Separator
             orientation="vertical"
-            className="data-vertical:h-4 data-vertical:self-center"
+            className="mr-2 data-vertical:h-4 data-vertical:self-center"
           />
           <Link
             to="/profiles/$profileId"

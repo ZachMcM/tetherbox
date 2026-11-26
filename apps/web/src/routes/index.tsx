@@ -18,10 +18,11 @@ import {
   InputGroupTextarea,
 } from "@tetherbox/ui/components/input-group";
 import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/native-select";
+import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
 import { CreateProfileDialog } from "../components/create-profile-dialog.tsx";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
-import { usePreferences } from "../lib/preferences.ts";
+import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
 import { profilesQueryOptions } from "../lib/queries.ts";
 
 interface HomeSearch {
@@ -35,31 +36,20 @@ function HomePage() {
   const { preferences } = usePreferences();
 
   const [createOpen, setCreateOpen] = useState(false);
-  const [selectedProfileId, setSelectedProfileId] = useState<string | undefined>(undefined);
   const [draft, setDraft] = useState("");
 
   const profilesQuery = useQuery(profilesQueryOptions);
   const profiles = profilesQuery.data?.profiles ?? [];
 
   const activeProfileId =
-    profiles.find((p) => p.id === selectedProfileId)?.id ??
-    profiles.find((p) => p.id === requestedProfile)?.id ??
-    profiles[0]?.id;
+    profiles.find((profile) => profile.id === requestedProfile)?.id ?? profiles[0]?.id;
 
   const startConversationMutation = useMutation({
     mutationFn: async ({ profileId, text }: { profileId: string; text: string }) => {
       const { session } = await unwrapJson(
         await appClient.profiles[":profileId"].sessions.$post({
           param: { profileId },
-          json: {},
-        }),
-      );
-
-      await queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
-      await unwrapJson(
-        await appClient.sessions[":sessionId"].messages.$post({
-          param: { sessionId: session.id },
-          json: { text },
+          json: { prompt: text },
         }),
       );
 
@@ -67,6 +57,7 @@ function HomePage() {
     },
     onSuccess: (session) => {
       setDraft("");
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
       void navigate({ to: "/sessions/$sessionId", params: { sessionId: session.id } });
     },
   });
@@ -82,30 +73,22 @@ function HomePage() {
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (event.key !== "Enter") {
-      return;
-    }
-
-    const shouldSend =
-      preferences.sendShortcut === "enter"
-        ? !event.shiftKey && !event.metaKey && !event.ctrlKey
-        : event.metaKey || event.ctrlKey;
-
-    if (shouldSend) {
+    if (isSendShortcutEvent(event, preferences.sendShortcut)) {
       event.preventDefault();
       submit();
     }
   };
 
-  const placeholder =
-    preferences.sendShortcut === "enter"
-      ? "Start a conversation… (Enter to send, Shift+Enter for newline)"
-      : "Start a conversation… (Cmd+Enter to send)";
+  const placeholder = `Start a conversation… (${sendShortcutHint(preferences.sendShortcut)})`;
 
   return (
     <div className="flex flex-1 flex-col">
-      <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-4">
-        <SidebarTrigger />
+      <header className="flex h-16 shrink-0 items-center gap-2 px-4 transition-[width,height] ease-linear group-has-data-[collapsible=icon]/sidebar-wrapper:h-12">
+        <SidebarTrigger className="-ml-1" />
+        <Separator
+          orientation="vertical"
+          className="mr-2 data-vertical:h-4 data-vertical:self-center"
+        />
         <span className="text-sm font-medium text-muted-foreground">New conversation</span>
       </header>
 
@@ -139,7 +122,7 @@ function HomePage() {
               </p>
             </div>
 
-            <InputGroup className="rounded-3xl bg-muted/60">
+            <InputGroup className="rounded-xl">
               <InputGroupTextarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
@@ -157,7 +140,6 @@ function HomePage() {
                   onChange={(event) => {
                     const nextId = event.target.value;
 
-                    setSelectedProfileId(nextId);
                     void navigate({
                       to: "/",
                       search: (prev) => ({ ...prev, profile: nextId }),
@@ -201,7 +183,6 @@ function HomePage() {
         open={createOpen}
         onOpenChange={setCreateOpen}
         onCreated={(profileId) => {
-          setSelectedProfileId(profileId);
           void navigate({ to: "/", search: (prev) => ({ ...prev, profile: profileId }) });
         }}
       />

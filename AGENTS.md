@@ -11,7 +11,7 @@ Tetherbox is a self-hosted personal assistant for engineers. It runs on a user's
 | `apps/web`          | Vite + React SPA using TanStack Router, TanStack Query, `@tetherbox/ui`, and `@tetherbox/core/app`. Served by the daemon over Tailscale Serve.           |
 | `apps/cli`          | `tetherbox` CLI that runs on the user's machine and drives the VM over an SSH alias.                                                                     |
 | `packages/core`     | Shared zod schemas, branded ids, the TS module contract, and the typed internal and app RPC APIs and clients.                                            |
-| `packages/ui`       | Shared shadcn/ui (`base-rhea`) component library and Tailwind v4 theme tokens used by `apps/web`.                                                        |
+| `packages/ui`       | Shared shadcn/ui (`base-nova`) component library and Tailwind v4 theme tokens used by `apps/web`.                                                        |
 | `packages/starters` | Opt-in skills and TS modules copied into a profile when enabled. They use the same format as agent-written ones.                                         |
 
 ## Process model and trust boundaries

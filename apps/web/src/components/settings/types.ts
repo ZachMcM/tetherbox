@@ -14,15 +14,15 @@ export const SETTINGS_NAV = [
   { tab: "integrations", label: "Integrations" },
 ] as const;
 
-const STATIC_TABS: ReadonlySet<string> = new Set(SETTINGS_NAV.map((item) => item.tab));
-
 export function parseSettingsTab(value: unknown): SettingsTab | undefined {
   if (typeof value !== "string") {
     return undefined;
   }
 
-  if (STATIC_TABS.has(value)) {
-    return SETTINGS_NAV.find((item) => item.tab === value)?.tab;
+  const staticTab = SETTINGS_NAV.find((item) => item.tab === value)?.tab;
+
+  if (staticTab !== undefined) {
+    return staticTab;
   }
 
   if (value.startsWith("profile:") && value.length > "profile:".length) {

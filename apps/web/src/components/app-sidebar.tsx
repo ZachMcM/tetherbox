@@ -40,6 +40,7 @@ import {
   SidebarMenuAction,
   SidebarMenuButton,
   SidebarMenuItem,
+  SidebarRail,
 } from "@tetherbox/ui/components/sidebar";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, expectOk, queryKeys } from "../lib/api.ts";
@@ -87,7 +88,7 @@ function ProfileGroup({
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
       <div className="flex items-center justify-between gap-1 px-1">
-        <CollapsibleTrigger className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-xl px-2 text-sm text-sidebar-foreground/80 ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-3 [&>svg]:size-4 [&>svg]:shrink-0">
+        <CollapsibleTrigger className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-sidebar-foreground/80 ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
           <FolderIcon className="text-muted-foreground" />
           <span className="truncate">{profile.config.name}</span>
         </CollapsibleTrigger>
@@ -201,11 +202,11 @@ export function AppSidebar() {
 
   return (
     <>
-      <Sidebar variant="inset">
-        <SidebarHeader className="p-2 pb-1">
+      <Sidebar>
+        <SidebarHeader className="h-16 justify-center px-3">
           <Button
-            variant="outline"
-            className="w-full justify-start gap-2 rounded-xl"
+            variant="default"
+            className="w-full justify-start gap-2"
             onClick={() => void navigate({ to: "/" })}
             disabled={profiles.length === 0}
             title={profiles.length === 0 ? "Create a profile first" : undefined}
@@ -216,7 +217,7 @@ export function AppSidebar() {
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup className="pt-2">
+          <SidebarGroup>
             <div className="mb-1 flex items-center justify-between px-2">
               <span className="text-xs font-medium text-sidebar-foreground/60">Profiles</span>
               <div className="flex items-center gap-0.5">
@@ -276,6 +277,7 @@ export function AppSidebar() {
             </SidebarMenuItem>
           </SidebarMenu>
         </SidebarFooter>
+        <SidebarRail />
       </Sidebar>
 
       <CreateProfileDialog

@@ -11,27 +11,20 @@ export function SectionHeader({ title, description }: { title: string; descripti
 
 export function SettingGroup({
   title,
-  description,
   action,
   children,
 }: {
   title: string;
-  description?: string;
   action?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <section className="space-y-2.5">
+    <section className="space-y-2">
       <div className="flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-medium">{title}</h3>
-          {description !== undefined && (
-            <p className="mt-0.5 text-xs text-muted-foreground">{description}</p>
-          )}
-        </div>
+        <h3 className="text-sm font-medium">{title}</h3>
         {action}
       </div>
-      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card/40">
+      <div className="divide-y divide-border overflow-hidden rounded-xl border border-border bg-card">
         {children}
       </div>
     </section>

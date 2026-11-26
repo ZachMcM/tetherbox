@@ -3,34 +3,35 @@ import { ToggleGroup, ToggleGroupItem } from "@tetherbox/ui/components/toggle-gr
 import { useTheme, type Theme } from "../theme-provider.tsx";
 import { SectionHeader } from "./shared.tsx";
 
-const THEME_CARDS = [
+const THEME_OPTIONS = [
   {
     value: "light",
-    title: "Light",
-    description: "Bright surface palette for well-lit spaces.",
+    label: "Light",
+    description: "Bright neutral surface palette for well-lit spaces.",
     Icon: SunIcon,
   },
   {
     value: "dark",
-    title: "Dark",
+    label: "Dark",
     description: "Low-glare dark palette tuned for long sessions.",
     Icon: MoonIcon,
   },
   {
     value: "system",
-    title: "System",
-    description: "Follow your operating system appearance.",
+    label: "System",
+    description: "Follow your operating system appearance automatically.",
     Icon: MonitorIcon,
   },
 ] as const satisfies readonly {
   value: Theme;
-  title: string;
+  label: string;
   description: string;
   Icon: typeof SunIcon;
 }[];
 
 export function AppearanceSection() {
   const { theme, setTheme } = useTheme();
+  const activeTheme = THEME_OPTIONS.find((option) => option.value === theme) ?? THEME_OPTIONS[2];
 
   return (
     <div className="space-y-6">
@@ -40,31 +41,29 @@ export function AppearanceSection() {
         <h3 className="text-sm font-medium">Theme</h3>
         <ToggleGroup
           variant="outline"
-          spacing={3}
+          spacing={2}
           value={[theme]}
           onValueChange={(values) => {
-            const next = THEME_CARDS.find((card) => card.value === values[0]);
+            const next = THEME_OPTIONS.find((option) => option.value === values[0]);
 
             if (next !== undefined) {
               setTheme(next.value);
             }
           }}
-          className="grid w-full grid-cols-1 sm:grid-cols-3"
         >
-          {THEME_CARDS.map(({ value, title, description, Icon }) => (
+          {THEME_OPTIONS.map(({ value, label, Icon }) => (
             <ToggleGroupItem
               key={value}
               value={value}
-              className="h-auto flex-col items-start justify-start rounded-xl bg-card/40 p-4 text-left whitespace-normal hover:bg-muted/50 aria-pressed:border-primary aria-pressed:bg-primary/8"
+              aria-label={label}
+              className="h-18 min-w-22 flex-col gap-1.5 rounded-xl px-3"
             >
-              <Icon className="mb-3 size-4 text-muted-foreground" />
-              <div className="text-sm font-medium">{title}</div>
-              <p className="mt-1 text-xs leading-relaxed font-normal text-muted-foreground">
-                {description}
-              </p>
+              <Icon className="size-5" />
+              <span className="text-xs font-normal text-muted-foreground">{label}</span>
             </ToggleGroupItem>
           ))}
         </ToggleGroup>
+        <p className="text-xs text-muted-foreground">{activeTheme.description}</p>
       </section>
     </div>
   );

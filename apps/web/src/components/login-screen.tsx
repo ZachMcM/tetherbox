@@ -39,7 +39,7 @@ export function LoginScreen() {
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
+          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
             <KeyRoundIcon className="size-4" />
           </div>
           <CardTitle>Sign in to Tetherbox</CardTitle>

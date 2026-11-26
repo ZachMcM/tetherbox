@@ -5,18 +5,11 @@ import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../../lib/api.ts";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 
-export function ProfileSettingsSection({
-  profileId,
-  enabled,
-}: {
-  profileId: string;
-  enabled: boolean;
-}) {
+export function ProfileSettingsSection({ profileId }: { profileId: string }) {
   const profileQuery = useQuery({
     queryKey: queryKeys.profile(profileId),
     queryFn: async () =>
       unwrapJson(await appClient.profiles[":profileId"].$get({ param: { profileId } })),
-    enabled,
   });
 
   if (profileQuery.isPending) {

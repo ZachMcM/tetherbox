@@ -44,8 +44,8 @@ function readPreferences(): UiPreferences {
     }
 
     return {
-      verbosity: "verbosity" in parsed ? parseVerbosity(parsed.verbosity) : "standard",
-      sendShortcut: "sendShortcut" in parsed ? parseSendShortcut(parsed.sendShortcut) : "enter",
+      verbosity: parseVerbosity("verbosity" in parsed ? parsed.verbosity : undefined),
+      sendShortcut: parseSendShortcut("sendShortcut" in parsed ? parsed.sendShortcut : undefined),
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -75,6 +75,23 @@ function updatePreferences(patch: Partial<UiPreferences>): void {
   for (const listener of listeners) {
     listener();
   }
+}
+
+export function isSendShortcutEvent(
+  event: { key: string; shiftKey: boolean; metaKey: boolean; ctrlKey: boolean },
+  shortcut: SendShortcut,
+): boolean {
+  if (event.key !== "Enter") {
+    return false;
+  }
+
+  return shortcut === "enter"
+    ? !event.shiftKey && !event.metaKey && !event.ctrlKey
+    : event.metaKey || event.ctrlKey;
+}
+
+export function sendShortcutHint(shortcut: SendShortcut): string {
+  return shortcut === "enter" ? "Enter to send, Shift+Enter for newline" : "Cmd+Enter to send";
 }
 
 export function usePreferences(): {
