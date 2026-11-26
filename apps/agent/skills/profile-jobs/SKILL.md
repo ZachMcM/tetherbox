@@ -15,20 +15,17 @@ File names are lowercase slugs (`daily-digest.json`), and the name becomes the j
 {
   "schedule": "0 9 * * 1-5",
   "timezone": "America/New_York",
-  "channel": "alerts",
-  "threadTs": "1730000000.000100",
-  "prompt": "Summarize yesterday's merged PRs and post them here."
+  "prompt": "Summarize yesterday's merged PRs and call notify if anything needs attention."
 }
 ```
 
-`schedule` is a five-field cron expression. `timezone` is optional and defaults to the VM's timezone. `channel` is optional; when set, it must match a named channel in `profile.json`'s `channels` (otherwise replies post to the profile's primary channel). `threadTs` is optional; when set, replies post to that Slack thread instead of the channel top level (use the active `threadTs` from the prompt when the user asks to schedule replies in the current thread). When the job fires, a new turn starts with `prompt`.
+`schedule` is a five-field cron expression. `timezone` is optional and defaults to the VM's timezone. `sessionId` is optional; when omitted, each run starts a fresh session under this profile. When set to an existing session ID (such as the active `sessionId` from the prompt), runs append to that session instead. When the job fires, a new turn starts with `prompt`.
 
 ## Webhooks: `webhooks/<name>.json`
 
 ```json
 {
-  "channel": "alerts",
-  "prompt": "A GitHub event arrived. Summarize anything that needs my attention.",
+  "prompt": "A GitHub event arrived. Summarize anything that needs my attention and call notify if urgent.",
   "verify": {
     "kind": "hmac-sha256",
     "secretKey": "GITHUB_WEBHOOK_SECRET",
@@ -37,11 +34,11 @@ File names are lowercase slugs (`daily-digest.json`), and the name becomes the j
 }
 ```
 
-The webhook is served at `/hooks/<profile id>/<name>` on the daemon's public URL. Each delivery starts a turn with `prompt` and the request body. `channel` is optional and targets a named channel from `profile.json`'s `channels` instead of the profile's primary channel.
+The webhook is served at `/hooks/<profile id>/<name>` on the daemon's public URL. Each delivery starts a new session under this profile with `prompt` and the request body.
 
 `verify` is required:
 
-- `hmac-sha256` checks the named header against an HMAC of the body. Use `check_secret` to confirm `secretKey` is set, and if it isn't, ask the user to add it with the tetherbox CLI.
+- `hmac-sha256` checks the named header against an HMAC of the body. Use `check_secret` to confirm `secretKey` is set, and if it isn't, ask the user to store it in Tetherbox.
 - `{ "kind": "public" }` accepts any request. The URL is reachable from the internet, so use it only when the user asks for it and the sender cannot sign requests.
 
 ## Removing

@@ -1,10 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  profileChannelName,
   profileConfigSchema,
   profileLayout,
   type ProfileConfig,
+  type SessionId,
   type StarterConfig,
   type TurnTrigger,
 } from "@tetherbox/core";
@@ -12,11 +12,12 @@ import {
 const MEMORY_PROMPT_BYTES = 8 * 1024;
 
 const RUNTIME_PROMPT = `You are Tetherbox, a personal assistant for an engineer, running inside one profile.
-Reply to the user with the send_message tool. Your profile directory is your working directory.
+Your responses stream directly to the user in the active session. During background runs (cron, webhook, poll, or reminder), call the notify tool only when something needs the user's attention.
+Your profile directory is your working directory.
 ${profileLayout.memory} is your memory index: a few always-relevant facts plus one line per file or
 folder in ${profileLayout.memoryDir}/. Read those files when they are relevant, and follow the memory skill when you change them.
 skills/ and modules/ hold what this profile can do.
-Never ask for API keys, tokens, or passwords in chat. Direct the user to \`tetherbox secrets set\` for daemon-managed secrets and \`tetherbox auth\` for external CLI logins.`;
+Never ask for API keys, tokens, or passwords in chat. Direct the user to configure daemon-managed secrets or OAuth connections in Tetherbox instead.`;
 
 async function readMemory(profileDir: string): Promise<string | undefined> {
   try {
@@ -64,44 +65,12 @@ function formatStarterConfig(starterConfig: StarterConfig): string | undefined {
   return `# Starter config (${profileLayout.config})\n\n${lines.join("\n")}`;
 }
 
-function formatNamedChannels(profileConfig: ProfileConfig | undefined): string | undefined {
-  if (profileConfig === undefined) {
-    return undefined;
-  }
-
-  const entries = Object.entries(profileConfig.channels);
-
-  if (entries.length === 0) {
-    return undefined;
-  }
-
-  const lines = entries.map(([name, channelId]) => `- ${name}: ${channelId}`);
-
-  return `# Named Slack channels (${profileLayout.config})\n\n${lines.join("\n")}`;
-}
-
 export async function loadSystemPromptAppendix(
   profileDir: string,
   profileConfig: ProfileConfig | undefined,
-  channelId: string,
-  threadTs?: string,
+  sessionId: SessionId,
 ): Promise<string[]> {
-  const sections = [RUNTIME_PROMPT];
-  const channelName =
-    profileConfig !== undefined ? profileChannelName(profileConfig, channelId) : undefined;
-  const slackLines = [
-    `- channelId: ${channelId}${channelName !== undefined ? ` (${channelName})` : " (primary)"}`,
-    ...(threadTs !== undefined ? [`- threadTs: ${threadTs}`] : []),
-  ];
-
-  sections.push(`# Active Slack context\n\n${slackLines.join("\n")}`);
-
-  const channelsSection = formatNamedChannels(profileConfig);
-
-  if (channelsSection !== undefined) {
-    sections.push(channelsSection);
-  }
-
+  const sections = [RUNTIME_PROMPT, `# Active session\n\n- sessionId: ${sessionId}`];
   const starterConfigSection = formatStarterConfig(profileConfig?.starterConfig ?? {});
 
   if (starterConfigSection !== undefined) {
@@ -119,7 +88,7 @@ export async function loadSystemPromptAppendix(
 
 export function formatTrigger(trigger: TurnTrigger): string {
   switch (trigger.kind) {
-    case "slack":
+    case "user":
       return trigger.text;
     case "cron":
       return `Scheduled job "${trigger.job}" fired.\n\n${trigger.prompt}`;
@@ -129,5 +98,10 @@ export function formatTrigger(trigger: TurnTrigger): string {
       return `Poll job "${trigger.job}" is ${trigger.status}.\n\n${trigger.prompt}\n\n${trigger.output}`;
     case "reminder":
       return `Reminder "${trigger.name}" fired.\n\n${trigger.prompt}`;
+    default: {
+      const exhaustive: never = trigger;
+
+      return exhaustive;
+    }
   }
 }

@@ -14,8 +14,6 @@
   "dependencies": {
     "@earendil-works/pi-ai": "catalog:",
     "@hono/node-server": "catalog:",
-    "@slack/socket-mode": "catalog:",
-    "@slack/web-api": "catalog:",
     "@tetherbox/core": "workspace:*",
     "@tetherbox/starters": "workspace:*",
     "croner": "catalog:",

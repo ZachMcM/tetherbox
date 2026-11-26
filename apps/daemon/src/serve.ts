@@ -1,8 +1,12 @@
 import { serve } from "@hono/node-server";
-import { resolveProfileChannel, secretKeySchema, type SecretKind } from "@tetherbox/core";
+import { loadOrCreateAppToken } from "./app-auth.ts";
+import { createAppServer } from "./app-server.ts";
 import type { DaemonConfig } from "./config.ts";
+import { DaemonDb } from "./db.ts";
+import { DaemonEventBus } from "./events.ts";
 import { startInternalServer } from "./internal-server.ts";
 import type { LlmOAuth } from "./llm-oauth.ts";
+import { LlmWebAuthManager } from "./llm-web-auth.ts";
 import type { OAuthStore } from "./oauth.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./poller.ts";
@@ -11,34 +15,8 @@ import { createPublicServer } from "./public-server.ts";
 import { ReminderStore } from "./reminders.ts";
 import { Scheduler } from "./scheduler.ts";
 import type { SecretStore } from "./secret-store.ts";
-import { createSlack, type ReplyTarget } from "./slack.ts";
 import { TurnRunner } from "./turns.ts";
-
-async function requireSecret(
-  secrets: SecretStore,
-  key: string,
-  allowedKinds: readonly SecretKind[],
-): Promise<string> {
-  const secret = await secrets.get(secretKeySchema.parse(key));
-
-  if (secret === undefined) {
-    throw new Error(`${key} is not set. Add it with: tetherbox secrets set ${key}`);
-  }
-
-  if (!allowedKinds.includes(secret.binding.kind)) {
-    throw new Error(
-      `${key} has binding "${secret.binding.kind}", expected ${allowedKinds.join(" or ")}`,
-    );
-  }
-
-  return secret.value;
-}
-
-function targetOf(channelId: string, threadTs?: string): ReplyTarget {
-  return threadTs !== undefined
-    ? { kind: "thread", channelId, threadTs }
-    : { kind: "channel", channelId };
-}
+import { loadOrCreateVapidKeys } from "./vapid.ts";
 
 export interface DaemonStores {
   secrets: SecretStore;
@@ -50,73 +28,49 @@ export async function serveDaemon(
   config: DaemonConfig,
   { secrets, llmOAuth, oauth }: DaemonStores,
 ): Promise<void> {
+  const appToken = loadOrCreateAppToken(config.dataDir);
+  const vapidKeys = loadOrCreateVapidKeys(config.dataDir);
+  const db = new DaemonDb(config.dataDir);
+  const resetCount = db.resetRunningSessions();
+
+  if (resetCount > 0) {
+    console.warn(`reset ${resetCount} stale running session(s) from a previous daemon run`);
+  }
+
+  const events = new DaemonEventBus();
+  const llmWebAuth = new LlmWebAuthManager(llmOAuth);
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
-    const channelId = resolveProfileChannel(profile.config, job.channel);
-
-    if (channelId === undefined) {
-      console.warn(
-        `cron job ${name} in profile ${profile.id} references unknown channel ${job.channel}`,
-      );
-
-      return;
-    }
-
-    turns.enqueue(
-      profile.id,
-      { kind: "cron", job: name, prompt: job.prompt },
-      targetOf(channelId, job.threadTs),
-    );
+    turns.enqueue(profile.id, { kind: "cron", job: name, prompt: job.prompt }, job.sessionId);
   });
-  const poller = new Poller(config.dataDir, (profileId, registered, outcome) => {
+  const poller = new Poller(db, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
       turns.enqueue(
         profileId,
         { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
-        targetOf(registered.channelId ?? profile.config.slackChannelId, registered.threadTs),
+        registered.sessionId,
       );
     }
   });
-  const reminders = new ReminderStore(config.dataDir, (profileId, reminder) => {
+  const reminders = new ReminderStore(db, (profileId, reminder) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
       turns.enqueue(
         profileId,
         { kind: "reminder", name: reminder.name, prompt: reminder.prompt },
-        targetOf(reminder.channelId ?? profile.config.slackChannelId, reminder.threadTs),
+        reminder.sessionId,
       );
     }
-  });
-  const slack = createSlack({
-    appToken: await requireSecret(secrets, "SLACK_APP_TOKEN", ["daemon"]),
-    botToken: await requireSecret(secrets, "SLACK_BOT_TOKEN", ["daemon", "proxy"]),
-    onMessage(message) {
-      const profile = registry.byChannel(message.channelId);
-
-      if (profile === undefined) {
-        return;
-      }
-
-      turns.enqueue(
-        profile.id,
-        { kind: "slack", userId: message.userId, text: message.text },
-        {
-          kind: "message",
-          channelId: message.channelId,
-          threadTs: message.threadTs ?? message.ts,
-          sourceTs: message.ts,
-        },
-      );
-    },
   });
   const turns = new TurnRunner({
     config,
     registry,
     llmOAuth,
-    slack: slack.transport,
+    db,
+    events,
     onProfileReloaded: (profile) => scheduler.sync(profile),
   });
 
@@ -131,9 +85,10 @@ export async function serveDaemon(
   };
 
   await reloadAll();
-  await poller.loadAll();
-  await reminders.loadAll();
+  poller.loadAll();
+  reminders.loadAll();
 
+  const shutdownController = new AbortController();
   const internal = await startInternalServer({
     socketPath: config.socketPath,
     registry,
@@ -149,10 +104,32 @@ export async function serveDaemon(
     hostname: config.publicHost,
     port: config.publicPort,
   });
+  const appServer = serve({
+    fetch: createAppServer({
+      config,
+      appToken,
+      vapidKeys,
+      db,
+      events,
+      registry,
+      scheduler,
+      poller,
+      reminders,
+      turns,
+      secrets,
+      llmOAuth,
+      llmWebAuth,
+      oauth,
+      shutdownSignal: shutdownController.signal,
+    }).fetch,
+    hostname: config.appHost,
+    port: config.appPort,
+  });
 
-  await slack.start();
   await writePidFile(config.dataDir);
-  console.log(`tetherbox daemon serving ${registry.all().length} profile(s)`);
+  console.log(
+    `tetherbox daemon serving ${registry.all().length} profile(s) (app http://${config.appHost}:${config.appPort}, public http://${config.publicHost}:${config.publicPort})`,
+  );
 
   let reloadChain = Promise.resolve();
   const onReload = () => {
@@ -175,9 +152,13 @@ export async function serveDaemon(
       scheduler.stopAll();
       poller.stopAll();
       reminders.stopAll();
-      await slack.stop();
+      llmWebAuth.stopAll();
+      shutdownController.abort();
       internal.close();
       publicServer.close();
+      appServer.close();
+      await turns.shutdown();
+      db.close();
       await removePidFile(config.dataDir);
     })();
 

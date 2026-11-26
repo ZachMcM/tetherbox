@@ -1,21 +1,15 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
-import { join } from "node:path";
-import {
-  profileIdSchema,
-  scheduledReminderSchema,
-  type EntryName,
-  type ProfileId,
-  type ScheduledReminder,
-  type ScheduleReminderInput,
+import type {
+  EntryName,
+  ProfileId,
+  ScheduledReminder,
+  ScheduleReminderInput,
+  SessionId,
 } from "@tetherbox/core";
+import type { DaemonDb } from "./db.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
 export type ReminderFire = (profileId: ProfileId, reminder: ScheduledReminder) => void;
-
-function isMissing(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
-}
 
 function timerKey(profileId: ProfileId, name: EntryName): string {
   return `${profileId}:${name}`;
@@ -36,56 +30,35 @@ function computeFireAt(input: ScheduleReminderInput, now: number): string {
 }
 
 /**
- * Persists one-shot reminders in `<dataDir>/reminders/<profileId>/<name>.json` so they survive
- * daemon restarts without creating git-tracked cron files.
+ * Persists one-shot reminders in SQLite so they survive daemon restarts without creating
+ * git-tracked cron files.
  */
 export class ReminderStore {
-  readonly #dir: string;
+  readonly #db: DaemonDb;
   readonly #reminders = new Map<ProfileId, Map<EntryName, ScheduledReminder>>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #onFire: ReminderFire;
 
-  constructor(dataDir: string, onFire: ReminderFire) {
-    this.#dir = join(dataDir, "reminders");
+  constructor(db: DaemonDb, onFire: ReminderFire) {
+    this.#db = db;
     this.#onFire = onFire;
   }
 
-  async loadAll(): Promise<void> {
-    let profileDirs: string[];
+  loadAll(): void {
+    this.stopAll();
+    this.#reminders.clear();
 
-    try {
-      profileDirs = await readdir(this.#dir);
-    } catch (error) {
-      if (isMissing(error)) {
-        return;
-      }
-
-      throw error;
-    }
-
-    for (const dir of profileDirs) {
-      const profileId = profileIdSchema.parse(dir);
-
-      for (const file of await readdir(join(this.#dir, dir))) {
-        const path = join(this.#dir, dir, file);
-
-        try {
-          const reminder = scheduledReminderSchema.parse(JSON.parse(await readFile(path, "utf8")));
-
-          this.#remindersFor(profileId).set(reminder.name, reminder);
-          this.#arm(profileId, reminder);
-        } catch (error) {
-          console.warn(`skipping reminder ${path}`, error);
-        }
-      }
+    for (const { profileId, reminder } of this.#db.listAllReminders()) {
+      this.#remindersFor(profileId).set(reminder.name, reminder);
+      this.#arm(profileId, reminder);
     }
   }
 
-  async schedule(
+  schedule(
     profileId: ProfileId,
     input: ScheduleReminderInput,
-    origin: { channelId: string; threadTs: string | undefined },
-  ): Promise<ScheduledReminder> {
+    sessionId: SessionId,
+  ): ScheduledReminder {
     const now = Date.now();
     const fireAt = computeFireAt(input, now);
     const reminder: ScheduledReminder = {
@@ -93,14 +66,10 @@ export class ReminderStore {
       fireAt,
       prompt: input.prompt,
       createdAt: new Date(now).toISOString(),
-      channelId: origin.channelId,
-      ...(origin.threadTs !== undefined ? { threadTs: origin.threadTs } : {}),
+      sessionId,
     };
 
-    await mkdir(join(this.#dir, profileId), { recursive: true, mode: 0o700 });
-    await writeFile(this.#fileFor(profileId, reminder.name), JSON.stringify(reminder), {
-      mode: 0o600,
-    });
+    this.#db.upsertReminder(profileId, reminder);
     this.#remindersFor(profileId).set(reminder.name, reminder);
     this.#arm(profileId, reminder);
 
@@ -113,14 +82,32 @@ export class ReminderStore {
     );
   }
 
-  async cancel(profileId: ProfileId, name: EntryName): Promise<boolean> {
+  cancel(profileId: ProfileId, name: EntryName): boolean {
     this.#clearTimer(profileId, name);
 
     const existed = this.#reminders.get(profileId)?.delete(name) ?? false;
 
-    await rm(this.#fileFor(profileId, name), { force: true });
+    this.#db.deleteReminder(profileId, name);
 
     return existed;
+  }
+
+  cancelBySession(sessionId: SessionId): void {
+    for (const [profileId, reminders] of this.#reminders) {
+      for (const [name, reminder] of reminders) {
+        if (reminder.sessionId === sessionId) {
+          this.cancel(profileId, name);
+        }
+      }
+    }
+  }
+
+  cancelByProfile(profileId: ProfileId): void {
+    for (const name of this.#reminders.get(profileId)?.keys() ?? []) {
+      this.cancel(profileId, name);
+    }
+
+    this.#reminders.delete(profileId);
   }
 
   stopAll(): void {
@@ -146,20 +133,20 @@ export class ReminderStore {
 
     const delayMs = Math.max(0, remainingMs);
     const timer = setTimeout(() => {
-      void this.#fire(profileId, reminder.name);
+      this.#fire(profileId, reminder.name);
     }, delayMs);
 
     this.#timers.set(timerKey(profileId, reminder.name), timer);
   }
 
-  async #fire(profileId: ProfileId, name: EntryName): Promise<void> {
+  #fire(profileId: ProfileId, name: EntryName): void {
     const reminder = this.#reminders.get(profileId)?.get(name);
 
     if (reminder === undefined) {
       return;
     }
 
-    await this.cancel(profileId, name);
+    this.cancel(profileId, name);
     this.#onFire(profileId, reminder);
   }
 
@@ -182,9 +169,5 @@ export class ReminderStore {
     }
 
     return reminders;
-  }
-
-  #fileFor(profileId: ProfileId, name: EntryName): string {
-    return join(this.#dir, profileId, `${name}.json`);
   }
 }

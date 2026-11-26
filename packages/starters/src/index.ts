@@ -4,40 +4,19 @@ import {
   secretInjectionSchema,
   secretKeySchema,
   type OAuthPresetId,
-  type SecretBinding,
   type SecretInjection,
   type SecretKey,
-  type StarterConfigFieldKind,
+  type StarterCategory,
+  type StarterConfigField,
+  type StarterSecret,
 } from "@tetherbox/core";
 
-export type StarterCategory = "cli" | "harness" | "integration";
-
-export interface StarterConfigField {
-  readonly key: string;
-  readonly kind: StarterConfigFieldKind;
-  readonly prompt: string;
-  readonly placeholder: string;
-}
+export type { StarterCategory, StarterConfigField, StarterSecret };
 
 export interface StarterConfigEntry {
   readonly starterId: string;
   readonly field: StarterConfigField;
 }
-
-export type StarterSecret =
-  | {
-      readonly kind: "fixed";
-      readonly key: SecretKey;
-      readonly binding: SecretBinding;
-    }
-  | {
-      readonly kind: "prompt-domain";
-      readonly key: SecretKey;
-      readonly inject: SecretInjection;
-      readonly domainPrompt: string;
-      readonly domainPlaceholder: string;
-      readonly fromConfigUrl?: { readonly starterId: string; readonly key: string };
-    };
 
 export interface StarterCliInstall {
   readonly target: "agent" | "system";

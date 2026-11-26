@@ -1,7 +1,5 @@
-import { readFile } from "node:fs/promises";
-import { basename } from "node:path";
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import { MAX_UPLOAD_FILE_BYTES, type InternalClient, type ModuleContext } from "@tetherbox/core";
+import type { InternalClient, ModuleContext } from "@tetherbox/core";
 import { Type } from "typebox";
 import { fetchWebPage } from "./web-fetch.ts";
 
@@ -21,92 +19,33 @@ function json(value: unknown) {
   return text(JSON.stringify(value, null, 2));
 }
 
-function createMessagingTools(client: InternalClient): ToolDefinition[] {
-  const sendMessage = defineTool({
-    name: "send_message",
-    label: "Send message",
+function createNotificationTools(client: InternalClient): ToolDefinition[] {
+  const notify = defineTool({
+    name: "notify",
+    label: "Notify user",
     description:
-      "Post a message to the user in the conversation that started this turn. Use it for the final reply and for progress updates during long work. Optionally pass a named channel from profile.json to post a top-level message there instead.",
+      "Send an alert for this session so the user is notified when something needs attention during a background run (cron, webhook, poll, or reminder). Do not call this for routine interactive replies.",
     parameters: Type.Object({
-      text: Type.String({ minLength: 1 }),
-      channel: Type.Optional(Type.String({ pattern: SLUG_PATTERN })),
+      title: Type.Optional(Type.String({ minLength: 1, maxLength: 120 })),
+      body: Type.String({ minLength: 1, maxLength: 1000 }),
     }),
     async execute(_toolCallId, params) {
-      const response = await client.rpc.messages.$post({
+      const response = await client.rpc.notify.$post({
         json: {
-          text: params.text,
-          ...(params.channel !== undefined ? { channel: params.channel } : {}),
-        },
-      });
-
-      if (!response.ok) {
-        throw await failure(response, "send_message");
-      }
-
-      return text("Sent.");
-    },
-  });
-  const sendFile = defineTool({
-    name: "send_file",
-    label: "Send file",
-    description:
-      "Upload a local file (such as a CSV, chart, diff, log, or screenshot) to the Slack conversation that started this turn. Optionally pass a named channel from profile.json to upload to that channel instead.",
-    parameters: Type.Object({
-      path: Type.String({ minLength: 1 }),
-      filename: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
-      title: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
-      comment: Type.Optional(Type.String({ minLength: 1 })),
-      channel: Type.Optional(Type.String({ pattern: SLUG_PATTERN })),
-    }),
-    async execute(_toolCallId, params) {
-      const content = await readFile(params.path);
-
-      if (content.byteLength === 0) {
-        throw new Error(`File "${params.path}" is empty`);
-      }
-
-      if (content.byteLength > MAX_UPLOAD_FILE_BYTES) {
-        throw new Error(
-          `File "${params.path}" is ${content.byteLength} bytes, exceeding the ${MAX_UPLOAD_FILE_BYTES} byte upload limit`,
-        );
-      }
-
-      const filename = params.filename ?? basename(params.path);
-      const response = await client.rpc.files.$post({
-        json: {
-          filename,
-          contentBase64: content.toString("base64"),
+          body: params.body,
           ...(params.title !== undefined ? { title: params.title } : {}),
-          ...(params.comment !== undefined ? { initialComment: params.comment } : {}),
-          ...(params.channel !== undefined ? { channel: params.channel } : {}),
         },
       });
 
       if (!response.ok) {
-        throw await failure(response, "send_file");
+        throw await failure(response, "notify");
       }
 
-      return text(`Uploaded ${filename}.`);
-    },
-  });
-  const addReaction = defineTool({
-    name: "add_reaction",
-    label: "Add reaction",
-    description:
-      "React with an emoji (Slack name without colons) to the message that started this turn.",
-    parameters: Type.Object({ emoji: Type.String({ minLength: 1 }) }),
-    async execute(_toolCallId, params) {
-      const response = await client.rpc.reactions.$post({ json: { emoji: params.emoji } });
-
-      if (!response.ok) {
-        throw await failure(response, "add_reaction");
-      }
-
-      return text("Reacted.");
+      return text("Notification recorded.");
     },
   });
 
-  return [sendMessage, sendFile, addReaction];
+  return [notify];
 }
 
 function createProfileTools(
@@ -117,7 +56,7 @@ function createProfileTools(
     name: "check_secret",
     label: "Check secret",
     description:
-      "Report whether a secret key (such as LINEAR_API_KEY or GOOGLE_CALENDAR_OAUTH) is stored and its binding kind, without revealing its value. If it is missing or has the wrong binding kind, tell the user to run `tetherbox secrets set <KEY> --domain <api host>` for an API key (adding `--inject header:<name>` or `--inject query:<name>` if not bearer auth), `tetherbox oauth login <preset>` or `tetherbox oauth custom <KEY> ...` for OAuth2, or `tetherbox secrets set <KEY>` for a webhook secret. Never ask for a secret value in chat.",
+      "Report whether a secret key (such as LINEAR_API_KEY or GOOGLE_CALENDAR_OAUTH) is stored and its binding kind, without revealing its value. Never ask for a secret value in chat.",
     parameters: Type.Object({ key: Type.String({ pattern: SECRET_KEY_PATTERN }) }),
     async execute(_toolCallId, params) {
       const response = await client.rpc.secrets[":key"].$get({ param: { key: params.key } });
@@ -199,7 +138,7 @@ function createPollTools(client: InternalClient): ToolDefinition[] {
     name: "register_poll_job",
     label: "Register poll job",
     description:
-      "Use when you started work outside this turn that finishes later (a coding agent session, CI run, deploy, or review) and need to act on the result. The daemon runs `command` every intervalSeconds; when it reports done, or makes no progress for stallAfterSeconds, a new turn starts with `prompt` and the command's output. Registering an existing name replaces it. For recurring schedules, write a cron file instead.",
+      "Use when you started work outside this turn that finishes later (a coding agent session, CI run, deploy, or review) and need to act on the result. The daemon runs `command` every intervalSeconds; when it reports done, or makes no progress for stallAfterSeconds, a new turn starts in this session with `prompt` and the command's output. Registering an existing name replaces it. For recurring schedules, write a cron file instead.",
     parameters: Type.Object({
       name: Type.String({ pattern: SLUG_PATTERN }),
       command: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
@@ -297,7 +236,7 @@ function createReminderTools(client: InternalClient): ToolDefinition[] {
     name: "schedule_reminder",
     label: "Schedule reminder",
     description:
-      "Schedule a one-shot reminder that wakes a new turn at a future time (provide either fireAt as an ISO-8601 timestamp or delaySeconds). Registering an existing name replaces it. Use cron/ files for recurring schedules instead.",
+      "Schedule a one-shot reminder that wakes a new turn in this session at a future time (provide either fireAt as an ISO-8601 timestamp or delaySeconds). Registering an existing name replaces it. Use cron/ files for recurring schedules instead.",
     parameters: Type.Object({
       name: Type.String({ pattern: SLUG_PATTERN }),
       fireAt: Type.Optional(Type.String({ minLength: 1 })),
@@ -379,7 +318,7 @@ export function createBuiltinTools(
   fetchWithSecret: ModuleContext["fetchWithSecret"],
 ): ToolDefinition[] {
   return [
-    ...createMessagingTools(client),
+    ...createNotificationTools(client),
     ...createWebTools(),
     ...createProfileTools(client, fetchWithSecret),
     ...createPollTools(client),

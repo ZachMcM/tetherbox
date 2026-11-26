@@ -1,206 +1,244 @@
 import { randomBytes, randomUUID } from "node:crypto";
-import { link, rm } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { mkdir } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
-  MAX_UPLOAD_FILE_BYTES,
-  resolveProfileChannel,
   RpcError,
   runIdSchema,
-  type AddReactionInput,
-  type EntryName,
+  sessionIdSchema,
   type ModelRef,
+  type NotifyInput,
   type ProfileId,
   type ProfileIssue,
   type RunContext,
   type RunId,
-  type SendFileInput,
-  type SendMessageInput,
+  type SessionId,
   type TurnModelAuth,
   type TurnTrigger,
 } from "@tetherbox/core";
 import { runAgent } from "./agent-spawner.ts";
 import type { DaemonConfig } from "./config.ts";
+import type { DaemonDb } from "./db.ts";
+import type { DaemonEventBus } from "./events.ts";
 import type { LlmOAuth } from "./llm-oauth.ts";
 import type { LoadedProfile, ProfileRegistry } from "./profiles.ts";
-import type { ReplyTarget, SlackTransport } from "./slack.ts";
+import { sessionTranscriptPath } from "./transcript.ts";
+
+const MAX_SESSION_TITLE_CHARS = 80;
+
+export const DEFAULT_SESSION_TITLE = "New session";
+
+export function sessionTitleFromText(text: string): string {
+  const compact = text.trim().replace(/\s+/g, " ");
+
+  if (compact.length <= MAX_SESSION_TITLE_CHARS) {
+    return compact;
+  }
+
+  return `${compact.slice(0, MAX_SESSION_TITLE_CHARS - 1).trimEnd()}…`;
+}
 
 interface ActiveRun {
   context: RunContext;
-  replyTarget: ReplyTarget;
-  sentMessage: boolean;
-  firstPostedTs: string | undefined;
-  done: Promise<void>;
+  runToken: string;
+  controller: AbortController;
 }
 
 export interface TurnRunnerDeps {
   config: DaemonConfig;
   registry: ProfileRegistry;
   llmOAuth: LlmOAuth;
-  slack: SlackTransport;
+  db: DaemonDb;
+  events: DaemonEventBus;
   onProfileReloaded(profile: LoadedProfile): ProfileIssue[];
 }
 
-function formatIssues(issues: readonly ProfileIssue[]): string {
-  return [
-    "Profile config has problems:",
-    ...issues.map((issue) => `• ${issue.file}: ${issue.message}`),
-  ].join("\n");
-}
+function deriveSessionTitle(trigger: TurnTrigger): string {
+  switch (trigger.kind) {
+    case "user":
+      return sessionTitleFromText(trigger.text);
+    case "cron":
+      return `Cron: ${trigger.job}`;
+    case "webhook":
+      return `Webhook: ${trigger.hook}`;
+    case "poll":
+      return `Poll: ${trigger.job}`;
+    case "reminder":
+      return `Reminder: ${trigger.name}`;
+    default: {
+      const exhaustive: never = trigger;
 
-function errorCode(error: unknown): string | undefined {
-  return error instanceof Error && "code" in error && typeof error.code === "string"
-    ? error.code
-    : undefined;
-}
-
-function threadQueueKey(profileId: ProfileId, replyTarget: ReplyTarget): string | undefined {
-  return replyTarget.kind === "channel"
-    ? undefined
-    : `${profileId}:${replyTarget.channelId}:${replyTarget.threadTs}`;
-}
-
-function sessionFilePath(
-  sessionsDir: string,
-  profileId: ProfileId,
-  replyTarget: ReplyTarget,
-  runId: RunId,
-): string {
-  const filename =
-    replyTarget.kind === "channel" ? `.pending-${runId}.jsonl` : `${replyTarget.threadTs}.jsonl`;
-
-  return join(sessionsDir, profileId, replyTarget.channelId, filename);
-}
-
-async function finalizePendingSession(
-  sessionFile: string,
-  postedTs: string | undefined,
-): Promise<void> {
-  if (postedTs !== undefined) {
-    try {
-      await link(sessionFile, join(dirname(sessionFile), `${postedTs}.jsonl`));
-    } catch (error) {
-      const code = errorCode(error);
-
-      if (code !== "ENOENT" && code !== "EEXIST") {
-        console.error(`failed to bind pending session ${sessionFile} to ${postedTs}`, error);
-      }
+      return exhaustive;
     }
   }
-
-  await rm(sessionFile, { force: true });
 }
 
 /**
- * Runs agent turns sequentially within each Slack thread while allowing separate threads and
- * threadless top-level triggers to run in parallel. A turn's reply goes out through
- * `send_message`; if the run never called it, the daemon posts the run's final text instead, so
- * each turn produces at most one fallback and never a duplicate.
+ * Runs agent turns sequentially within each session while allowing separate sessions to run in
+ * parallel. Live Pi events stream over `events`, and session state is persisted in SQLite.
  */
 export class TurnRunner {
   readonly #deps: TurnRunnerDeps;
   readonly #runsByToken = new Map<string, ActiveRun>();
   readonly #runsById = new Map<RunId, ActiveRun>();
-  readonly #queues = new Map<string, Promise<void>>();
+  readonly #activeBySession = new Map<SessionId, ActiveRun>();
+  readonly #queues = new Map<SessionId, Promise<void>>();
+  readonly #queuedProfile = new Map<SessionId, ProfileId>();
+  readonly #deletedSessions = new Set<SessionId>();
+  readonly #deletingProfiles = new Set<ProfileId>();
+  #closing = false;
 
   constructor(deps: TurnRunnerDeps) {
     this.#deps = deps;
   }
 
-  enqueue(profileId: ProfileId, trigger: TurnTrigger, replyTarget: ReplyTarget): void {
-    const queueKey = threadQueueKey(profileId, replyTarget);
-
-    if (queueKey === undefined) {
-      void this.#run(profileId, trigger, replyTarget).catch((error: unknown) => {
-        console.error(`turn for profile ${profileId} failed`, error);
-      });
-
-      return;
+  enqueue(profileId: ProfileId, trigger: TurnTrigger, existingSessionId?: SessionId): SessionId {
+    if (this.#closing || this.#deletingProfiles.has(profileId)) {
+      throw new RpcError(409, `profile "${profileId}" is not accepting turns`);
     }
 
-    const previous = this.#queues.get(queueKey) ?? Promise.resolve();
+    if (existingSessionId !== undefined && this.#deletedSessions.has(existingSessionId)) {
+      throw new RpcError(404, `session "${existingSessionId}" was deleted`);
+    }
+
+    const sessionId = existingSessionId ?? sessionIdSchema.parse(randomUUID());
+    const existing = this.#deps.db.getSession(sessionId);
+
+    if (existing !== undefined && existing.profileId !== profileId) {
+      throw new RpcError(
+        409,
+        `session "${sessionId}" belongs to profile "${existing.profileId}", not "${profileId}"`,
+      );
+    }
+
+    if (existing === undefined) {
+      const created = this.#deps.db.createSession({
+        id: sessionId,
+        profileId,
+        title: deriveSessionTitle(trigger),
+        triggerKind: trigger.kind,
+      });
+
+      this.#deps.events.emit({ kind: "session_updated", session: created });
+    }
+
+    const previous = this.#queues.get(sessionId) ?? Promise.resolve();
     const next = previous
-      .then(() => this.#run(profileId, trigger, replyTarget))
+      .then(async () => {
+        if (this.#isCancelled(profileId, sessionId)) {
+          return;
+        }
+
+        await this.#run(profileId, sessionId, trigger);
+      })
       .catch((error: unknown) => {
-        console.error(`turn for profile ${profileId} failed`, error);
+        console.error(`turn for profile ${profileId} session ${sessionId} failed`, error);
       })
       .finally(() => {
-        if (this.#queues.get(queueKey) === next) {
-          this.#queues.delete(queueKey);
+        if (this.#queues.get(sessionId) === next) {
+          this.#queues.delete(sessionId);
+          this.#queuedProfile.delete(sessionId);
         }
       });
 
-    this.#queues.set(queueKey, next);
+    this.#queues.set(sessionId, next);
+    this.#queuedProfile.set(sessionId, profileId);
+
+    return sessionId;
+  }
+
+  abort(sessionId: SessionId): boolean {
+    const run = this.#activeBySession.get(sessionId);
+
+    if (run === undefined) {
+      return false;
+    }
+
+    this.#revokeRun(run);
+    run.controller.abort();
+
+    return true;
+  }
+
+  async cancelSession(sessionId: SessionId): Promise<void> {
+    this.#deletedSessions.add(sessionId);
+    this.abort(sessionId);
+
+    const pending = this.#queues.get(sessionId);
+
+    if (pending !== undefined) {
+      await pending;
+    }
+  }
+
+  async cancelProfile(profileId: ProfileId, sessionIds: readonly SessionId[]): Promise<void> {
+    this.#deletingProfiles.add(profileId);
+
+    const targets = new Set<SessionId>(sessionIds);
+
+    for (const [sessionId, queuedProfileId] of this.#queuedProfile) {
+      if (queuedProfileId === profileId) {
+        targets.add(sessionId);
+      }
+    }
+
+    for (const [sessionId, run] of this.#activeBySession) {
+      if (run.context.profileId === profileId) {
+        targets.add(sessionId);
+      }
+    }
+
+    await Promise.all([...targets].map((sessionId) => this.cancelSession(sessionId)));
+  }
+
+  finishProfileDeletion(profileId: ProfileId): void {
+    this.#deletingProfiles.delete(profileId);
+  }
+
+  async shutdown(): Promise<void> {
+    this.#closing = true;
+
+    for (const sessionId of this.#activeBySession.keys()) {
+      this.abort(sessionId);
+    }
+
+    await Promise.allSettled(this.#queues.values());
   }
 
   resolveRun(token: string): RunContext | undefined {
     return this.#runsByToken.get(token)?.context;
   }
 
-  replyOrigin(context: RunContext): { channelId: string; threadTs: string | undefined } {
+  notify(context: RunContext, input: NotifyInput): void {
     const run = this.#active(context);
 
-    return {
-      channelId: run.replyTarget.channelId,
-      threadTs: run.replyTarget.kind === "channel" ? undefined : run.replyTarget.threadTs,
-    };
-  }
-
-  async sendMessage(context: RunContext, input: SendMessageInput): Promise<{ ts: string }> {
-    const run = this.#active(context);
-    const target = this.#resolvePostTarget(run, input.channel);
-    const result = await this.#deps.slack.postMessage(target, input.text);
-
-    if (target.channelId === run.replyTarget.channelId) {
-      if (run.replyTarget.kind === "channel" && run.firstPostedTs === undefined) {
-        run.firstPostedTs = result.ts;
-        this.#claimThreadQueue(run.context.profileId, target.channelId, result.ts, run.done);
-      }
-
-      run.sentMessage = true;
+    if (this.#isCancelled(run.context.profileId, run.context.sessionId)) {
+      return;
     }
 
-    return result;
-  }
+    const updated = this.#deps.db.markSessionUnreadAlert(run.context.sessionId);
 
-  async sendFile(context: RunContext, input: SendFileInput): Promise<void> {
-    const run = this.#active(context);
-    const target = this.#resolvePostTarget(run, input.channel);
-    const content = Buffer.from(input.contentBase64, "base64");
-
-    if (content.byteLength === 0 || content.byteLength > MAX_UPLOAD_FILE_BYTES) {
-      throw new RpcError(
-        400,
-        `File "${input.filename}" must be between 1 and ${MAX_UPLOAD_FILE_BYTES} bytes`,
-      );
+    if (updated !== undefined) {
+      this.#deps.events.emit({ kind: "session_updated", session: updated });
     }
 
-    await this.#deps.slack.uploadFile(target, {
-      filename: input.filename,
-      content,
+    this.#deps.events.emit({
+      kind: "notification",
+      profileId: run.context.profileId,
+      sessionId: run.context.sessionId,
       ...(input.title !== undefined ? { title: input.title } : {}),
-      ...(input.initialComment !== undefined ? { initialComment: input.initialComment } : {}),
+      body: input.body,
     });
-
-    if (target.channelId === run.replyTarget.channelId) {
-      run.sentMessage = true;
-    }
   }
 
-  async addReaction(context: RunContext, input: AddReactionInput): Promise<void> {
-    const run = this.#active(context);
-
-    if (run.replyTarget.kind !== "message") {
-      throw new RpcError(
-        400,
-        "this run was not started by a Slack message, so there is nothing to react to",
-      );
-    }
-
-    await this.#deps.slack.addReaction(
-      run.replyTarget.channelId,
-      run.replyTarget.sourceTs,
-      input.emoji,
+  #isCancelled(profileId: ProfileId, sessionId: SessionId): boolean {
+    return (
+      this.#closing || this.#deletedSessions.has(sessionId) || this.#deletingProfiles.has(profileId)
     );
+  }
+
+  #revokeRun(run: ActiveRun): void {
+    this.#runsByToken.delete(run.runToken);
+    this.#runsById.delete(run.context.runId);
   }
 
   #active(context: RunContext): ActiveRun {
@@ -211,47 +249,6 @@ export class TurnRunner {
     }
 
     return run;
-  }
-
-  #claimThreadQueue(
-    profileId: ProfileId,
-    channelId: string,
-    threadTs: string,
-    runDone: Promise<void>,
-  ): void {
-    const queueKey = `${profileId}:${channelId}:${threadTs}`;
-
-    if (this.#queues.has(queueKey)) {
-      return;
-    }
-
-    const cleanup = runDone.finally(() => {
-      if (this.#queues.get(queueKey) === cleanup) {
-        this.#queues.delete(queueKey);
-      }
-    });
-
-    this.#queues.set(queueKey, cleanup);
-  }
-
-  #resolvePostTarget(run: ActiveRun, channel: EntryName | undefined): ReplyTarget {
-    if (channel === undefined) {
-      return run.replyTarget;
-    }
-
-    const profile = this.#deps.registry.get(run.context.profileId);
-
-    if (profile === undefined) {
-      throw new RpcError(404, `profile ${run.context.profileId} is not loaded`);
-    }
-
-    const channelId = resolveProfileChannel(profile.config, channel);
-
-    if (channelId === undefined) {
-      throw new RpcError(400, `unknown channel "${channel}" for profile ${profile.id}`);
-    }
-
-    return { kind: "channel", channelId };
   }
 
   async #modelAuth(model: ModelRef): Promise<TurnModelAuth | undefined> {
@@ -268,106 +265,168 @@ export class TurnRunner {
     }
   }
 
-  async #run(profileId: ProfileId, trigger: TurnTrigger, replyTarget: ReplyTarget): Promise<void> {
-    const { config, registry, slack } = this.#deps;
+  #setSessionStatus(
+    sessionId: SessionId,
+    status: "idle" | "running" | "error",
+    errorMessage: string | null,
+  ): void {
+    if (this.#deletedSessions.has(sessionId)) {
+      return;
+    }
+
+    const updated = this.#deps.db.updateSessionStatus(sessionId, { status, errorMessage });
+
+    if (updated !== undefined) {
+      this.#deps.events.emit({ kind: "session_updated", session: updated });
+    }
+  }
+
+  async #run(profileId: ProfileId, sessionId: SessionId, trigger: TurnTrigger): Promise<void> {
+    const { config, registry, events } = this.#deps;
     const profile = registry.get(profileId);
 
     if (profile === undefined) {
-      return;
-    }
-
-    const { model } = profile.config;
-    let modelAuth: TurnModelAuth | undefined;
-
-    try {
-      modelAuth = await this.#modelAuth(model);
-    } catch (error) {
-      console.error(`could not resolve model auth for profile ${profileId}`, error);
-      await slack.postMessage(
-        replyTarget,
-        `Could not load the ${model.provider} login for this profile. Check the daemon logs.`,
-      );
-
-      return;
-    }
-
-    if (modelAuth === undefined) {
-      await slack.postMessage(
-        replyTarget,
-        `This profile signs in to ${model.provider} with OAuth, but the daemon has no login for it. Run: tetherbox llm login ${model.provider}`,
-      );
+      this.#setSessionStatus(sessionId, "error", `Profile "${profileId}" is not loaded.`);
 
       return;
     }
 
     const runId = runIdSchema.parse(randomUUID());
     const runToken = randomBytes(32).toString("base64url");
-    const sessionFile = sessionFilePath(config.sessionsDir, profileId, replyTarget, runId);
-    const { promise: done, resolve: resolveDone } = Promise.withResolvers<void>();
+    const controller = new AbortController();
     const run: ActiveRun = {
-      context: { runId, profileId },
-      replyTarget,
-      sentMessage: false,
-      firstPostedTs: undefined,
-      done,
+      context: { runId, profileId, sessionId },
+      runToken,
+      controller,
     };
 
-    this.#runsByToken.set(runToken, run);
-    this.#runsById.set(runId, run);
+    // Register before any await so abort/cancelSession sees the run during auth and mkdir.
+    this.#activeBySession.set(sessionId, run);
+
+    let started = false;
+    let finishStatus: "idle" | "error" = "idle";
+    let finishError: string | null = null;
 
     try {
-      const threadTs = replyTarget.kind === "channel" ? undefined : replyTarget.threadTs;
-      const result = await runAgent(config.agent, {
-        runId,
-        runToken,
-        profileId,
-        profileDir: profile.dir,
-        sessionFile,
-        socketPath: config.socketPath,
-        model,
-        modelAuth,
-        trigger,
-        channelId: replyTarget.channelId,
-        ...(threadTs !== undefined ? { threadTs } : {}),
-      });
+      const { model } = profile.config;
+      let modelAuth: TurnModelAuth | undefined;
 
-      if (!run.sentMessage && result.finalText !== null && result.finalText.trim() !== "") {
-        const posted = await slack.postMessage(replyTarget, result.finalText);
+      try {
+        modelAuth = await this.#modelAuth(model);
+      } catch (error) {
+        console.error(`could not resolve model auth for profile ${profileId}`, error);
+        this.#setSessionStatus(
+          sessionId,
+          "error",
+          `Could not load the ${model.provider} login for this profile. Check the daemon logs.`,
+        );
 
-        if (replyTarget.kind === "channel" && run.firstPostedTs === undefined) {
-          run.firstPostedTs = posted.ts;
-          this.#claimThreadQueue(profileId, replyTarget.channelId, posted.ts, done);
-        }
+        return;
       }
-    } catch (error) {
-      console.error(`run ${runId} for profile ${profileId} failed`, error);
-      await slack.postMessage(
-        replyTarget,
-        "This run failed before it finished. Check the daemon logs.",
+
+      if (controller.signal.aborted || this.#isCancelled(profileId, sessionId)) {
+        return;
+      }
+
+      if (modelAuth === undefined) {
+        this.#setSessionStatus(
+          sessionId,
+          "error",
+          `This profile signs in to ${model.provider} with OAuth, but the daemon has no login for it.`,
+        );
+
+        return;
+      }
+
+      const sessionFile = sessionTranscriptPath(config.sessionsDir, profileId, sessionId);
+
+      await mkdir(dirname(sessionFile), { recursive: true });
+
+      if (controller.signal.aborted || this.#isCancelled(profileId, sessionId)) {
+        return;
+      }
+
+      this.#runsByToken.set(runToken, run);
+      this.#runsById.set(runId, run);
+      started = true;
+      this.#setSessionStatus(sessionId, "running", null);
+      events.emit({ kind: "turn_started", profileId, sessionId, runId, trigger });
+
+      await runAgent(
+        config.agent,
+        {
+          runId,
+          runToken,
+          profileId,
+          sessionId,
+          profileDir: profile.dir,
+          sessionFile,
+          socketPath: config.socketPath,
+          model,
+          modelAuth,
+          trigger,
+        },
+        {
+          signal: controller.signal,
+          onEvent: (event) => {
+            if (!this.#deletedSessions.has(sessionId)) {
+              events.emit({ kind: "turn_event", profileId, sessionId, runId, event });
+            }
+          },
+        },
       );
-    } finally {
-      this.#runsByToken.delete(runToken);
-      this.#runsById.delete(runId);
-
-      if (replyTarget.kind === "channel") {
-        await finalizePendingSession(sessionFile, run.firstPostedTs);
+    } catch (error) {
+      if (!this.#deletedSessions.has(sessionId)) {
+        console.error(`run ${runId} for profile ${profileId} session ${sessionId} failed`, error);
       }
 
-      resolveDone();
+      finishStatus = "error";
+      finishError = controller.signal.aborted
+        ? "Run was aborted."
+        : "This run failed before it finished. Check the daemon logs.";
+    } finally {
+      this.#revokeRun(run);
+
+      if (this.#activeBySession.get(sessionId) === run) {
+        this.#activeBySession.delete(sessionId);
+      }
+
+      if (started && !this.#deletedSessions.has(sessionId)) {
+        this.#setSessionStatus(sessionId, finishStatus, finishError);
+        events.emit({
+          kind: "turn_finished",
+          profileId,
+          sessionId,
+          runId,
+          status: finishStatus,
+          errorMessage: finishError,
+        });
+      }
     }
 
-    await this.#reloadAfterRun(profileId, replyTarget);
+    if (!this.#closing && !this.#deletingProfiles.has(profileId)) {
+      await this.#reloadAfterRun(profileId);
+    }
   }
 
-  async #reloadAfterRun(profileId: ProfileId, replyTarget: ReplyTarget): Promise<void> {
+  async #reloadAfterRun(profileId: ProfileId): Promise<void> {
+    if (this.#deletingProfiles.has(profileId)) {
+      return;
+    }
+
     const load = await this.#deps.registry.reload(profileId);
+
+    if (this.#deletingProfiles.has(profileId)) {
+      return;
+    }
+
     const issues =
       load.kind === "loaded"
         ? [...load.issues, ...this.#deps.onProfileReloaded(load.profile)]
         : load.issues;
 
-    if (issues.length > 0) {
-      await this.#deps.slack.postMessage(replyTarget, formatIssues(issues));
+    for (const issue of issues) {
+      console.warn(`profile ${profileId} config issue: ${issue.file}: ${issue.message}`);
     }
   }
 }

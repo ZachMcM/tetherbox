@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { entryNameSchema, profileIdSchema, slackChannelIdSchema } from "@tetherbox/core";
+import { profileIdSchema } from "@tetherbox/core";
 import { starters } from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
@@ -14,7 +14,7 @@ export function registerProfiles(program: Command): void {
 
   profiles
     .command("list")
-    .description("List profiles and the Slack channels they map to")
+    .description("List profiles on the VM")
     .action(async () => {
       const { sshAlias } = await readConfig();
 
@@ -23,7 +23,7 @@ export function registerProfiles(program: Command): void {
 
   profiles
     .command("validate")
-    .description("Check a profile's config, cron, webhook, and poll files")
+    .description("Check a profile's config, cron, and webhook files")
     .argument("<id>", "profile id")
     .action(async (rawId: string) => {
       const id = profileIdSchema.parse(rawId);
@@ -43,7 +43,7 @@ export function registerProfiles(program: Command): void {
 
   profiles
     .command("create")
-    .description("Create a profile for a Slack channel or DM")
+    .description("Create a profile")
     .argument("<id>", "profile id")
     .action(async (rawId: string) => {
       const id = profileIdSchema.parse(rawId);
@@ -59,21 +59,6 @@ export function registerProfiles(program: Command): void {
       });
 
       if (p.isCancel(name)) {
-        p.cancel("Profile creation cancelled.");
-
-        return;
-      }
-
-      const channel = await p.text({
-        message: "Slack channel or DM ID",
-        placeholder: "C0123456789",
-        validate: (value) =>
-          slackChannelIdSchema.safeParse(value?.trim()).success
-            ? undefined
-            : "Expected a Slack channel or DM ID starting with C, D, or G",
-      });
-
-      if (p.isCancel(channel)) {
         p.cancel("Profile creation cancelled.");
 
         return;
@@ -130,7 +115,6 @@ export function registerProfiles(program: Command): void {
         "create",
         id,
         `--name=${name.trim()}`,
-        `--channel=${channel.trim()}`,
         ...modelRefArgs(model),
         ...starterArgs,
         ...starterConfigArgs(starterSetup.starterConfig),
@@ -185,39 +169,5 @@ export function registerProfiles(program: Command): void {
       if (code === 0) {
         p.outro(`Profile ${pc.cyan(id)} now uses ${model.provider}/${model.id}.`);
       }
-    });
-
-  profiles
-    .command("add-channel")
-    .description("Attach an additional named Slack channel to a profile")
-    .argument("<id>", "profile id")
-    .argument("<name>", "channel name (lowercase slug, e.g. alerts)")
-    .argument("<channelId>", "Slack channel or DM ID")
-    .action(async (rawId: string, rawName: string, rawChannelId: string) => {
-      const id = profileIdSchema.parse(rawId);
-      const name = entryNameSchema.parse(rawName);
-      const channelId = slackChannelIdSchema.parse(rawChannelId);
-      const { sshAlias } = await readConfig();
-
-      process.exitCode = await runDaemonCommand(sshAlias, [
-        "profiles",
-        "add-channel",
-        id,
-        name,
-        channelId,
-      ]);
-    });
-
-  profiles
-    .command("remove-channel")
-    .description("Remove an additional named Slack channel from a profile")
-    .argument("<id>", "profile id")
-    .argument("<name>", "channel name")
-    .action(async (rawId: string, rawName: string) => {
-      const id = profileIdSchema.parse(rawId);
-      const name = entryNameSchema.parse(rawName);
-      const { sshAlias } = await readConfig();
-
-      process.exitCode = await runDaemonCommand(sshAlias, ["profiles", "remove-channel", id, name]);
     });
 }

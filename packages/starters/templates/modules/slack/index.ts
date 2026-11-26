@@ -148,7 +148,7 @@ async function slackCall(
 
 export default {
   name: "slack",
-  description: "Slack actions beyond replying in the current thread.",
+  description: "Read, search, and post messages in Slack channels and threads.",
   requiredSecrets: [SECRET_KEY],
   tools: [
     {

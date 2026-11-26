@@ -15,7 +15,7 @@ Memory is plain markdown in this profile's git repository.
 
 ```
 MEMORY.md
-  - Prefers short Slack replies.
+  - Prefers short, direct replies.
   - memory/projects/   → one file per active project (see INDEX.md)
   - memory/routines.md → standup format, weekly review steps
 

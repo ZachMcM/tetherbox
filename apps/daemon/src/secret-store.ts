@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import {
+  RpcError,
   secretBindingSchema,
   secretKeySchema,
   type LlmProvider,
@@ -71,7 +72,8 @@ export function createFileSecretStore(dataDir: string): SecretStore {
             existing.binding.kind === "llm" &&
             existing.binding.provider === provider
           ) {
-            throw new Error(
+            throw new RpcError(
+              409,
               `LLM provider "${provider}" is already bound to ${existing.key}; update or delete ${existing.key} first`,
             );
           }

@@ -48,8 +48,8 @@ export function registerSetup(program: Command): void {
 
       // TODO: Provision the VM: install Node 24, create the tetherbox (daemon) and tetherbox-agent
       // users plus a shared socket group, lay out /var/lib/tetherbox and /srv/tetherbox/profiles,
-      // install the daemon and agent builds, the sudoers rule for agent runs, a systemd unit, and
-      // Tailscale Funnel for the public server. Then prompt for the Slack app and bot tokens.
+      // install the daemon and agent builds, the sudoers rule for agent runs, a systemd unit,
+      // Tailscale Serve for the private web app, and Tailscale Funnel for the public webhook server.
       p.outro(`Saved ${pc.cyan(alias)}. VM provisioning is not implemented yet.`);
     });
 }

@@ -1,10 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import {
-  entryNameSchema,
-  profileIdSchema,
-  resolveProfileChannel,
-  type WebhookVerification,
-} from "@tetherbox/core";
+import { entryNameSchema, profileIdSchema, type WebhookVerification } from "@tetherbox/core";
 import { Hono } from "hono";
 import type { ProfileRegistry } from "./profiles.ts";
 import type { SecretStore } from "./secret-store.ts";
@@ -80,18 +75,13 @@ export function createPublicServer({ registry, secrets, turns }: PublicServerDep
         return c.json({ error: "signature mismatch" }, 401);
       }
 
-      const channelId = resolveProfileChannel(profile.config, hook.channel);
+      const sessionId = turns.enqueue(profile.id, {
+        kind: "webhook",
+        hook: name.data,
+        prompt: hook.prompt,
+        payload: parseBody(body),
+      });
 
-      if (channelId === undefined) {
-        return c.json({ error: "webhook channel is not configured" }, 500);
-      }
-
-      turns.enqueue(
-        profile.id,
-        { kind: "webhook", hook: name.data, prompt: hook.prompt, payload: parseBody(body) },
-        { kind: "channel", channelId },
-      );
-
-      return c.json({ accepted: true }, 202);
+      return c.json({ accepted: true, sessionId }, 202);
     });
 }

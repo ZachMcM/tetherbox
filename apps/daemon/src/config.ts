@@ -7,6 +7,9 @@ const envSchema = z.object({
   TETHERBOX_SOCKET: z.string().default("/run/tetherbox/internal.sock"),
   TETHERBOX_PUBLIC_HOST: z.string().default("127.0.0.1"),
   TETHERBOX_PUBLIC_PORT: z.coerce.number().int().positive().default(8787),
+  TETHERBOX_APP_HOST: z.string().default("127.0.0.1"),
+  TETHERBOX_APP_PORT: z.coerce.number().int().positive().default(8788),
+  TETHERBOX_WEB_DIR: z.string().min(1).optional(),
   TETHERBOX_AGENT_USER: z.string().min(1).optional(),
   TETHERBOX_AGENT_ENTRY: z.string().default("/opt/tetherbox/apps/agent/dist/main.mjs"),
   TETHERBOX_TURN_TIMEOUT_SECONDS: z.coerce.number().int().positive().default(900),
@@ -19,6 +22,9 @@ export interface DaemonConfig {
   socketPath: string;
   publicHost: string;
   publicPort: number;
+  appHost: string;
+  appPort: number;
+  webDir: string | undefined;
   agent: { user: string | undefined; entry: string; timeoutMs: number };
 }
 
@@ -32,6 +38,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DaemonConfig {
     socketPath: parsed.TETHERBOX_SOCKET,
     publicHost: parsed.TETHERBOX_PUBLIC_HOST,
     publicPort: parsed.TETHERBOX_PUBLIC_PORT,
+    appHost: parsed.TETHERBOX_APP_HOST,
+    appPort: parsed.TETHERBOX_APP_PORT,
+    webDir: parsed.TETHERBOX_WEB_DIR,
     agent: {
       user: parsed.TETHERBOX_AGENT_USER,
       entry: parsed.TETHERBOX_AGENT_ENTRY,

@@ -9,6 +9,7 @@ import {
   ModelRuntime,
   SessionManager,
   SettingsManager,
+  type AgentSessionEvent,
 } from "@earendil-works/pi-coding-agent";
 import {
   createInternalClient,
@@ -16,7 +17,7 @@ import {
   profileLayout,
   RUN_TOKEN_HEADER,
   type TurnInput,
-  type TurnResult,
+  type TurnStreamEvent,
 } from "@tetherbox/core";
 import { startLlmForwarder } from "./llm-forwarder.ts";
 import { loadProfileModules } from "./modules.ts";
@@ -26,6 +27,50 @@ import { createWebSearchExtension, resolveWebSearchMode } from "./web-search.ts"
 
 const builtinSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
 const PLACEHOLDER_OAUTH_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;
+
+function mapSessionEvent(event: AgentSessionEvent): TurnStreamEvent | undefined {
+  switch (event.type) {
+    case "message_update": {
+      const { assistantMessageEvent } = event;
+
+      switch (assistantMessageEvent.type) {
+        case "text_delta":
+          return { kind: "text_delta", delta: assistantMessageEvent.delta };
+        case "thinking_delta":
+          return { kind: "thinking_delta", delta: assistantMessageEvent.delta };
+        default:
+          return undefined;
+      }
+    }
+    case "tool_execution_start":
+      return {
+        kind: "tool_start",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        args: event.args,
+      };
+    case "tool_execution_update":
+      return {
+        kind: "tool_update",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        partialResult: event.partialResult,
+      };
+    case "tool_execution_end":
+      return {
+        kind: "tool_end",
+        toolCallId: event.toolCallId,
+        toolName: event.toolName,
+        result: event.result,
+        isError: event.isError,
+        ...(event.durationMs !== undefined ? { durationMs: event.durationMs } : {}),
+      };
+    case "message_end":
+      return { kind: "message_end", message: event.message };
+    default:
+      return undefined;
+  }
+}
 
 /**
  * A placeholder OAuth credential never expires, so Pi formats requests for the subscription API
@@ -48,7 +93,10 @@ async function seedModelAuth(input: TurnInput, authPath: string): Promise<void> 
   });
 }
 
-export async function runTurn(input: TurnInput): Promise<TurnResult> {
+export async function runTurn(
+  input: TurnInput,
+  emit: (event: TurnStreamEvent) => void,
+): Promise<void> {
   const { profileDir, socketPath, runToken } = input;
   const client = createInternalClient({ socketPath, runToken });
   const forwarder = await startLlmForwarder(socketPath);
@@ -108,8 +156,7 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       appendSystemPrompt: await loadSystemPromptAppendix(
         profileDir,
         profileConfig,
-        input.channelId,
-        input.threadTs,
+        input.sessionId,
       ),
     });
 
@@ -143,13 +190,20 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       ),
       customTools: [...createBuiltinTools(client, fetchWithSecret), ...moduleTools],
     });
+    const unsubscribe = session.subscribe((event) => {
+      const mapped = mapSessionEvent(event);
+
+      if (mapped !== undefined) {
+        emit(mapped);
+      }
+    });
 
     try {
       await session.bindExtensions({});
       await session.prompt(formatTrigger(input.trigger));
-
-      return { finalText: session.getLastAssistantText() ?? null };
+      emit({ kind: "turn_end", finalText: session.getLastAssistantText() ?? null });
     } finally {
+      unsubscribe();
       session.dispose();
     }
   } finally {

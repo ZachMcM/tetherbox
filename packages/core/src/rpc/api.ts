@@ -8,6 +8,7 @@ import {
   type ProfileId,
   type RunId,
   type SecretKey,
+  type SessionId,
 } from "../ids.ts";
 import { llmProviderSchema, type LlmProvider } from "../llm-auth.ts";
 import {
@@ -22,7 +23,7 @@ import {
   type ScheduleReminderInput,
 } from "../reminder.ts";
 import type { SecretCheckResult } from "../secrets.ts";
-import { RUN_TOKEN_HEADER } from "./headers.ts";
+import { bearerToken, RUN_TOKEN_HEADER } from "./headers.ts";
 
 export class RpcError extends Error {
   readonly status: 400 | 404 | 409;
@@ -36,34 +37,18 @@ export class RpcError extends Error {
 export interface RunContext {
   runId: RunId;
   profileId: ProfileId;
+  sessionId: SessionId;
 }
 
-export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_UPLOAD_BASE64_CHARS = Math.ceil((MAX_UPLOAD_FILE_BYTES * 4) / 3) + 4;
-
-export const sendMessageInputSchema = z.object({
-  text: z.string().min(1),
-  channel: entryNameSchema.optional(),
+export const notifyInputSchema = z.object({
+  title: z.string().trim().min(1).max(120).optional(),
+  body: z.string().trim().min(1).max(1000),
 });
-export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;
-
-export const sendFileInputSchema = z.object({
-  filename: z.string().min(1).max(255),
-  contentBase64: z.string().min(1).max(MAX_UPLOAD_BASE64_CHARS),
-  title: z.string().min(1).max(255).optional(),
-  initialComment: z.string().min(1).optional(),
-  channel: entryNameSchema.optional(),
-});
-export type SendFileInput = z.infer<typeof sendFileInputSchema>;
-
-export const addReactionInputSchema = z.object({ emoji: z.string().regex(/^[a-z0-9_+-]+$/) });
-export type AddReactionInput = z.infer<typeof addReactionInputSchema>;
+export type NotifyInput = z.infer<typeof notifyInputSchema>;
 
 export interface InternalApiHandlers {
   resolveRun(runToken: string): RunContext | undefined;
-  sendMessage(run: RunContext, input: SendMessageInput): Promise<{ ts: string }>;
-  sendFile(run: RunContext, input: SendFileInput): Promise<void>;
-  addReaction(run: RunContext, input: AddReactionInput): Promise<void>;
+  notify(run: RunContext, input: NotifyInput): Promise<void> | void;
   checkSecret(key: SecretKey): Promise<SecretCheckResult>;
   validateProfile(run: RunContext): Promise<ProfileValidation>;
   registerPollJob(run: RunContext, input: RegisterPollJobInput): Promise<RegisteredPollJob>;
@@ -74,16 +59,6 @@ export interface InternalApiHandlers {
   cancelReminder(run: RunContext, name: EntryName): Promise<{ cancelled: boolean }>;
   proxyWithSecret(run: RunContext, request: Request): Promise<Response>;
   proxyLlm(run: RunContext, provider: LlmProvider, request: Request): Promise<Response>;
-}
-
-function bearerToken(header: string | undefined): string | undefined {
-  if (header === undefined) {
-    return undefined;
-  }
-
-  const match = /^Bearer\s+(\S+)$/i.exec(header.trim());
-
-  return match?.[1];
 }
 
 function runTokenCandidates(c: Context): readonly (string | undefined)[] {
@@ -138,16 +113,8 @@ export function createInternalApi(handlers: InternalApiHandlers) {
       c.set("run", run);
       await next();
     })
-    .post("/rpc/messages", zValidator("json", sendMessageInputSchema), async (c) =>
-      c.json(await handlers.sendMessage(c.get("run"), c.req.valid("json"))),
-    )
-    .post("/rpc/files", zValidator("json", sendFileInputSchema), async (c) => {
-      await handlers.sendFile(c.get("run"), c.req.valid("json"));
-
-      return c.body(null, 204);
-    })
-    .post("/rpc/reactions", zValidator("json", addReactionInputSchema), async (c) => {
-      await handlers.addReaction(c.get("run"), c.req.valid("json"));
+    .post("/rpc/notify", zValidator("json", notifyInputSchema), async (c) => {
+      await handlers.notify(c.get("run"), c.req.valid("json"));
 
       return c.body(null, 204);
     })

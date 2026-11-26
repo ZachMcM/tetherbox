@@ -8,6 +8,9 @@ export type ProfileId = z.infer<typeof profileIdSchema>;
 export const entryNameSchema = z.string().regex(slug).brand<"EntryName">();
 export type EntryName = z.infer<typeof entryNameSchema>;
 
+export const sessionIdSchema = z.uuid().brand<"SessionId">();
+export type SessionId = z.infer<typeof sessionIdSchema>;
+
 export const runIdSchema = z.uuid().brand<"RunId">();
 export type RunId = z.infer<typeof runIdSchema>;
 

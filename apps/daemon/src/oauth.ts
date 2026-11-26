@@ -1,5 +1,3 @@
-import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { join } from "node:path";
 import {
   customOAuthLoginSchema,
@@ -9,25 +7,33 @@ import {
   oauthPresetSchema,
   oauthProviderSchema,
   oauthScopeModeSchema,
+  RpcError,
   secretKeySchema,
   type CustomOAuthLoginInput,
   type OAuthPresetId,
   type OAuthProviderId,
   type OAuthScopeMode,
+  type OAuthStatusEntry,
   type SecretKey,
 } from "@tetherbox/core";
 import { z } from "zod";
 import { createKeyedJsonStore, createKeyedLock } from "./file-store.ts";
+import {
+  createWebOAuthFlowStore,
+  postTokenForm,
+  runLoopbackAuthCodeFlow,
+  type OAuthFlowConfig,
+  type OAuthTokenBundle,
+  type WebOAuthCallbackInput,
+} from "./oauth-flow.ts";
 import type { SecretStore } from "./secret-store.ts";
 
 const REFRESH_MARGIN_MS = 60_000;
-const TOKEN_TIMEOUT_MS = 30_000;
-const LOGIN_TIMEOUT_MS = 5 * 60_000;
 
 const storedOAuthCredentialBase = {
   secretKey: secretKeySchema,
-  scopes: z.array(z.string().min(1)).nonempty(),
-  domains: z.array(hostnameSchema).nonempty(),
+  scopes: z.tuple([z.string().min(1)], z.string().min(1)),
+  domains: z.tuple([hostnameSchema], hostnameSchema),
   accessToken: z.string().min(1),
   refreshToken: z.string().min(1),
   expiresAt: z.number(),
@@ -53,14 +59,6 @@ const storedOAuthCredentialSchema = z.discriminatedUnion("kind", [
 
 type StoredOAuthCredential = z.infer<typeof storedOAuthCredentialSchema>;
 
-const tokenResponseSchema = z.object({
-  access_token: z.string().min(1),
-  expires_in: z.number().positive().optional(),
-  refresh_token: z.string().min(1).optional(),
-  scope: z.string().optional(),
-  token_type: z.string().optional(),
-});
-
 export type OAuthLoginSummary =
   | {
       readonly kind: "preset";
@@ -68,53 +66,99 @@ export type OAuthLoginSummary =
       readonly provider: OAuthProviderId;
       readonly secretKey: SecretKey;
       readonly scopeMode: OAuthScopeMode;
-      readonly scopes: readonly string[];
-      readonly domains: readonly string[];
+      readonly scopes: readonly [string, ...string[]];
+      readonly domains: readonly [string, ...string[]];
       readonly expiresAt: number;
     }
   | {
       readonly kind: "custom";
       readonly secretKey: SecretKey;
       readonly tokenUrl: string;
-      readonly scopes: readonly string[];
-      readonly domains: readonly string[];
+      readonly scopes: readonly [string, ...string[]];
+      readonly domains: readonly [string, ...string[]];
       readonly expiresAt: number;
     };
 
 export interface OAuthAccess {
   readonly token: string;
-  readonly domains: readonly string[];
+  readonly domains: readonly [string, ...string[]];
 }
 
 export interface OAuthAccessOptions {
   readonly staleToken?: string;
 }
 
+export interface WebOAuthPresetOptions {
+  readonly redirectUri: string;
+  readonly scopeMode?: OAuthScopeMode | undefined;
+}
+
+export type { WebOAuthCallbackInput };
+
 export interface OAuthStore {
   loginPreset(presetId: OAuthPresetId, scopeMode?: OAuthScopeMode): Promise<OAuthLoginSummary>;
   loginCustom(input: CustomOAuthLoginInput): Promise<OAuthLoginSummary>;
+  startWebPresetLogin(
+    presetId: OAuthPresetId,
+    options: WebOAuthPresetOptions,
+  ): Promise<{ authorizationUrl: string }>;
+  startWebCustomLogin(
+    input: CustomOAuthLoginInput,
+    redirectUri: string,
+  ): Promise<{ authorizationUrl: string }>;
+  completeWebLogin(callback: WebOAuthCallbackInput): Promise<OAuthLoginSummary>;
   logout(target: string): Promise<SecretKey>;
   list(): Promise<OAuthLoginSummary[]>;
   has(secretKey: SecretKey): Promise<boolean>;
   access(secretKey: SecretKey, options?: OAuthAccessOptions): Promise<OAuthAccess | undefined>;
 }
 
+interface PreparedOAuthFlow {
+  readonly config: OAuthFlowConfig;
+  readonly buildCredential: (tokens: OAuthTokenBundle) => StoredOAuthCredential;
+}
+
+export function formatExpiry(expires: number): string {
+  const date = new Date(expires);
+
+  return Number.isNaN(date.getTime()) ? "never" : date.toISOString();
+}
+
+export function toOAuthStatusEntry(entry: OAuthLoginSummary): OAuthStatusEntry {
+  const scopes: [string, ...string[]] = [...entry.scopes];
+  const domains: [string, ...string[]] = [...entry.domains];
+
+  switch (entry.kind) {
+    case "preset":
+      return {
+        kind: "preset",
+        preset: entry.preset,
+        provider: entry.provider,
+        secretKey: entry.secretKey,
+        scopeMode: entry.scopeMode,
+        scopes,
+        domains,
+        expires: formatExpiry(entry.expiresAt),
+      };
+    case "custom":
+      return {
+        kind: "custom",
+        secretKey: entry.secretKey,
+        tokenUrl: entry.tokenUrl,
+        scopes,
+        domains,
+        expires: formatExpiry(entry.expiresAt),
+      };
+    default: {
+      const exhaustive: never = entry;
+
+      return exhaustive;
+    }
+  }
+}
+
 function isFresh(credential: StoredOAuthCredential): boolean {
   return credential.expiresAt - Date.now() > REFRESH_MARGIN_MS;
-}
-
-function sameState(expected: string, actual: string): boolean {
-  const expectedBuf = Buffer.from(expected, "utf8");
-  const actualBuf = Buffer.from(actual, "utf8");
-
-  return expectedBuf.length === actualBuf.length && timingSafeEqual(expectedBuf, actualBuf);
-}
-
-function createPkce(): { verifier: string; challenge: string } {
-  const verifier = randomBytes(32).toString("base64url");
-  const challenge = createHash("sha256").update(verifier).digest("base64url");
-
-  return { verifier, challenge };
 }
 
 function toSummary(credential: StoredOAuthCredential): OAuthLoginSummary {
@@ -147,121 +191,6 @@ function toSummary(credential: StoredOAuthCredential): OAuthLoginSummary {
   }
 }
 
-function escapeHtml(text: string): string {
-  return text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#39;");
-}
-
-function sendHtml(res: ServerResponse, status: number, title: string, message: string): void {
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(
-    `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p></body></html>`,
-  );
-}
-
-async function waitForAuthorizationCode(options: {
-  port: number;
-  path: string;
-  expectedState: string;
-  authUrl: string;
-}): Promise<string> {
-  const { port, path, expectedState, authUrl } = options;
-
-  return new Promise<string>((resolve, reject) => {
-    let settled = false;
-
-    const finish = (outcome: { kind: "ok"; code: string } | { kind: "err"; error: Error }) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timer);
-      process.off("SIGINT", onSigint);
-      server.close();
-
-      if (outcome.kind === "ok") {
-        resolve(outcome.code);
-      } else {
-        reject(outcome.error);
-      }
-    };
-
-    const onSigint = () => finish({ kind: "err", error: new Error("OAuth login cancelled") });
-    const timer = setTimeout(
-      () => finish({ kind: "err", error: new Error("OAuth login timed out waiting for callback") }),
-      LOGIN_TIMEOUT_MS,
-    );
-
-    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      const requestUrl = URL.parse(req.url ?? "/", `http://127.0.0.1:${port}`);
-
-      if (requestUrl === null || requestUrl.pathname !== path) {
-        res.writeHead(404);
-        res.end("Not found");
-
-        return;
-      }
-
-      const state = requestUrl.searchParams.get("state");
-
-      if (state === null || !sameState(expectedState, state)) {
-        sendHtml(res, 400, "Invalid state", "State mismatch. Restart the login from your CLI.");
-
-        return;
-      }
-
-      const errorParam = requestUrl.searchParams.get("error");
-
-      if (errorParam !== null) {
-        const description = requestUrl.searchParams.get("error_description");
-        const detail = description ? `${errorParam}: ${description}` : errorParam;
-
-        sendHtml(res, 400, "Authorization failed", detail);
-        finish({ kind: "err", error: new Error(`OAuth authorization failed: ${detail}`) });
-
-        return;
-      }
-
-      const code = requestUrl.searchParams.get("code");
-
-      if (code === null || code.trim() === "") {
-        sendHtml(res, 400, "Missing code", "Authorization code was missing from the callback.");
-        finish({ kind: "err", error: new Error("OAuth callback did not include a code") });
-
-        return;
-      }
-
-      sendHtml(
-        res,
-        200,
-        "Tetherbox connected",
-        "Authorization complete. You can close this browser tab and return to your terminal.",
-      );
-      finish({ kind: "ok", code });
-    });
-
-    server.once("error", (error) => {
-      finish({
-        kind: "err",
-        error: new Error(`Failed to listen on 127.0.0.1:${port}: ${error.message}`, {
-          cause: error,
-        }),
-      });
-    });
-
-    process.once("SIGINT", onSigint);
-    server.listen(port, "127.0.0.1", () => {
-      console.log(`\nOpen this URL in your browser:\n\n  ${authUrl}\n`);
-      console.log("Waiting for authorization callback...");
-    });
-  });
-}
-
 async function readClientCredentials(
   secrets: SecretStore,
   options: {
@@ -273,8 +202,9 @@ async function readClientCredentials(
   const clientId = await secrets.get(options.clientIdSecretKey);
 
   if (clientId === undefined) {
-    throw new Error(
-      `Missing ${options.label} OAuth client ID (${options.clientIdSecretKey}). Set it with \`tetherbox secrets set ${options.clientIdSecretKey}\` or run \`tetherbox oauth\`.`,
+    throw new RpcError(
+      400,
+      `Missing ${options.label} OAuth client ID (${options.clientIdSecretKey}).`,
     );
   }
 
@@ -285,99 +215,16 @@ async function readClientCredentials(
   const clientSecret = await secrets.get(options.clientSecretSecretKey);
 
   if (clientSecret === undefined) {
-    throw new Error(
-      `Missing ${options.label} OAuth client secret (${options.clientSecretSecretKey}). Set it with \`tetherbox secrets set ${options.clientSecretSecretKey}\` or run \`tetherbox oauth\`.`,
+    throw new RpcError(
+      400,
+      `Missing ${options.label} OAuth client secret (${options.clientSecretSecretKey}).`,
     );
   }
 
   return { clientId: clientId.value, clientSecret: clientSecret.value };
 }
 
-async function postTokenForm(
-  tokenUrl: string,
-  params: Record<string, string>,
-): Promise<z.infer<typeof tokenResponseSchema>> {
-  const body = new URLSearchParams(params);
-  const response = await fetch(tokenUrl, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      Accept: "application/json",
-    },
-    body,
-    signal: AbortSignal.timeout(TOKEN_TIMEOUT_MS),
-  });
-  const text = await response.text();
-
-  if (!response.ok) {
-    throw new Error(`OAuth token endpoint returned ${response.status}: ${text.slice(0, 500)}`);
-  }
-
-  return tokenResponseSchema.parse(JSON.parse(text));
-}
-
-async function runAuthCodeFlow(options: {
-  label: string;
-  authorizationUrl: string;
-  tokenUrl: string;
-  scopes: readonly string[];
-  callbackPort: number;
-  callbackPath: string;
-  clientId: string;
-  clientSecret?: string | undefined;
-  extraAuthParams?: Readonly<Record<string, string>> | undefined;
-}): Promise<{ accessToken: string; refreshToken: string; expiresAt: number }> {
-  const redirectUri = `http://127.0.0.1:${options.callbackPort}${options.callbackPath}`;
-  const state = randomBytes(24).toString("base64url");
-  const pkce = createPkce();
-  const authUrl = new URL(options.authorizationUrl);
-
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", options.clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", options.scopes.join(" "));
-  authUrl.searchParams.set("state", state);
-  authUrl.searchParams.set("code_challenge", pkce.challenge);
-  authUrl.searchParams.set("code_challenge_method", "S256");
-
-  for (const [param, value] of Object.entries(options.extraAuthParams ?? {})) {
-    authUrl.searchParams.set(param, value);
-  }
-
-  const code = await waitForAuthorizationCode({
-    port: options.callbackPort,
-    path: options.callbackPath,
-    expectedState: state,
-    authUrl: authUrl.toString(),
-  });
-  const token = await postTokenForm(options.tokenUrl, {
-    grant_type: "authorization_code",
-    code,
-    redirect_uri: redirectUri,
-    client_id: options.clientId,
-    ...(options.clientSecret !== undefined ? { client_secret: options.clientSecret } : {}),
-    code_verifier: pkce.verifier,
-  });
-
-  if (token.refresh_token === undefined) {
-    throw new Error(
-      `${options.label} did not return a refresh token. Ensure offline access / refresh tokens are enabled and re-authorize.`,
-    );
-  }
-
-  return {
-    accessToken: token.access_token,
-    refreshToken: token.refresh_token,
-    expiresAt: Date.now() + (token.expires_in ?? 3600) * 1000,
-  };
-}
-
-function refreshTargetFor(credential: StoredOAuthCredential): {
-  label: string;
-  tokenUrl: string;
-  clientIdSecretKey: SecretKey;
-  clientSecretSecretKey?: SecretKey | undefined;
-} {
+function refreshTargetFor(credential: StoredOAuthCredential) {
   switch (credential.kind) {
     case "preset": {
       const provider = getOAuthProvider(credential.provider);
@@ -404,6 +251,90 @@ function refreshTargetFor(credential: StoredOAuthCredential): {
   }
 }
 
+async function preparePresetFlow(
+  secrets: SecretStore,
+  presetId: OAuthPresetId,
+  requestedScopeMode?: OAuthScopeMode,
+): Promise<PreparedOAuthFlow> {
+  const preset = getOAuthPreset(presetId);
+
+  if (preset === undefined) {
+    throw new RpcError(400, `unknown OAuth preset "${presetId}"`);
+  }
+
+  const provider = getOAuthProvider(preset.provider);
+  const scopeMode = requestedScopeMode ?? preset.defaultScopeMode;
+  const scopes = preset.scopes[scopeMode];
+  const { clientId, clientSecret } = await readClientCredentials(secrets, {
+    label: provider.label,
+    clientIdSecretKey: provider.clientIdSecretKey,
+    clientSecretSecretKey: provider.clientSecretSecretKey,
+  });
+
+  return {
+    config: {
+      label: provider.label,
+      authorizationUrl: provider.authorizationUrl,
+      tokenUrl: provider.tokenUrl,
+      scopes,
+      callbackPort: provider.callbackPort,
+      callbackPath: provider.callbackPath,
+      clientId,
+      clientSecret,
+      extraAuthParams: provider.extraAuthParams,
+    },
+    buildCredential: (tokens) => ({
+      kind: "preset",
+      preset: preset.id,
+      provider: preset.provider,
+      secretKey: preset.secretKey,
+      scopeMode,
+      scopes: [...scopes],
+      domains: [...preset.domains],
+      ...tokens,
+    }),
+  };
+}
+
+async function prepareCustomFlow(
+  secrets: SecretStore,
+  rawInput: CustomOAuthLoginInput,
+): Promise<PreparedOAuthFlow> {
+  const input = customOAuthLoginSchema.parse(rawInput);
+  const { clientId, clientSecret } = await readClientCredentials(secrets, {
+    label: input.secretKey,
+    clientIdSecretKey: input.clientIdSecretKey,
+    clientSecretSecretKey: input.clientSecretSecretKey,
+  });
+
+  return {
+    config: {
+      label: input.secretKey,
+      authorizationUrl: input.authorizationUrl,
+      tokenUrl: input.tokenUrl,
+      scopes: input.scopes,
+      callbackPort: input.callbackPort,
+      callbackPath: input.callbackPath,
+      clientId,
+      clientSecret,
+      extraAuthParams: input.extraAuthParams,
+    },
+    buildCredential: (tokens) => ({
+      kind: "custom",
+      secretKey: input.secretKey,
+      authorizationUrl: input.authorizationUrl,
+      tokenUrl: input.tokenUrl,
+      clientIdSecretKey: input.clientIdSecretKey,
+      ...(input.clientSecretSecretKey !== undefined
+        ? { clientSecretSecretKey: input.clientSecretSecretKey }
+        : {}),
+      scopes: input.scopes,
+      domains: input.domains,
+      ...tokens,
+    }),
+  };
+}
+
 /**
  * Generic OAuth2 authorization-code + PKCE store for daemon-held integration tokens. One JSON file
  * per secret key, readable only by the daemon's OS user. Writes and refreshes per key are
@@ -416,6 +347,13 @@ export function createOAuthStore(dataDir: string, secrets: SecretStore): OAuthSt
     valueSchema: storedOAuthCredentialSchema,
   });
   const { withLock } = createKeyedLock<SecretKey>();
+  const webFlows = createWebOAuthFlowStore<(tokens: OAuthTokenBundle) => StoredOAuthCredential>();
+
+  const saveCredential = async (credential: StoredOAuthCredential): Promise<OAuthLoginSummary> => {
+    await withLock(credential.secretKey, () => files.write(credential.secretKey, credential));
+
+    return toSummary(credential);
+  };
 
   const refresh = (key: SecretKey, staleToken?: string) =>
     withLock(key, async (): Promise<StoredOAuthCredential | undefined> => {
@@ -451,85 +389,47 @@ export function createOAuthStore(dataDir: string, secrets: SecretStore): OAuthSt
 
   return {
     async loginPreset(presetId, requestedScopeMode) {
-      const preset = getOAuthPreset(presetId);
+      const prepared = await preparePresetFlow(secrets, presetId, requestedScopeMode);
+      const tokens = await runLoopbackAuthCodeFlow(prepared.config);
 
-      if (preset === undefined) {
-        throw new Error(`unknown OAuth preset "${presetId}"`);
-      }
-
-      const provider = getOAuthProvider(preset.provider);
-      const scopeMode = requestedScopeMode ?? preset.defaultScopeMode;
-      const scopes = preset.scopes[scopeMode];
-      const { clientId, clientSecret } = await readClientCredentials(secrets, {
-        label: provider.label,
-        clientIdSecretKey: provider.clientIdSecretKey,
-        clientSecretSecretKey: provider.clientSecretSecretKey,
-      });
-      const tokens = await runAuthCodeFlow({
-        label: provider.label,
-        authorizationUrl: provider.authorizationUrl,
-        tokenUrl: provider.tokenUrl,
-        scopes,
-        callbackPort: provider.callbackPort,
-        callbackPath: provider.callbackPath,
-        clientId,
-        clientSecret,
-        extraAuthParams: provider.extraAuthParams,
-      });
-      const credential: StoredOAuthCredential = {
-        kind: "preset",
-        preset: preset.id,
-        provider: preset.provider,
-        secretKey: preset.secretKey,
-        scopeMode,
-        scopes: [...scopes],
-        domains: [...preset.domains],
-        ...tokens,
-      };
-
-      await withLock(preset.secretKey, () => files.write(preset.secretKey, credential));
-
-      return toSummary(credential);
+      return saveCredential(prepared.buildCredential(tokens));
     },
     async loginCustom(rawInput) {
-      const input = customOAuthLoginSchema.parse(rawInput);
-      const { clientId, clientSecret } = await readClientCredentials(secrets, {
-        label: input.secretKey,
-        clientIdSecretKey: input.clientIdSecretKey,
-        clientSecretSecretKey: input.clientSecretSecretKey,
-      });
-      const tokens = await runAuthCodeFlow({
-        label: input.secretKey,
-        authorizationUrl: input.authorizationUrl,
-        tokenUrl: input.tokenUrl,
-        scopes: input.scopes,
-        callbackPort: input.callbackPort,
-        callbackPath: input.callbackPath,
-        clientId,
-        clientSecret,
-        extraAuthParams: input.extraAuthParams,
-      });
-      const credential: StoredOAuthCredential = {
-        kind: "custom",
-        secretKey: input.secretKey,
-        authorizationUrl: input.authorizationUrl,
-        tokenUrl: input.tokenUrl,
-        clientIdSecretKey: input.clientIdSecretKey,
-        ...(input.clientSecretSecretKey !== undefined
-          ? { clientSecretSecretKey: input.clientSecretSecretKey }
-          : {}),
-        scopes: input.scopes,
-        domains: input.domains,
-        ...tokens,
-      };
+      const prepared = await prepareCustomFlow(secrets, rawInput);
+      const tokens = await runLoopbackAuthCodeFlow(prepared.config);
 
-      await withLock(input.secretKey, () => files.write(input.secretKey, credential));
+      return saveCredential(prepared.buildCredential(tokens));
+    },
+    async startWebPresetLogin(presetId, options) {
+      const prepared = await preparePresetFlow(secrets, presetId, options.scopeMode);
 
-      return toSummary(credential);
+      return webFlows.start(prepared.config, options.redirectUri, prepared.buildCredential);
+    },
+    async startWebCustomLogin(rawInput, redirectUri) {
+      const prepared = await prepareCustomFlow(secrets, rawInput);
+
+      return webFlows.start(prepared.config, redirectUri, prepared.buildCredential);
+    },
+    async completeWebLogin(callback) {
+      const { tokens, payload: buildCredential } = await webFlows.complete(callback);
+
+      return saveCredential(buildCredential(tokens));
     },
     async logout(target) {
       const preset = getOAuthPreset(target);
-      const key = preset !== undefined ? preset.secretKey : secretKeySchema.parse(target);
+      let key: SecretKey;
+
+      if (preset !== undefined) {
+        key = preset.secretKey;
+      } else {
+        const parsed = secretKeySchema.safeParse(target);
+
+        if (!parsed.success) {
+          throw new RpcError(400, `invalid OAuth target "${target}"`);
+        }
+
+        key = parsed.data;
+      }
 
       await withLock(key, () => files.delete(key));
 

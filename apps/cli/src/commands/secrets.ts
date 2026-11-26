@@ -13,7 +13,7 @@ export function registerSecrets(program: Command): void {
   secrets
     .command("set")
     .description("Store a daemon-only secret, domain-pinned proxy secret, or LLM provider key")
-    .argument("<key>", "secret name, such as LINEAR_API_KEY or SLACK_APP_TOKEN")
+    .argument("<key>", "secret name, such as LINEAR_API_KEY or GITHUB_WEBHOOK_SECRET")
     .option("-d, --domain <domain...>", "domains the secret proxy may send this secret to")
     .option("-i, --inject <spec>", "bearer, header:<name>, or query:<name> (requires --domain)")
     .option("-p, --provider <provider>", "LLM provider name for /llm proxy credentials")

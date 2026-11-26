@@ -123,12 +123,15 @@ export function getOAuthPreset(id: string): OAuthPreset | undefined {
   return parsed.success ? presetsById.get(parsed.data) : undefined;
 }
 
+const nonEmptyHostnamesSchema = z.tuple([hostnameSchema], hostnameSchema);
+const nonEmptyStringsSchema = z.tuple([z.string().min(1)], z.string().min(1));
+
 export const customOAuthLoginSchema = z.object({
   secretKey: secretKeySchema,
   authorizationUrl: httpsUrlSchema,
   tokenUrl: httpsUrlSchema,
-  domains: z.array(hostnameSchema).nonempty(),
-  scopes: z.array(z.string().min(1)).nonempty(),
+  domains: nonEmptyHostnamesSchema,
+  scopes: nonEmptyStringsSchema,
   clientIdSecretKey: secretKeySchema,
   clientSecretSecretKey: secretKeySchema.optional(),
   callbackPort: z.number().int().min(1).max(65535).default(DEFAULT_OAUTH_CALLBACK_PORT),
@@ -144,16 +147,16 @@ export const oauthStatusEntrySchema = z.discriminatedUnion("kind", [
     provider: oauthProviderSchema,
     secretKey: secretKeySchema,
     scopeMode: oauthScopeModeSchema,
-    scopes: z.array(z.string().min(1)).nonempty(),
-    domains: z.array(hostnameSchema).nonempty(),
+    scopes: nonEmptyStringsSchema,
+    domains: nonEmptyHostnamesSchema,
     expires: z.string().min(1),
   }),
   z.object({
     kind: z.literal("custom"),
     secretKey: secretKeySchema,
     tokenUrl: httpsUrlSchema,
-    scopes: z.array(z.string().min(1)).nonempty(),
-    domains: z.array(hostnameSchema).nonempty(),
+    scopes: nonEmptyStringsSchema,
+    domains: nonEmptyHostnamesSchema,
     expires: z.string().min(1),
   }),
 ]);

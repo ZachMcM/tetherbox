@@ -182,12 +182,6 @@ catalogs:
     '@mozilla/readability':
       specifier: 0.6.0
       version: 0.6.0
-    '@slack/socket-mode':
-      specifier: 3.2.0
-      version: 3.2.0
-    '@slack/web-api':
-      specifier: 8.5.0
-      version: 8.5.0
     '@stylistic/eslint-plugin':
       specifier: 6.0.1
       version: 6.0.1
@@ -342,12 +336,6 @@ importers:
       '@hono/node-server':
         specifier: 'catalog:'
         version: 2.1.11(hono@4.13.21)
-      '@slack/socket-mode':
-        specifier: 'catalog:'
-        version: 3.2.0(undici@8.12.4)
-      '@slack/web-api':
-        specifier: 'catalog:'
-        version: 8.5.0
       '@tetherbox/core':
         specifier: workspace:*
         version: link:../../packages/core
@@ -1048,24 +1036,6 @@ packages:
   '@silvia-odwyer/photon-node@0.3.4':
     resolution: {integrity: sha512-bnly4BKB3KDTFxrUIcgCLbaeVVS8lrAkri1pEzskpmxu9MdfGQTy8b8EgcD83ywD3RPMsIulY8xJH5Awa+t9fA==}
 
-  '@slack/logger@5.0.0':
-    resolution: {integrity: sha512-VGXhmmgsAo9shdQYh4tFDndd+7nsgp0Y5h0UPDaUp8K359pBasI6YdkMqFW3mCOxLQkq09qj7o7cq6f3DuXcJQ==}
-    engines: {node: '>= 20', npm: '>=9.6.4'}
-
-  '@slack/socket-mode@3.2.0':
-    resolution: {integrity: sha512-G5cp8+C1tNmQy7f3RC+ZgXbUcGmSch4bKcwcv7bYVZF9JDLbQZH9mvBhSKIi2lnhFRF6WwMFubsMM8QwUyVATA==}
-    engines: {node: '>=20', npm: '>=9.6.4'}
-    peerDependencies:
-      undici: ^7.0.0 || ^8.0.0
-
-  '@slack/types@3.3.1':
-    resolution: {integrity: sha512-F4JJd1SY5Nro1O6O4izMrBv0/IOpr+a8GGewr23tnP8zO1t9mWFLBjpNPv6nxuxhhw4JVRM9CPltBnLkZj7Ucw==}
-    engines: {node: '>= 20', npm: '>=9.6.4'}
-
-  '@slack/web-api@8.5.0':
-    resolution: {integrity: sha512-mbqNGN/geNqV4j0VB8pq/HR5RA2KpvwPxuSe3Y0VZtel9b419hZNeIyEx4aluuIaxXSEhEZiFnp0QniBsk8/SA==}
-    engines: {node: '>= 20', npm: '>=9.6.4'}
-
   '@smithy/core@3.41.1':
     resolution: {integrity: sha512-24LyiHSY0R/MLcbTylurWXU6Uy4lzI6KJgsdzxkNnjT9/OLWc2zGPb/3k5AM1f0vcgCGrExanUG339t+TBiIrA==}
     engines: {node: '>=18.0.0'}
@@ -1156,9 +1126,6 @@ packages:
 
   '@types/retry@0.12.0':
     resolution: {integrity: sha512-wWKOClTTiizcZhXnPY4wikVAwmdYHp8q6DmC+EJUzAMsycb7HB32Kh9RN4+0gExjmPmZSAQjgURXIGATPegAvA==}
-
-  '@types/retry@0.12.5':
-    resolution: {integrity: sha512-3xSjTp3v03X/lSQLkczaN9UIEwJMoMCA1+Nb5HfbJEQWogdeQIyVtTvxPXDQjZ5zws8rFQfVfRdz03ARihPJgw==}
 
   '@types/turndown@5.0.6':
     resolution: {integrity: sha512-ru00MoyeeouE5BX4gRL+6m/BsDfbRayOskWqUvh7CLGW+UXxHQItqALa38kKnOiZPqJrtzJUgAC2+F0rL1S4Pg==}
@@ -1547,12 +1514,6 @@ packages:
     resolution: {integrity: sha512-kVscqXk4OCp68SZ0dkgEKVi6/8ij300KBWTJq32P/dYeWTSwK41WyTxalN1eRmA5Z9UU/LX9D7FWSmV9SAYx6g==}
     engines: {node: '>=0.10.0'}
 
-  eventemitter3@4.0.7:
-    resolution: {integrity: sha512-8guHBZCwKnFhYdHr2ysuRWErTwhoN2X8XELRlrRwpmfeY2jjuUN4taQMsULKUVo1K4DvZl+0pgfyoysHxvmvEw==}
-
-  eventemitter3@5.0.4:
-    resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
-
   extend@3.0.2:
     resolution: {integrity: sha512-fjquC59cD7CyW6urNXK0FBufkZcoiGG80wTuPujX590cB5Ttln20E2UB4S/WARVqhXffZl2LNgS+gQdPIIim/g==}
 
@@ -1887,10 +1848,6 @@ packages:
       vite-plus:
         optional: true
 
-  p-finally@1.0.0:
-    resolution: {integrity: sha512-LICb2p9CB7FS+0eR1oqWnHhp0FljGLZCWBE9aix0Uye9W8LTQPwMTYVGWQWIw9RdQiDg4+epXQODwIYJtSJaow==}
-    engines: {node: '>=4'}
-
   p-limit@3.1.0:
     resolution: {integrity: sha512-TYOanM3wGwNGsZN2cVTYPArw454xnXj5qmWF1bEoAc4+cU/ol7GVh7odevjp1FNHduHc3KZMcFduxU5Xc6uJRQ==}
     engines: {node: '>=10'}
@@ -1899,16 +1856,8 @@ packages:
     resolution: {integrity: sha512-LaNjtRWUBY++zB5nE/NwcaoMylSPk+S+ZHNB1TzdbMJMny6dynpAGt7X/tl/QYq3TIeE6nxHppbo2LGymrG5Pw==}
     engines: {node: '>=10'}
 
-  p-queue@6.6.2:
-    resolution: {integrity: sha512-RwFpb72c/BhQLEXIZ5K2e+AhgNVmIejGlTgiB9MzZ0e93GRvqZ7uSi0dvRF7/XIXDeNkra2fNHBxTyPDGySpjQ==}
-    engines: {node: '>=8'}
-
   p-retry@4.6.2:
     resolution: {integrity: sha512-312Id396EbJdvRONlngUx0NydfrIQ5lsYu0znKVUzVvArzEIt08V1qhtyESbGVd1FGX7UKtiFp5uwKZdM8wIuQ==}
-    engines: {node: '>=8'}
-
-  p-timeout@3.2.0:
-    resolution: {integrity: sha512-rhIwUycgwwKcP9yTOOFK/AKsAopjjCakVqLHePO3CC6Mir1Z99xT+R63jZxAT5lFZLa2inS5h+ZS2GvR99/FBg==}
     engines: {node: '>=8'}
 
   partial-json@0.1.7:
@@ -2812,31 +2761,6 @@ snapshots:
 
   '@silvia-odwyer/photon-node@0.3.4': {}
 
-  '@slack/logger@5.0.0':
-    dependencies:
-      '@types/node': 24.19.2
-
-  '@slack/socket-mode@3.2.0(undici@8.12.4)':
-    dependencies:
-      '@slack/logger': 5.0.0
-      '@slack/web-api': 8.5.0
-      '@types/node': 24.19.2
-      eventemitter3: 5.0.4
-      undici: 8.12.4
-
-  '@slack/types@3.3.1': {}
-
-  '@slack/web-api@8.5.0':
-    dependencies:
-      '@slack/logger': 5.0.0
-      '@slack/types': 3.3.1
-      '@types/node': 24.19.2
-      '@types/retry': 0.12.5
-      eventemitter3: 5.0.4
-      p-queue: 6.6.2
-      p-retry: 4.6.2
-      retry: 0.13.1
-
   '@smithy/core@3.41.1':
     dependencies:
       '@smithy/types': 4.20.0
@@ -2923,8 +2847,6 @@ snapshots:
       undici-types: 7.24.6
 
   '@types/retry@0.12.0': {}
-
-  '@types/retry@0.12.5': {}
 
   '@types/turndown@5.0.6': {}
 
@@ -3223,10 +3145,6 @@ snapshots:
   estraverse@5.3.0: {}
 
   esutils@2.0.3: {}
-
-  eventemitter3@4.0.7: {}
-
-  eventemitter3@5.0.4: {}
 
   extend@3.0.2: {}
 
@@ -3564,8 +3482,6 @@ snapshots:
       '@oxlint/binding-win32-ia32-msvc': 1.95.0
       '@oxlint/binding-win32-x64-msvc': 1.95.0
 
-  p-finally@1.0.0: {}
-
   p-limit@3.1.0:
     dependencies:
       yocto-queue: 0.1.0
@@ -3574,19 +3490,10 @@ snapshots:
     dependencies:
       p-limit: 3.1.0
 
-  p-queue@6.6.2:
-    dependencies:
-      eventemitter3: 4.0.7
-      p-timeout: 3.2.0
-
   p-retry@4.6.2:
     dependencies:
       '@types/retry': 0.12.0
       retry: 0.13.1
-
-  p-timeout@3.2.0:
-    dependencies:
-      p-finally: 1.0.0
 
   partial-json@0.1.7: {}
 

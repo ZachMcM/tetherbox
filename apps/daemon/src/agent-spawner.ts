@@ -3,11 +3,16 @@ import {
   AGENT_SYSTEM_PATH,
   buildAgentSudoCommand,
   localAgentPath,
-  turnResultSchema,
+  turnStreamEventSchema,
   type TurnInput,
-  type TurnResult,
+  type TurnStreamEvent,
 } from "@tetherbox/core";
 import type { DaemonConfig } from "./config.ts";
+
+export interface RunAgentOptions {
+  onEvent?(event: TurnStreamEvent): void;
+  signal?: AbortSignal;
+}
 
 function agentCommand(agent: DaemonConfig["agent"]): readonly [string, string[]] {
   if (agent.user === undefined) {
@@ -23,11 +28,23 @@ function agentCommand(agent: DaemonConfig["agent"]): readonly [string, string[]]
   });
 }
 
+function isBrokenPipeError(error: unknown): boolean {
+  if (!(error instanceof Error) || !("code" in error)) {
+    return false;
+  }
+
+  return error.code === "EPIPE" || error.code === "ERR_STREAM_DESTROYED";
+}
+
 /**
- * Runs one agent turn in a child process. The turn input goes over stdin so nothing reaches the
- * child through the environment, and the child prints a single TurnResult JSON document on stdout.
+ * Runs one agent turn in a child process. Turn input goes over stdin so nothing reaches the child
+ * through the environment, and the child writes newline-delimited TurnStreamEvent JSON on stdout.
  */
-export function runAgent(agent: DaemonConfig["agent"], input: TurnInput): Promise<TurnResult> {
+export function runAgent(
+  agent: DaemonConfig["agent"],
+  input: TurnInput,
+  options?: RunAgentOptions,
+): Promise<void> {
   const [command, args] = agentCommand(agent);
   const child = spawn(command, args, {
     env: {
@@ -39,25 +56,90 @@ export function runAgent(agent: DaemonConfig["agent"], input: TurnInput): Promis
     timeout: agent.timeoutMs,
     killSignal: "SIGTERM",
   });
-  const stdout: Buffer[] = [];
 
-  child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+  child.stdout.setEncoding("utf8");
+
+  let remainder = "";
+  let streamError: Error | undefined;
+
+  const handleLine = (line: string): void => {
+    const trimmed = line.trim();
+
+    if (trimmed === "") {
+      return;
+    }
+
+    try {
+      const event = turnStreamEventSchema.parse(JSON.parse(trimmed));
+
+      options?.onEvent?.(event);
+    } catch (error) {
+      streamError ??= error instanceof Error ? error : new Error(String(error));
+    }
+  };
+
+  child.stdout.on("data", (chunk: string) => {
+    remainder += chunk;
+
+    let newlineIndex = remainder.indexOf("\n");
+
+    while (newlineIndex !== -1) {
+      const line = remainder.slice(0, newlineIndex);
+
+      remainder = remainder.slice(newlineIndex + 1);
+      handleLine(line);
+      newlineIndex = remainder.indexOf("\n");
+    }
+  });
+
+  const onAbort = (): void => {
+    child.kill("SIGTERM");
+  };
+
+  if (options?.signal !== undefined) {
+    if (options.signal.aborted) {
+      child.kill("SIGTERM");
+    } else {
+      options.signal.addEventListener("abort", onAbort, { once: true });
+    }
+  }
+
+  const cleanup = (): void => {
+    options?.signal?.removeEventListener("abort", onAbort);
+  };
+
+  child.stdin.on("error", (error) => {
+    if (!isBrokenPipeError(error)) {
+      streamError ??= error;
+    }
+  });
   child.stdin.end(JSON.stringify(input));
 
   return new Promise((resolve, reject) => {
-    child.once("error", reject);
+    child.once("error", (error) => {
+      cleanup();
+      reject(error);
+    });
     child.once("close", (code, signal) => {
+      cleanup();
+
+      if (remainder.trim() !== "") {
+        handleLine(remainder);
+      }
+
       if (code !== 0) {
         reject(new Error(`agent run ${input.runId} exited with ${signal ?? `code ${code}`}`));
 
         return;
       }
 
-      try {
-        resolve(turnResultSchema.parse(JSON.parse(Buffer.concat(stdout).toString("utf8"))));
-      } catch (error) {
-        reject(error);
+      if (streamError !== undefined) {
+        reject(streamError);
+
+        return;
       }
+
+      resolve();
     });
   });
 }

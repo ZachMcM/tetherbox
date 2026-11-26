@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runLlmCommand, runOAuthCommand, runProfilesCommand, runSecretsCommand } from "./admin.ts";
+import { loadOrCreateAppToken } from "./app-auth.ts";
 import { loadConfig } from "./config.ts";
 import { createLlmOAuth } from "./llm-oauth.ts";
 import { createOAuthStore } from "./oauth.ts";
@@ -17,6 +18,9 @@ try {
     case "serve":
       await serveDaemon(config, { secrets, llmOAuth, oauth });
       break;
+    case "app-token":
+      console.log(loadOrCreateAppToken(config.dataDir));
+      break;
     case "secrets":
       await runSecretsCommand(secrets, args);
       break;
@@ -31,7 +35,7 @@ try {
       break;
     default:
       throw new Error(
-        `unknown command "${command}", expected serve, secrets, llm, oauth, or profiles`,
+        `unknown command "${command}", expected serve, app-token, secrets, llm, oauth, or profiles`,
       );
   }
 } catch (error) {

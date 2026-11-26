@@ -1,6 +1,6 @@
 # tetherbox
 
-Lean, self-hosted personal agent control plane for engineers. One Slack app, Code Mode by default, channel-isolated profiles, webhooks, and remote coding-harness dispatch.
+Lean, self-hosted personal agent control plane for engineers. Code Mode by default, profile-isolated Pi sessions, webhooks, cron, and remote coding-harness dispatch.
 
 ## Development
 
