@@ -58,12 +58,11 @@ export async function startInternalServer({
 
       return load.issues.length === 0 ? { ok: true } : { ok: false, issues: load.issues };
     },
-    registerPollJob: (run, input) =>
-      poller.register(run.profileId, input, turns.replyThreadTs(run)),
+    registerPollJob: (run, input) => poller.register(run.profileId, input, turns.replyOrigin(run)),
     listPollJobs: (run) => poller.list(run.profileId),
     cancelPollJob: async (run, name) => ({ cancelled: await poller.cancel(run.profileId, name) }),
     scheduleReminder: (run, input) =>
-      reminders.schedule(run.profileId, input, turns.replyThreadTs(run)),
+      reminders.schedule(run.profileId, input, turns.replyOrigin(run)),
     listReminders: (run) => reminders.list(run.profileId),
     cancelReminder: async (run, name) => ({
       cancelled: await reminders.cancel(run.profileId, name),

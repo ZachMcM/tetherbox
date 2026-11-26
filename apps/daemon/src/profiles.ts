@@ -3,9 +3,11 @@ import { join } from "node:path";
 import {
   cronJobSchema,
   entryNameSchema,
+  profileChannelIds,
   profileConfigSchema,
   profileIdSchema,
   profileLayout,
+  resolveProfileChannel,
   webhookSchema,
   type CronJob,
   type EntryName,
@@ -83,6 +85,23 @@ async function loadEntries<T>(
   return entries;
 }
 
+function dropUnknownChannels<T extends { channel?: EntryName | undefined }>(
+  entries: Map<EntryName, T>,
+  dir: string,
+  config: ProfileConfig,
+  issues: ProfileIssue[],
+): void {
+  for (const [name, entry] of entries) {
+    if (entry.channel !== undefined && resolveProfileChannel(config, entry.channel) === undefined) {
+      issues.push({
+        file: join(dir, `${name}.json`),
+        message: `unknown channel "${entry.channel}" (not defined in profile.json channels)`,
+      });
+      entries.delete(name);
+    }
+  }
+}
+
 export async function loadProfile(id: ProfileId, dir: string): Promise<ProfileLoad> {
   const configPath = join(dir, profileLayout.config);
   let config: ProfileConfig;
@@ -103,12 +122,20 @@ export async function loadProfile(id: ProfileId, dir: string): Promise<ProfileLo
   }
 
   const issues: ProfileIssue[] = [];
+  const cronDir = join(dir, profileLayout.cronDir);
+  const webhooksDir = join(dir, profileLayout.webhooksDir);
+  const cron = await loadEntries(cronDir, cronJobSchema, issues);
+  const webhooks = await loadEntries(webhooksDir, webhookSchema, issues);
+
+  dropUnknownChannels(cron, cronDir, config, issues);
+  dropUnknownChannels(webhooks, webhooksDir, config, issues);
+
   const profile: LoadedProfile = {
     id,
     dir,
     config,
-    cron: await loadEntries(join(dir, profileLayout.cronDir), cronJobSchema, issues),
-    webhooks: await loadEntries(join(dir, profileLayout.webhooksDir), webhookSchema, issues),
+    cron,
+    webhooks,
   };
 
   return { kind: "loaded", profile, issues };
@@ -190,31 +217,47 @@ export class ProfileRegistry {
         continue;
       }
 
-      const owner = channels.get(load.profile.config.slackChannelId);
+      const profileChannels = profileChannelIds(load.profile.config);
+      const conflictIssues: ProfileIssue[] = [];
 
-      if (owner !== undefined) {
-        issues.push(
-          {
+      for (const channelId of profileChannels) {
+        const owner = channels.get(channelId);
+
+        if (owner !== undefined) {
+          conflictIssues.push({
             file: join(load.profile.dir, profileLayout.config),
-            message: `Slack channel ${load.profile.config.slackChannelId} already belongs to profile ${owner}`,
-          },
-          ...load.issues,
-        );
+            message: `Slack channel ${channelId} already belongs to profile ${owner}`,
+          });
+        }
+      }
+
+      if (conflictIssues.length > 0) {
+        issues.push(...conflictIssues, ...load.issues);
         failedIds.push(id);
         continue;
       }
 
       issues.push(...load.issues);
       next.set(id, load.profile);
-      channels.set(load.profile.config.slackChannelId, id);
+
+      for (const channelId of profileChannels) {
+        channels.set(channelId, id);
+      }
     }
 
     for (const id of failedIds) {
       const previous = this.#profiles.get(id);
 
-      if (previous !== undefined && !channels.has(previous.config.slackChannelId)) {
-        next.set(id, previous);
-        channels.set(previous.config.slackChannelId, id);
+      if (previous !== undefined) {
+        const previousChannels = profileChannelIds(previous.config);
+
+        if (previousChannels.every((channelId) => !channels.has(channelId))) {
+          next.set(id, previous);
+
+          for (const channelId of previousChannels) {
+            channels.set(channelId, id);
+          }
+        }
       }
     }
 
@@ -230,15 +273,23 @@ export class ProfileRegistry {
       return load;
     }
 
-    const owner = this.byChannel(load.profile.config.slackChannelId);
+    const conflictIssues: ProfileIssue[] = [];
 
-    if (owner !== undefined && owner.id !== id) {
-      const issue = {
-        file: join(load.profile.dir, profileLayout.config),
-        message: `Slack channel ${load.profile.config.slackChannelId} already belongs to profile ${owner.id}`,
-      };
+    for (const channelId of profileChannelIds(load.profile.config)) {
+      const owner = this.byChannel(channelId);
 
-      return { kind: "invalid", issues: [issue, ...load.issues] };
+      if (owner !== undefined && owner.id !== id) {
+        conflictIssues.push({
+          file: join(load.profile.dir, profileLayout.config),
+          message: `Slack channel ${channelId} already belongs to profile ${owner.id}`,
+        });
+      }
+    }
+
+    const [firstConflict, ...restConflicts] = conflictIssues;
+
+    if (firstConflict !== undefined) {
+      return { kind: "invalid", issues: [firstConflict, ...restConflicts, ...load.issues] };
     }
 
     this.#profiles.set(id, load.profile);
@@ -252,7 +303,7 @@ export class ProfileRegistry {
 
   byChannel(channelId: string): LoadedProfile | undefined {
     for (const profile of this.#profiles.values()) {
-      if (profile.config.slackChannelId === channelId) {
+      if (profileChannelIds(profile.config).includes(channelId)) {
         return profile;
       }
     }

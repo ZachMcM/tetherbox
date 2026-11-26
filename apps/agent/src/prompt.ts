@@ -1,8 +1,10 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  profileChannelName,
   profileConfigSchema,
   profileLayout,
+  type ProfileConfig,
   type StarterConfig,
   type TurnTrigger,
 } from "@tetherbox/core";
@@ -36,13 +38,13 @@ function capMemory(memory: string): string {
   return `${kept}\n\n[${profileLayout.memory} is ${bytes.length} bytes and was cut at ${MEMORY_PROMPT_BYTES}. Consolidate it: move details into ${profileLayout.memoryDir}/ and keep one index line per topic.]`;
 }
 
-export async function readStarterConfig(profileDir: string): Promise<StarterConfig> {
+export async function readProfileConfig(profileDir: string): Promise<ProfileConfig | undefined> {
   try {
     const raw = await readFile(join(profileDir, profileLayout.config), "utf8");
 
-    return profileConfigSchema.parse(JSON.parse(raw)).starterConfig;
+    return profileConfigSchema.parse(JSON.parse(raw));
   } catch {
-    return {};
+    return undefined;
   }
 }
 
@@ -62,18 +64,45 @@ function formatStarterConfig(starterConfig: StarterConfig): string | undefined {
   return `# Starter config (${profileLayout.config})\n\n${lines.join("\n")}`;
 }
 
+function formatNamedChannels(profileConfig: ProfileConfig | undefined): string | undefined {
+  if (profileConfig === undefined) {
+    return undefined;
+  }
+
+  const entries = Object.entries(profileConfig.channels);
+
+  if (entries.length === 0) {
+    return undefined;
+  }
+
+  const lines = entries.map(([name, channelId]) => `- ${name}: ${channelId}`);
+
+  return `# Named Slack channels (${profileLayout.config})\n\n${lines.join("\n")}`;
+}
+
 export async function loadSystemPromptAppendix(
   profileDir: string,
-  starterConfig: StarterConfig,
+  profileConfig: ProfileConfig | undefined,
+  channelId: string,
   threadTs?: string,
 ): Promise<string[]> {
   const sections = [RUNTIME_PROMPT];
+  const channelName =
+    profileConfig !== undefined ? profileChannelName(profileConfig, channelId) : undefined;
+  const slackLines = [
+    `- channelId: ${channelId}${channelName !== undefined ? ` (${channelName})` : " (primary)"}`,
+    ...(threadTs !== undefined ? [`- threadTs: ${threadTs}`] : []),
+  ];
 
-  if (threadTs !== undefined) {
-    sections.push(`# Active Slack thread\n\n- threadTs: ${threadTs}`);
+  sections.push(`# Active Slack context\n\n${slackLines.join("\n")}`);
+
+  const channelsSection = formatNamedChannels(profileConfig);
+
+  if (channelsSection !== undefined) {
+    sections.push(channelsSection);
   }
 
-  const starterConfigSection = formatStarterConfig(starterConfig);
+  const starterConfigSection = formatStarterConfig(profileConfig?.starterConfig ?? {});
 
   if (starterConfigSection !== undefined) {
     sections.push(starterConfigSection);

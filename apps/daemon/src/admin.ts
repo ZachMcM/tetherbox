@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { text } from "node:stream/consumers";
 import { parseArgs, promisify } from "node:util";
 import {
+  entryNameSchema,
   formatSecretInjection,
   getLlmOAuthProvider,
   getOAuthPreset,
@@ -16,6 +17,7 @@ import {
   profileLayout,
   resolveSecretBinding,
   secretKeySchema,
+  slackChannelIdSchema,
   starterConfigFlagsSchema,
   type ProfileConfig,
   type SecretBinding,
@@ -345,6 +347,12 @@ function modelInput(values: ModelArgs) {
   };
 }
 
+async function readProfileConfig(profileDir: string): Promise<ProfileConfig> {
+  return profileConfigSchema.parse(
+    JSON.parse(await readFile(join(profileDir, profileLayout.config), "utf8")),
+  );
+}
+
 async function writeProfileConfig(profileDir: string, profileConfig: ProfileConfig): Promise<void> {
   await writeFile(
     join(profileDir, profileLayout.config),
@@ -369,7 +377,15 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       }
 
       for (const profile of registry.all()) {
-        console.log(`${profile.id}\t${profile.config.slackChannelId}\t${profile.config.name}`);
+        const extraChannels = Object.entries(profile.config.channels)
+          .map(([name, channelId]) => `${name}=${channelId}`)
+          .join(", ");
+        const channelColumn =
+          extraChannels === ""
+            ? profile.config.slackChannelId
+            : `${profile.config.slackChannelId} (${extraChannels})`;
+
+        console.log(`${profile.id}\t${channelColumn}\t${profile.config.name}`);
       }
 
       return;
@@ -466,9 +482,7 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
         options: MODEL_ARG_OPTIONS,
       });
       const profileDir = join(config.profilesDir, id);
-      const current = profileConfigSchema.parse(
-        JSON.parse(await readFile(join(profileDir, profileLayout.config), "utf8")),
-      );
+      const current = await readProfileConfig(profileDir);
       const model = modelRefSchema.parse(modelInput(values));
 
       await writeProfileConfig(profileDir, { ...current, model });
@@ -476,6 +490,53 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
         config,
         `set ${id} model to ${model.provider}/${model.id} (${model.auth})`,
       );
+
+      return;
+    }
+    case "add-channel": {
+      const id = profileIdSchema.parse(rawId);
+      const name = entryNameSchema.parse(rest[0]);
+      const channelId = slackChannelIdSchema.parse(rest[1]);
+      const profileDir = join(config.profilesDir, id);
+      const current = await readProfileConfig(profileDir);
+
+      if (Object.hasOwn(current.channels, name)) {
+        throw new Error(`profile "${id}" already has a channel named "${name}"`);
+      }
+
+      await registry.loadAll();
+
+      const owner = registry.byChannel(channelId);
+
+      if (owner !== undefined) {
+        throw new Error(`Slack channel ${channelId} already belongs to profile ${owner.id}`);
+      }
+
+      const updated = profileConfigSchema.parse({
+        ...current,
+        channels: { ...current.channels, [name]: channelId },
+      });
+
+      await writeProfileConfig(profileDir, updated);
+      await reportReload(config, `added channel ${name} (${channelId}) to ${id}`);
+
+      return;
+    }
+    case "remove-channel": {
+      const id = profileIdSchema.parse(rawId);
+      const name = entryNameSchema.parse(rest[0]);
+      const profileDir = join(config.profilesDir, id);
+      const current = await readProfileConfig(profileDir);
+
+      if (!Object.hasOwn(current.channels, name)) {
+        throw new Error(`profile "${id}" has no channel named "${name}"`);
+      }
+
+      const { [name]: _removed, ...channels } = current.channels;
+      const updated = profileConfigSchema.parse({ ...current, channels });
+
+      await writeProfileConfig(profileDir, updated);
+      await reportReload(config, `removed channel ${name} from ${id}`);
 
       return;
     }
@@ -492,7 +553,7 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
     }
     default:
       throw new Error(
-        "usage: tetherbox-daemon profiles <list|validate|create|set-model|reload> [id]",
+        "usage: tetherbox-daemon profiles <list|validate|create|set-model|add-channel|remove-channel|reload> [id]",
       );
   }
 }

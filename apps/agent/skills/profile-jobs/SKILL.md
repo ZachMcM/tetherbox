@@ -15,17 +15,19 @@ File names are lowercase slugs (`daily-digest.json`), and the name becomes the j
 {
   "schedule": "0 9 * * 1-5",
   "timezone": "America/New_York",
+  "channel": "alerts",
   "threadTs": "1730000000.000100",
   "prompt": "Summarize yesterday's merged PRs and post them here."
 }
 ```
 
-`schedule` is a five-field cron expression. `timezone` is optional and defaults to the VM's timezone. `threadTs` is optional; when set, replies post to that Slack thread instead of the channel top level (use the active `threadTs` from the prompt when the user asks to schedule replies in the current thread). When the job fires, a new turn starts with `prompt`.
+`schedule` is a five-field cron expression. `timezone` is optional and defaults to the VM's timezone. `channel` is optional; when set, it must match a named channel in `profile.json`'s `channels` (otherwise replies post to the profile's primary channel). `threadTs` is optional; when set, replies post to that Slack thread instead of the channel top level (use the active `threadTs` from the prompt when the user asks to schedule replies in the current thread). When the job fires, a new turn starts with `prompt`.
 
 ## Webhooks: `webhooks/<name>.json`
 
 ```json
 {
+  "channel": "alerts",
   "prompt": "A GitHub event arrived. Summarize anything that needs my attention.",
   "verify": {
     "kind": "hmac-sha256",
@@ -35,7 +37,7 @@ File names are lowercase slugs (`daily-digest.json`), and the name becomes the j
 }
 ```
 
-The webhook is served at `/hooks/<profile id>/<name>` on the daemon's public URL. Each delivery starts a turn with `prompt` and the request body.
+The webhook is served at `/hooks/<profile id>/<name>` on the daemon's public URL. Each delivery starts a turn with `prompt` and the request body. `channel` is optional and targets a named channel from `profile.json`'s `channels` instead of the profile's primary channel.
 
 `verify` is required:
 

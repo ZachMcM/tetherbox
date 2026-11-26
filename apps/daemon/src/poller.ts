@@ -66,14 +66,15 @@ export class Poller {
   async register(
     profileId: ProfileId,
     input: RegisterPollJobInput,
-    threadTs?: string,
+    origin: { channelId: string; threadTs: string | undefined },
   ): Promise<RegisteredPollJob> {
     const { name, ...job } = input;
     const registered: RegisteredPollJob = {
       name,
       job,
       registeredAt: new Date().toISOString(),
-      ...(threadTs !== undefined ? { threadTs } : {}),
+      channelId: origin.channelId,
+      ...(origin.threadTs !== undefined ? { threadTs: origin.threadTs } : {}),
     };
 
     await mkdir(join(this.#dir, profileId), { recursive: true, mode: 0o700 });

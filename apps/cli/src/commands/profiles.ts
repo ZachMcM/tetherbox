@@ -1,5 +1,5 @@
 import * as p from "@clack/prompts";
-import { profileConfigSchema, profileIdSchema } from "@tetherbox/core";
+import { entryNameSchema, profileIdSchema, slackChannelIdSchema } from "@tetherbox/core";
 import { starters } from "@tetherbox/starters";
 import type { Command } from "commander";
 import pc from "picocolors";
@@ -8,8 +8,6 @@ import { ensureModelAuth, modelRefArgs, promptModelRef } from "../llm.ts";
 import { runDaemonCommand } from "../remote.ts";
 import { listRemoteSecrets } from "../secrets.ts";
 import { ensureStarterSetup, starterConfigArgs } from "../starters.ts";
-
-const slackChannelSchema = profileConfigSchema.shape.slackChannelId;
 
 export function registerProfiles(program: Command): void {
   const profiles = program.command("profiles").description("Manage Tetherbox profiles on the VM");
@@ -70,7 +68,7 @@ export function registerProfiles(program: Command): void {
         message: "Slack channel or DM ID",
         placeholder: "C0123456789",
         validate: (value) =>
-          slackChannelSchema.safeParse(value?.trim()).success
+          slackChannelIdSchema.safeParse(value?.trim()).success
             ? undefined
             : "Expected a Slack channel or DM ID starting with C, D, or G",
       });
@@ -187,5 +185,39 @@ export function registerProfiles(program: Command): void {
       if (code === 0) {
         p.outro(`Profile ${pc.cyan(id)} now uses ${model.provider}/${model.id}.`);
       }
+    });
+
+  profiles
+    .command("add-channel")
+    .description("Attach an additional named Slack channel to a profile")
+    .argument("<id>", "profile id")
+    .argument("<name>", "channel name (lowercase slug, e.g. alerts)")
+    .argument("<channelId>", "Slack channel or DM ID")
+    .action(async (rawId: string, rawName: string, rawChannelId: string) => {
+      const id = profileIdSchema.parse(rawId);
+      const name = entryNameSchema.parse(rawName);
+      const channelId = slackChannelIdSchema.parse(rawChannelId);
+      const { sshAlias } = await readConfig();
+
+      process.exitCode = await runDaemonCommand(sshAlias, [
+        "profiles",
+        "add-channel",
+        id,
+        name,
+        channelId,
+      ]);
+    });
+
+  profiles
+    .command("remove-channel")
+    .description("Remove an additional named Slack channel from a profile")
+    .argument("<id>", "profile id")
+    .argument("<name>", "channel name")
+    .action(async (rawId: string, rawName: string) => {
+      const id = profileIdSchema.parse(rawId);
+      const name = entryNameSchema.parse(rawName);
+      const { sshAlias } = await readConfig();
+
+      process.exitCode = await runDaemonCommand(sshAlias, ["profiles", "remove-channel", id, name]);
     });
 }

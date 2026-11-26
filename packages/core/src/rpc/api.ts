@@ -24,6 +24,15 @@ import {
 import type { SecretCheckResult } from "../secrets.ts";
 import { RUN_TOKEN_HEADER } from "./headers.ts";
 
+export class RpcError extends Error {
+  readonly status: 400 | 404 | 409;
+
+  constructor(status: 400 | 404 | 409, message: string) {
+    super(message);
+    this.status = status;
+  }
+}
+
 export interface RunContext {
   runId: RunId;
   profileId: ProfileId;
@@ -32,7 +41,10 @@ export interface RunContext {
 export const MAX_UPLOAD_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_UPLOAD_BASE64_CHARS = Math.ceil((MAX_UPLOAD_FILE_BYTES * 4) / 3) + 4;
 
-export const sendMessageInputSchema = z.object({ text: z.string().min(1) });
+export const sendMessageInputSchema = z.object({
+  text: z.string().min(1),
+  channel: entryNameSchema.optional(),
+});
 export type SendMessageInput = z.infer<typeof sendMessageInputSchema>;
 
 export const sendFileInputSchema = z.object({
@@ -40,6 +52,7 @@ export const sendFileInputSchema = z.object({
   contentBase64: z.string().min(1).max(MAX_UPLOAD_BASE64_CHARS),
   title: z.string().min(1).max(255).optional(),
   initialComment: z.string().min(1).optional(),
+  channel: entryNameSchema.optional(),
 });
 export type SendFileInput = z.infer<typeof sendFileInputSchema>;
 
@@ -94,6 +107,15 @@ function runTokenCandidates(c: Context): readonly (string | undefined)[] {
  */
 export function createInternalApi(handlers: InternalApiHandlers) {
   return new Hono<{ Variables: { run: RunContext } }>()
+    .onError((error, c) => {
+      if (error instanceof RpcError) {
+        return c.json({ error: error.message }, error.status);
+      }
+
+      console.error(error);
+
+      return c.text("Internal Server Error", 500);
+    })
     .use(async (c, next) => {
       let run: RunContext | undefined;
 

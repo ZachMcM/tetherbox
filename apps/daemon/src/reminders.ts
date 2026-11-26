@@ -84,7 +84,7 @@ export class ReminderStore {
   async schedule(
     profileId: ProfileId,
     input: ScheduleReminderInput,
-    threadTs?: string,
+    origin: { channelId: string; threadTs: string | undefined },
   ): Promise<ScheduledReminder> {
     const now = Date.now();
     const fireAt = computeFireAt(input, now);
@@ -93,7 +93,8 @@ export class ReminderStore {
       fireAt,
       prompt: input.prompt,
       createdAt: new Date(now).toISOString(),
-      ...(threadTs !== undefined ? { threadTs } : {}),
+      channelId: origin.channelId,
+      ...(origin.threadTs !== undefined ? { threadTs: origin.threadTs } : {}),
     };
 
     await mkdir(join(this.#dir, profileId), { recursive: true, mode: 0o700 });

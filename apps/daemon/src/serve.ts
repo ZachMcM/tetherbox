@@ -1,12 +1,12 @@
 import { serve } from "@hono/node-server";
-import { secretKeySchema, type SecretKind } from "@tetherbox/core";
+import { resolveProfileChannel, secretKeySchema, type SecretKind } from "@tetherbox/core";
 import type { DaemonConfig } from "./config.ts";
 import { startInternalServer } from "./internal-server.ts";
 import type { LlmOAuth } from "./llm-oauth.ts";
 import type { OAuthStore } from "./oauth.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./poller.ts";
-import { ProfileRegistry, type LoadedProfile } from "./profiles.ts";
+import { ProfileRegistry } from "./profiles.ts";
 import { createPublicServer } from "./public-server.ts";
 import { ReminderStore } from "./reminders.ts";
 import { Scheduler } from "./scheduler.ts";
@@ -34,10 +34,10 @@ async function requireSecret(
   return secret.value;
 }
 
-function targetOf(profile: LoadedProfile, threadTs?: string): ReplyTarget {
+function targetOf(channelId: string, threadTs?: string): ReplyTarget {
   return threadTs !== undefined
-    ? { kind: "thread", channelId: profile.config.slackChannelId, threadTs }
-    : { kind: "channel", channelId: profile.config.slackChannelId };
+    ? { kind: "thread", channelId, threadTs }
+    : { kind: "channel", channelId };
 }
 
 export interface DaemonStores {
@@ -51,13 +51,23 @@ export async function serveDaemon(
   { secrets, llmOAuth, oauth }: DaemonStores,
 ): Promise<void> {
   const registry = new ProfileRegistry(config.profilesDir);
-  const scheduler = new Scheduler((profile, name, job) =>
+  const scheduler = new Scheduler((profile, name, job) => {
+    const channelId = resolveProfileChannel(profile.config, job.channel);
+
+    if (channelId === undefined) {
+      console.warn(
+        `cron job ${name} in profile ${profile.id} references unknown channel ${job.channel}`,
+      );
+
+      return;
+    }
+
     turns.enqueue(
       profile.id,
       { kind: "cron", job: name, prompt: job.prompt },
-      targetOf(profile, job.threadTs),
-    ),
-  );
+      targetOf(channelId, job.threadTs),
+    );
+  });
   const poller = new Poller(config.dataDir, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
 
@@ -65,7 +75,7 @@ export async function serveDaemon(
       turns.enqueue(
         profileId,
         { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
-        targetOf(profile, registered.threadTs),
+        targetOf(registered.channelId ?? profile.config.slackChannelId, registered.threadTs),
       );
     }
   });
@@ -76,7 +86,7 @@ export async function serveDaemon(
       turns.enqueue(
         profileId,
         { kind: "reminder", name: reminder.name, prompt: reminder.prompt },
-        targetOf(profile, reminder.threadTs),
+        targetOf(reminder.channelId ?? profile.config.slackChannelId, reminder.threadTs),
       );
     }
   });

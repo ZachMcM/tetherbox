@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { profileIdSchema, runIdSchema } from "./ids.ts";
 import { turnModelAuthSchema } from "./llm-auth.ts";
-import { modelRefSchema } from "./profile.ts";
+import { modelRefSchema, slackChannelIdSchema, slackTsSchema } from "./profile.ts";
 
 export const turnTriggerSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -40,11 +40,13 @@ export const turnInputSchema = z.object({
   runToken: z.string().min(32),
   profileId: profileIdSchema,
   profileDir: z.string().min(1),
+  sessionFile: z.string().min(1),
   socketPath: z.string().min(1),
   model: modelRefSchema,
   modelAuth: turnModelAuthSchema,
   trigger: turnTriggerSchema,
-  threadTs: z.string().min(1).optional(),
+  channelId: slackChannelIdSchema,
+  threadTs: slackTsSchema.optional(),
 });
 export type TurnInput = z.infer<typeof turnInputSchema>;
 

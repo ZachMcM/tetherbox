@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { entryNameSchema } from "./ids.ts";
+import { slackChannelIdSchema, slackTsSchema } from "./profile.ts";
 
 export const pollJobSchema = z.object({
   check: z.object({
@@ -18,6 +19,7 @@ export const registeredPollJobSchema = z.object({
   name: entryNameSchema,
   job: pollJobSchema,
   registeredAt: z.iso.datetime(),
-  threadTs: z.string().min(1).optional(),
+  channelId: slackChannelIdSchema.optional(),
+  threadTs: slackTsSchema.optional(),
 });
 export type RegisteredPollJob = z.infer<typeof registeredPollJobSchema>;

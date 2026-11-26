@@ -1,6 +1,6 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createAgentSession,
@@ -20,7 +20,7 @@ import {
 } from "@tetherbox/core";
 import { startLlmForwarder } from "./llm-forwarder.ts";
 import { loadProfileModules } from "./modules.ts";
-import { formatTrigger, loadSystemPromptAppendix, readStarterConfig } from "./prompt.ts";
+import { formatTrigger, loadSystemPromptAppendix, readProfileConfig } from "./prompt.ts";
 import { createBuiltinTools } from "./tools.ts";
 import { createWebSearchExtension, resolveWebSearchMode } from "./web-search.ts";
 
@@ -52,7 +52,6 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
   const { profileDir, socketPath, runToken } = input;
   const client = createInternalClient({ socketPath, runToken });
   const forwarder = await startLlmForwarder(socketPath);
-  // TODO: Persist Pi sessions per profile (or per Slack thread) instead of a throwaway agent dir.
   const agentDir = await mkdtemp(join(tmpdir(), "tetherbox-run-"));
 
   try {
@@ -95,7 +94,8 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
     // The daemon's LLM proxy relays HTTP only, so Pi must not open WebSocket streams.
     settingsManager.applyOverrides({ defaultTools: ["+codemode"], transport: "sse" });
 
-    const starterConfig = await readStarterConfig(profileDir);
+    const profileConfig = await readProfileConfig(profileDir);
+    const starterConfig = profileConfig?.starterConfig ?? {};
     const resourceLoader = new DefaultResourceLoader({
       cwd: profileDir,
       agentDir,
@@ -105,7 +105,12 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
         createWebSearchExtension(webSearchMode),
       ],
       additionalSkillPaths: [builtinSkillsDir, join(profileDir, profileLayout.skillsDir)],
-      appendSystemPrompt: await loadSystemPromptAppendix(profileDir, starterConfig, input.threadTs),
+      appendSystemPrompt: await loadSystemPromptAppendix(
+        profileDir,
+        profileConfig,
+        input.channelId,
+        input.threadTs,
+      ),
     });
 
     await resourceLoader.reload();
@@ -131,7 +136,11 @@ export async function runTurn(input: TurnInput): Promise<TurnResult> {
       modelRuntime,
       settingsManager,
       resourceLoader,
-      sessionManager: SessionManager.inMemory(profileDir),
+      sessionManager: SessionManager.open(
+        input.sessionFile,
+        dirname(input.sessionFile),
+        profileDir,
+      ),
       customTools: [...createBuiltinTools(client, fetchWithSecret), ...moduleTools],
     });
 

@@ -3,6 +3,7 @@ import { z } from "zod";
 const envSchema = z.object({
   TETHERBOX_DATA_DIR: z.string().default("/var/lib/tetherbox"),
   TETHERBOX_PROFILES_DIR: z.string().default("/srv/tetherbox/profiles"),
+  TETHERBOX_SESSIONS_DIR: z.string().default("/srv/tetherbox/sessions"),
   TETHERBOX_SOCKET: z.string().default("/run/tetherbox/internal.sock"),
   TETHERBOX_PUBLIC_HOST: z.string().default("127.0.0.1"),
   TETHERBOX_PUBLIC_PORT: z.coerce.number().int().positive().default(8787),
@@ -14,6 +15,7 @@ const envSchema = z.object({
 export interface DaemonConfig {
   dataDir: string;
   profilesDir: string;
+  sessionsDir: string;
   socketPath: string;
   publicHost: string;
   publicPort: number;
@@ -26,6 +28,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DaemonConfig {
   return {
     dataDir: parsed.TETHERBOX_DATA_DIR,
     profilesDir: parsed.TETHERBOX_PROFILES_DIR,
+    sessionsDir: parsed.TETHERBOX_SESSIONS_DIR,
     socketPath: parsed.TETHERBOX_SOCKET,
     publicHost: parsed.TETHERBOX_PUBLIC_HOST,
     publicPort: parsed.TETHERBOX_PUBLIC_PORT,

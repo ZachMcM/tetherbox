@@ -26,10 +26,18 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
     name: "send_message",
     label: "Send message",
     description:
-      "Post a message to the user in the conversation that started this turn. Use it for the final reply and for progress updates during long work.",
-    parameters: Type.Object({ text: Type.String({ minLength: 1 }) }),
+      "Post a message to the user in the conversation that started this turn. Use it for the final reply and for progress updates during long work. Optionally pass a named channel from profile.json to post a top-level message there instead.",
+    parameters: Type.Object({
+      text: Type.String({ minLength: 1 }),
+      channel: Type.Optional(Type.String({ pattern: SLUG_PATTERN })),
+    }),
     async execute(_toolCallId, params) {
-      const response = await client.rpc.messages.$post({ json: { text: params.text } });
+      const response = await client.rpc.messages.$post({
+        json: {
+          text: params.text,
+          ...(params.channel !== undefined ? { channel: params.channel } : {}),
+        },
+      });
 
       if (!response.ok) {
         throw await failure(response, "send_message");
@@ -42,12 +50,13 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
     name: "send_file",
     label: "Send file",
     description:
-      "Upload a local file (such as a CSV, chart, diff, log, or screenshot) to the Slack conversation that started this turn.",
+      "Upload a local file (such as a CSV, chart, diff, log, or screenshot) to the Slack conversation that started this turn. Optionally pass a named channel from profile.json to upload to that channel instead.",
     parameters: Type.Object({
       path: Type.String({ minLength: 1 }),
       filename: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
       title: Type.Optional(Type.String({ minLength: 1, maxLength: 255 })),
       comment: Type.Optional(Type.String({ minLength: 1 })),
+      channel: Type.Optional(Type.String({ pattern: SLUG_PATTERN })),
     }),
     async execute(_toolCallId, params) {
       const content = await readFile(params.path);
@@ -69,6 +78,7 @@ function createMessagingTools(client: InternalClient): ToolDefinition[] {
           contentBase64: content.toString("base64"),
           ...(params.title !== undefined ? { title: params.title } : {}),
           ...(params.comment !== undefined ? { initialComment: params.comment } : {}),
+          ...(params.channel !== undefined ? { channel: params.channel } : {}),
         },
       });
 

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { secretKeySchema } from "./ids.ts";
+import { entryNameSchema, secretKeySchema, type EntryName } from "./ids.ts";
 import { llmAuthKindSchema, llmProviderSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
 
 export const modelRefSchema = z
@@ -70,19 +70,71 @@ export const starterConfigFlagsSchema = z
   })
   .pipe(starterConfigSchema);
 
-export const profileConfigSchema = z.object({
-  name: z.string().min(1),
-  slackChannelId: z.string().regex(/^[CDG][A-Z0-9]+$/),
-  model: modelRefSchema,
-  starters: z.array(z.string().min(1)).default([]),
-  starterConfig: starterConfigSchema.default({}),
-});
+export const slackChannelIdSchema = z.string().regex(/^[CDG][A-Z0-9]+$/);
+export const slackTsSchema = z.string().regex(/^\d+\.\d+$/);
+
+export const profileChannelsSchema = z.record(entryNameSchema, slackChannelIdSchema);
+export type ProfileChannels = z.infer<typeof profileChannelsSchema>;
+
+export const profileConfigSchema = z
+  .object({
+    name: z.string().min(1),
+    slackChannelId: slackChannelIdSchema,
+    channels: profileChannelsSchema.default({}),
+    model: modelRefSchema,
+    starters: z.array(z.string().min(1)).default([]),
+    starterConfig: starterConfigSchema.default({}),
+  })
+  .superRefine((config, ctx) => {
+    const seen = new Map<string, string>([[config.slackChannelId, "slackChannelId"]]);
+
+    for (const [name, channelId] of Object.entries(config.channels)) {
+      const existing = seen.get(channelId);
+
+      if (existing !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          path: ["channels", name],
+          message: `Slack channel ${channelId} is already assigned to ${existing}`,
+        });
+        continue;
+      }
+
+      seen.set(channelId, `channels.${name}`);
+    }
+  });
 export type ProfileConfig = z.infer<typeof profileConfigSchema>;
+
+export function profileChannelIds(config: ProfileConfig): string[] {
+  return [config.slackChannelId, ...Object.values(config.channels)];
+}
+
+export function resolveProfileChannel(
+  config: ProfileConfig,
+  channelName: EntryName | undefined,
+): string | undefined {
+  if (channelName === undefined) {
+    return config.slackChannelId;
+  }
+
+  return Object.hasOwn(config.channels, channelName) ? config.channels[channelName] : undefined;
+}
+
+export function profileChannelName(config: ProfileConfig, channelId: string): string | undefined {
+  for (const [name, id] of Object.entries(config.channels)) {
+    if (id === channelId) {
+      return name;
+    }
+  }
+
+  return undefined;
+}
 
 export const cronJobSchema = z.object({
   schedule: z.string().min(1),
   timezone: z.string().min(1).optional(),
-  threadTs: z.string().min(1).optional(),
+  channel: entryNameSchema.optional(),
+  threadTs: slackTsSchema.optional(),
   prompt: z.string().min(1),
 });
 export type CronJob = z.infer<typeof cronJobSchema>;
@@ -98,6 +150,7 @@ export const webhookVerificationSchema = z.discriminatedUnion("kind", [
 export type WebhookVerification = z.infer<typeof webhookVerificationSchema>;
 
 export const webhookSchema = z.object({
+  channel: entryNameSchema.optional(),
   prompt: z.string().min(1),
   verify: webhookVerificationSchema,
 });

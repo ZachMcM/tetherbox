@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { entryNameSchema } from "./ids.ts";
+import { slackChannelIdSchema, slackTsSchema } from "./profile.ts";
 
 const reminderBase = {
   name: entryNameSchema,
@@ -25,6 +26,7 @@ export const scheduledReminderSchema = z.object({
   fireAt: z.iso.datetime(),
   prompt: z.string().min(1),
   createdAt: z.iso.datetime(),
-  threadTs: z.string().min(1).optional(),
+  channelId: slackChannelIdSchema.optional(),
+  threadTs: slackTsSchema.optional(),
 });
 export type ScheduledReminder = z.infer<typeof scheduledReminderSchema>;

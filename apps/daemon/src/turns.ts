@@ -1,8 +1,13 @@
 import { randomBytes, randomUUID } from "node:crypto";
+import { link, rm } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import {
   MAX_UPLOAD_FILE_BYTES,
+  resolveProfileChannel,
+  RpcError,
   runIdSchema,
   type AddReactionInput,
+  type EntryName,
   type ModelRef,
   type ProfileId,
   type ProfileIssue,
@@ -23,6 +28,8 @@ interface ActiveRun {
   context: RunContext;
   replyTarget: ReplyTarget;
   sentMessage: boolean;
+  firstPostedTs: string | undefined;
+  done: Promise<void>;
 }
 
 export interface TurnRunnerDeps {
@@ -40,75 +47,151 @@ function formatIssues(issues: readonly ProfileIssue[]): string {
   ].join("\n");
 }
 
+function errorCode(error: unknown): string | undefined {
+  return error instanceof Error && "code" in error && typeof error.code === "string"
+    ? error.code
+    : undefined;
+}
+
+function threadQueueKey(profileId: ProfileId, replyTarget: ReplyTarget): string | undefined {
+  return replyTarget.kind === "channel"
+    ? undefined
+    : `${profileId}:${replyTarget.channelId}:${replyTarget.threadTs}`;
+}
+
+function sessionFilePath(
+  sessionsDir: string,
+  profileId: ProfileId,
+  replyTarget: ReplyTarget,
+  runId: RunId,
+): string {
+  const filename =
+    replyTarget.kind === "channel" ? `.pending-${runId}.jsonl` : `${replyTarget.threadTs}.jsonl`;
+
+  return join(sessionsDir, profileId, replyTarget.channelId, filename);
+}
+
+async function finalizePendingSession(
+  sessionFile: string,
+  postedTs: string | undefined,
+): Promise<void> {
+  if (postedTs !== undefined) {
+    try {
+      await link(sessionFile, join(dirname(sessionFile), `${postedTs}.jsonl`));
+    } catch (error) {
+      const code = errorCode(error);
+
+      if (code !== "ENOENT" && code !== "EEXIST") {
+        console.error(`failed to bind pending session ${sessionFile} to ${postedTs}`, error);
+      }
+    }
+  }
+
+  await rm(sessionFile, { force: true });
+}
+
 /**
- * Runs agent turns one at a time per profile. A turn's reply goes out through `send_message`; if
- * the run never called it, the daemon posts the run's final text instead, so each turn produces
- * at most one fallback and never a duplicate.
+ * Runs agent turns sequentially within each Slack thread while allowing separate threads and
+ * threadless top-level triggers to run in parallel. A turn's reply goes out through
+ * `send_message`; if the run never called it, the daemon posts the run's final text instead, so
+ * each turn produces at most one fallback and never a duplicate.
  */
 export class TurnRunner {
   readonly #deps: TurnRunnerDeps;
   readonly #runsByToken = new Map<string, ActiveRun>();
   readonly #runsById = new Map<RunId, ActiveRun>();
-  readonly #queues = new Map<ProfileId, Promise<void>>();
+  readonly #queues = new Map<string, Promise<void>>();
 
   constructor(deps: TurnRunnerDeps) {
     this.#deps = deps;
   }
 
   enqueue(profileId: ProfileId, trigger: TurnTrigger, replyTarget: ReplyTarget): void {
-    const previous = this.#queues.get(profileId) ?? Promise.resolve();
+    const queueKey = threadQueueKey(profileId, replyTarget);
+
+    if (queueKey === undefined) {
+      void this.#run(profileId, trigger, replyTarget).catch((error: unknown) => {
+        console.error(`turn for profile ${profileId} failed`, error);
+      });
+
+      return;
+    }
+
+    const previous = this.#queues.get(queueKey) ?? Promise.resolve();
     const next = previous
       .then(() => this.#run(profileId, trigger, replyTarget))
       .catch((error: unknown) => {
         console.error(`turn for profile ${profileId} failed`, error);
+      })
+      .finally(() => {
+        if (this.#queues.get(queueKey) === next) {
+          this.#queues.delete(queueKey);
+        }
       });
 
-    this.#queues.set(profileId, next);
+    this.#queues.set(queueKey, next);
   }
 
   resolveRun(token: string): RunContext | undefined {
     return this.#runsByToken.get(token)?.context;
   }
 
-  replyThreadTs(context: RunContext): string | undefined {
+  replyOrigin(context: RunContext): { channelId: string; threadTs: string | undefined } {
     const run = this.#active(context);
 
-    return run.replyTarget.kind === "channel" ? undefined : run.replyTarget.threadTs;
+    return {
+      channelId: run.replyTarget.channelId,
+      threadTs: run.replyTarget.kind === "channel" ? undefined : run.replyTarget.threadTs,
+    };
   }
 
   async sendMessage(context: RunContext, input: SendMessageInput): Promise<{ ts: string }> {
     const run = this.#active(context);
-    const result = await this.#deps.slack.postMessage(run.replyTarget, input.text);
+    const target = this.#resolvePostTarget(run, input.channel);
+    const result = await this.#deps.slack.postMessage(target, input.text);
 
-    run.sentMessage = true;
+    if (target.channelId === run.replyTarget.channelId) {
+      if (run.replyTarget.kind === "channel" && run.firstPostedTs === undefined) {
+        run.firstPostedTs = result.ts;
+        this.#claimThreadQueue(run.context.profileId, target.channelId, result.ts, run.done);
+      }
+
+      run.sentMessage = true;
+    }
 
     return result;
   }
 
   async sendFile(context: RunContext, input: SendFileInput): Promise<void> {
     const run = this.#active(context);
+    const target = this.#resolvePostTarget(run, input.channel);
     const content = Buffer.from(input.contentBase64, "base64");
 
     if (content.byteLength === 0 || content.byteLength > MAX_UPLOAD_FILE_BYTES) {
-      throw new Error(
+      throw new RpcError(
+        400,
         `File "${input.filename}" must be between 1 and ${MAX_UPLOAD_FILE_BYTES} bytes`,
       );
     }
 
-    await this.#deps.slack.uploadFile(run.replyTarget, {
+    await this.#deps.slack.uploadFile(target, {
       filename: input.filename,
       content,
       ...(input.title !== undefined ? { title: input.title } : {}),
       ...(input.initialComment !== undefined ? { initialComment: input.initialComment } : {}),
     });
-    run.sentMessage = true;
+
+    if (target.channelId === run.replyTarget.channelId) {
+      run.sentMessage = true;
+    }
   }
 
   async addReaction(context: RunContext, input: AddReactionInput): Promise<void> {
     const run = this.#active(context);
 
     if (run.replyTarget.kind !== "message") {
-      throw new Error(
+      throw new RpcError(
+        400,
         "this run was not started by a Slack message, so there is nothing to react to",
       );
     }
@@ -124,10 +207,51 @@ export class TurnRunner {
     const run = this.#runsById.get(context.runId);
 
     if (run === undefined) {
-      throw new Error(`run ${context.runId} is no longer active`);
+      throw new RpcError(409, `run ${context.runId} is no longer active`);
     }
 
     return run;
+  }
+
+  #claimThreadQueue(
+    profileId: ProfileId,
+    channelId: string,
+    threadTs: string,
+    runDone: Promise<void>,
+  ): void {
+    const queueKey = `${profileId}:${channelId}:${threadTs}`;
+
+    if (this.#queues.has(queueKey)) {
+      return;
+    }
+
+    const cleanup = runDone.finally(() => {
+      if (this.#queues.get(queueKey) === cleanup) {
+        this.#queues.delete(queueKey);
+      }
+    });
+
+    this.#queues.set(queueKey, cleanup);
+  }
+
+  #resolvePostTarget(run: ActiveRun, channel: EntryName | undefined): ReplyTarget {
+    if (channel === undefined) {
+      return run.replyTarget;
+    }
+
+    const profile = this.#deps.registry.get(run.context.profileId);
+
+    if (profile === undefined) {
+      throw new RpcError(404, `profile ${run.context.profileId} is not loaded`);
+    }
+
+    const channelId = resolveProfileChannel(profile.config, channel);
+
+    if (channelId === undefined) {
+      throw new RpcError(400, `unknown channel "${channel}" for profile ${profile.id}`);
+    }
+
+    return { kind: "channel", channelId };
   }
 
   async #modelAuth(model: ModelRef): Promise<TurnModelAuth | undefined> {
@@ -178,7 +302,15 @@ export class TurnRunner {
 
     const runId = runIdSchema.parse(randomUUID());
     const runToken = randomBytes(32).toString("base64url");
-    const run: ActiveRun = { context: { runId, profileId }, replyTarget, sentMessage: false };
+    const sessionFile = sessionFilePath(config.sessionsDir, profileId, replyTarget, runId);
+    const { promise: done, resolve: resolveDone } = Promise.withResolvers<void>();
+    const run: ActiveRun = {
+      context: { runId, profileId },
+      replyTarget,
+      sentMessage: false,
+      firstPostedTs: undefined,
+      done,
+    };
 
     this.#runsByToken.set(runToken, run);
     this.#runsById.set(runId, run);
@@ -190,15 +322,22 @@ export class TurnRunner {
         runToken,
         profileId,
         profileDir: profile.dir,
+        sessionFile,
         socketPath: config.socketPath,
         model,
         modelAuth,
         trigger,
+        channelId: replyTarget.channelId,
         ...(threadTs !== undefined ? { threadTs } : {}),
       });
 
       if (!run.sentMessage && result.finalText !== null && result.finalText.trim() !== "") {
-        await slack.postMessage(replyTarget, result.finalText);
+        const posted = await slack.postMessage(replyTarget, result.finalText);
+
+        if (replyTarget.kind === "channel" && run.firstPostedTs === undefined) {
+          run.firstPostedTs = posted.ts;
+          this.#claimThreadQueue(profileId, replyTarget.channelId, posted.ts, done);
+        }
       }
     } catch (error) {
       console.error(`run ${runId} for profile ${profileId} failed`, error);
@@ -209,6 +348,12 @@ export class TurnRunner {
     } finally {
       this.#runsByToken.delete(runToken);
       this.#runsById.delete(runId);
+
+      if (replyTarget.kind === "channel") {
+        await finalizePendingSession(sessionFile, run.firstPostedTs);
+      }
+
+      resolveDone();
     }
 
     await this.#reloadAfterRun(profileId, replyTarget);
