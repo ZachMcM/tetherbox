@@ -48,5 +48,10 @@
     ],
     "unicorn/require-post-message-target-origin": "off"
   },
-  "ignorePatterns": ["**/dist/**", "**/.turbo/**"]
+  "ignorePatterns": [
+    "**/dist/**",
+    "**/.turbo/**",
+    "packages/ui/src/**",
+    "apps/web/src/routeTree.gen.ts"
+  ]
 }

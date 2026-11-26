@@ -1,3 +1,7 @@
+# Local dev daemon state
+.local/
+.tanstack/
+
 # Logs
 logs
 *.log

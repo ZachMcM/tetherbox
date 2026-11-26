@@ -187,24 +187,27 @@ export function createAppApi(handlers: AppApiHandlers) {
         500,
       );
     })
-    .get("/profiles", async (c) => c.json({ profiles: await handlers.listProfiles() }))
+    .get("/profiles", async (c) => c.json({ profiles: await handlers.listProfiles() }, 200))
     .post("/profiles", zValidator("json", createProfileInputSchema), async (c) =>
       c.json({ profile: await handlers.createProfile(c.req.valid("json")) }, 201),
     )
     .get("/profiles/:profileId", zValidator("param", profileIdParam), async (c) =>
-      c.json({ profile: await handlers.getProfile(c.req.valid("param").profileId) }),
+      c.json({ profile: await handlers.getProfile(c.req.valid("param").profileId) }, 200),
     )
     .patch(
       "/profiles/:profileId",
       zValidator("param", profileIdParam),
       zValidator("json", updateProfileInputSchema),
       async (c) =>
-        c.json({
-          profile: await handlers.updateProfile(
-            c.req.valid("param").profileId,
-            c.req.valid("json"),
-          ),
-        }),
+        c.json(
+          {
+            profile: await handlers.updateProfile(
+              c.req.valid("param").profileId,
+              c.req.valid("json"),
+            ),
+          },
+          200,
+        ),
     )
     .put(
       "/profiles/:profileId/memory",
@@ -216,6 +219,7 @@ export function createAppApi(handlers: AppApiHandlers) {
             c.req.valid("param").profileId,
             c.req.valid("json").content,
           ),
+          200,
         ),
     )
     .delete("/profiles/:profileId", zValidator("param", profileIdParam), async (c) => {
@@ -226,18 +230,18 @@ export function createAppApi(handlers: AppApiHandlers) {
     .delete("/profiles/:profileId/poll-jobs/:name", zValidator("param", profileEntryParam), (c) => {
       const { profileId, name } = c.req.valid("param");
 
-      return c.json(handlers.cancelPollJob(profileId, name));
+      return c.json(handlers.cancelPollJob(profileId, name), 200);
     })
     .delete("/profiles/:profileId/reminders/:name", zValidator("param", profileEntryParam), (c) => {
       const { profileId, name } = c.req.valid("param");
 
-      return c.json(handlers.cancelReminder(profileId, name));
+      return c.json(handlers.cancelReminder(profileId, name), 200);
     })
-    .get("/starters", (c) => c.json({ starters: handlers.listStarters() }))
+    .get("/starters", (c) => c.json({ starters: handlers.listStarters() }, 200))
     .get(
       "/sessions",
       zValidator("query", z.object({ profileId: profileIdSchema.optional() })),
-      (c) => c.json({ sessions: handlers.listSessions(c.req.valid("query").profileId) }),
+      (c) => c.json({ sessions: handlers.listSessions(c.req.valid("query").profileId) }, 200),
     )
     .post(
       "/profiles/:profileId/sessions",
@@ -252,7 +256,7 @@ export function createAppApi(handlers: AppApiHandlers) {
         ),
     )
     .get("/sessions/:sessionId", zValidator("param", sessionIdParam), async (c) =>
-      c.json(await handlers.getSession(c.req.valid("param").sessionId)),
+      c.json(await handlers.getSession(c.req.valid("param").sessionId), 200),
     )
     .post(
       "/sessions/:sessionId/messages",
@@ -265,58 +269,67 @@ export function createAppApi(handlers: AppApiHandlers) {
         ),
     )
     .post("/sessions/:sessionId/abort", zValidator("param", sessionIdParam), (c) =>
-      c.json(handlers.abortSession(c.req.valid("param").sessionId)),
+      c.json(handlers.abortSession(c.req.valid("param").sessionId), 200),
     )
     .patch(
       "/sessions/:sessionId",
       zValidator("param", sessionIdParam),
       zValidator("json", updateSessionInputSchema),
       (c) =>
-        c.json({
-          session: handlers.updateSession(c.req.valid("param").sessionId, c.req.valid("json")),
-        }),
+        c.json(
+          {
+            session: handlers.updateSession(c.req.valid("param").sessionId, c.req.valid("json")),
+          },
+          200,
+        ),
     )
     .delete("/sessions/:sessionId", zValidator("param", sessionIdParam), async (c) => {
       await handlers.deleteSession(c.req.valid("param").sessionId);
 
       return c.body(null, 204);
     })
-    .get("/secrets", async (c) => c.json({ secrets: await handlers.listSecrets() }))
+    .get("/secrets", async (c) => c.json({ secrets: await handlers.listSecrets() }, 200))
     .put(
       "/secrets/:key",
       zValidator("param", secretKeyParam),
       zValidator("json", setSecretInputSchema),
       async (c) =>
-        c.json({
-          secret: await handlers.setSecret(c.req.valid("param").key, c.req.valid("json")),
-        }),
+        c.json(
+          {
+            secret: await handlers.setSecret(c.req.valid("param").key, c.req.valid("json")),
+          },
+          200,
+        ),
     )
     .delete("/secrets/:key", zValidator("param", secretKeyParam), async (c) => {
       await handlers.deleteSecret(c.req.valid("param").key);
 
       return c.body(null, 204);
     })
-    .get("/llm/status", async (c) => c.json(await handlers.getLlmStatus()))
+    .get("/llm/status", async (c) => c.json(await handlers.getLlmStatus(), 200))
     .post("/llm/oauth/:provider/start", zValidator("param", llmProviderParam), async (c) =>
-      c.json({ flow: await handlers.startLlmOAuth(c.req.valid("param").provider) }),
+      c.json({ flow: await handlers.startLlmOAuth(c.req.valid("param").provider) }, 200),
     )
     .get("/llm/oauth/flows/:flowId", (c) =>
-      c.json({ flow: handlers.getLlmOAuthFlow(c.req.param("flowId")) }),
+      c.json({ flow: handlers.getLlmOAuthFlow(c.req.param("flowId")) }, 200),
     )
     .post("/llm/oauth/flows/:flowId/respond", zValidator("json", llmOAuthRespondInputSchema), (c) =>
-      c.json({
-        flow: handlers.respondLlmOAuthFlow(c.req.param("flowId"), c.req.valid("json").value),
-      }),
+      c.json(
+        {
+          flow: handlers.respondLlmOAuthFlow(c.req.param("flowId"), c.req.valid("json").value),
+        },
+        200,
+      ),
     )
     .post("/llm/oauth/flows/:flowId/cancel", (c) =>
-      c.json(handlers.cancelLlmOAuthFlow(c.req.param("flowId"))),
+      c.json(handlers.cancelLlmOAuthFlow(c.req.param("flowId")), 200),
     )
     .delete("/llm/oauth/:provider", zValidator("param", llmProviderParam), async (c) => {
       await handlers.logoutLlmOAuth(c.req.valid("param").provider);
 
       return c.body(null, 204);
     })
-    .get("/oauth/status", async (c) => c.json(await handlers.getOAuthStatus()))
+    .get("/oauth/status", async (c) => c.json(await handlers.getOAuthStatus(), 200))
     .post(
       "/oauth/presets/:preset/start",
       zValidator("param", oauthPresetParam),
@@ -328,6 +341,7 @@ export function createAppApi(handlers: AppApiHandlers) {
             c.req.valid("json"),
             requestOrigin(c.req.url, c.req.raw.headers),
           ),
+          200,
         ),
     )
     .post("/oauth/custom/start", zValidator("json", customOAuthLoginSchema), async (c) =>
@@ -336,6 +350,7 @@ export function createAppApi(handlers: AppApiHandlers) {
           c.req.valid("json"),
           requestOrigin(c.req.url, c.req.raw.headers),
         ),
+        200,
       ),
     )
     .delete("/oauth/:target", async (c) => {
@@ -343,14 +358,14 @@ export function createAppApi(handlers: AppApiHandlers) {
 
       return c.body(null, 204);
     })
-    .get("/push/vapid-key", (c) => c.json(handlers.getVapidPublicKey()))
+    .get("/push/vapid-key", (c) => c.json(handlers.getVapidPublicKey(), 200))
     .post("/push/subscriptions", zValidator("json", pushSubscriptionInputSchema), (c) => {
       handlers.upsertPushSubscription(c.req.valid("json"));
 
       return c.body(null, 204);
     })
     .delete("/push/subscriptions", zValidator("json", deletePushSubscriptionInputSchema), (c) =>
-      c.json(handlers.deletePushSubscription(c.req.valid("json").endpoint)),
+      c.json(handlers.deletePushSubscription(c.req.valid("json").endpoint), 200),
     );
 }
 

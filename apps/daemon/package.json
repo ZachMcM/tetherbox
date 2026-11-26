@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsdown",
     "typecheck": "tsc -p tsconfig.json",
-    "dev": "node --watch src/main.ts serve"
+    "dev": "node scripts/dev.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-ai": "catalog:",
