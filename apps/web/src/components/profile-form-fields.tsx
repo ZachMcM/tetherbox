@@ -49,6 +49,21 @@ export function starterKindLabel(starter: StarterSummary): string {
   return starter.cli !== undefined ? "Skill + CLI" : "Skill";
 }
 
+export function StarterBadges({ starter }: { starter: StarterSummary }) {
+  return (
+    <>
+      <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
+        {starterKindLabel(starter)}
+      </Badge>
+      {starter.source === "library" && (
+        <Badge variant="secondary" className="shrink-0 px-1.5 text-[10px]">
+          Library
+        </Badge>
+      )}
+    </>
+  );
+}
+
 export function starterFieldKey(starterId: string, fieldKey: string): string {
   return `${starterId}.${fieldKey}`;
 }
@@ -533,9 +548,7 @@ export function StarterSelectionFields({
                           aria-label="Ready on this VM"
                         />
                       )}
-                      <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
-                        {starterKindLabel(starter)}
-                      </Badge>
+                      <StarterBadges starter={starter} />
                     </Field>
                   </FieldLabel>
                 );
@@ -590,9 +603,7 @@ export function StarterSetupCard({
           )}
           <StarterIcon starter={starter} />
           <span className="truncate text-sm font-semibold">{starter.name}</span>
-          <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
-            {starterKindLabel(starter)}
-          </Badge>
+          <StarterBadges starter={starter} />
         </div>
 
         {allReady ? (

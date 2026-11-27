@@ -50,7 +50,7 @@ Every profile gets the agent's built-in tools (`notify`, `web_fetch`, `check_sec
 
 `packages/starters` holds opt-in, profile-specific skills and modules (CLIs, coding harnesses, integrations). Enabling one copies it into the profile so the agent can patch it.
 
-The starter library is a git repo at `<dataDir>/library` with the same `skills/` and `modules/` layout. After each run, the daemon copies every agent-written skill or module with a valid `starter.json` from that profile into the library, skipping copies the profile has not changed since it last synced or received them. The starter picker lists built-in and library starters together, and enabling a library starter copies it into the profile.
+The starter library is a git repo at `<dataDir>/library` with the same `skills/` and `modules/` layout. After each run, the daemon copies every agent-written skill or module with a valid `starter.json` from that profile into the library, skipping copies the profile has not changed since it last synced or received them. The starter picker lists built-in and library starters together, and enabling a library starter copies it into the profile. A profile whose copy is unchanged while the library has moved on shows an update in its settings. Removing a starter from the library leaves existing copies alone, and it returns only if a profile changes its copy. Library sync state lives in `<dataDir>/library-sync.json`.
 
 ## Commands
 

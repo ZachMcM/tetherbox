@@ -122,6 +122,7 @@ export interface ProfileDetail {
   pollJobs: RegisteredPollJob[];
   reminders: ScheduledReminder[];
   issues: ProfileIssue[];
+  starterUpdates: string[];
 }
 
 export type StarterSummary = Omit<Starter, "cli"> & {

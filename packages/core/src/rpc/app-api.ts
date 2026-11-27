@@ -70,6 +70,7 @@ const secretKeyParam = z.object({ key: secretKeySchema });
 const llmProviderParam = z.object({ provider: llmProviderSchema });
 const oauthPresetParam = z.object({ preset: oauthPresetSchema });
 const starterIdParam = z.object({ starterId: z.string().min(1) });
+const profileStarterParam = z.object({ profileId: profileIdSchema, starterId: z.string().min(1) });
 
 export interface AppApiHandlers {
   getSettings(): AppSettings;
@@ -81,7 +82,9 @@ export interface AppApiHandlers {
   updateProfile(id: ProfileId, input: UpdateProfileInput): Promise<ProfileDetail>;
   updateProfileMemory(id: ProfileId, content: string): Promise<{ content: string }>;
   deleteProfile(id: ProfileId): Promise<void>;
+  updateProfileStarter(id: ProfileId, starterId: string): Promise<ProfileDetail>;
   listStarters(): StarterSummary[];
+  removeLibraryStarter(starterId: string): Promise<void>;
   listCliStatuses(): Promise<StarterCliStatusEntry[]>;
   startCliInstall(starterId: string): CliInstallJobState;
   getCliInstallJob(jobId: string): CliInstallJobState;
@@ -267,7 +270,21 @@ export function createAppApi(handlers: AppApiHandlers) {
 
       return c.json(handlers.cancelReminder(profileId, name), 200);
     })
+    .post(
+      "/profiles/:profileId/starters/:starterId/update",
+      zValidator("param", profileStarterParam),
+      async (c) => {
+        const { profileId, starterId } = c.req.valid("param");
+
+        return c.json({ profile: await handlers.updateProfileStarter(profileId, starterId) }, 200);
+      },
+    )
     .get("/starters", (c) => c.json({ starters: handlers.listStarters() }, 200))
+    .delete("/starters/:starterId", zValidator("param", starterIdParam), async (c) => {
+      await handlers.removeLibraryStarter(c.req.valid("param").starterId);
+
+      return c.body(null, 204);
+    })
     .get("/clis/status", async (c) => c.json({ clis: await handlers.listCliStatuses() }, 200))
     .post("/clis/:starterId/install", zValidator("param", starterIdParam), (c) =>
       c.json({ job: handlers.startCliInstall(c.req.valid("param").starterId) }, 200),

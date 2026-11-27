@@ -43,7 +43,7 @@ import {
   STARTER_CATEGORY_ORDER,
   StarterConfigFields,
   starterFieldKey,
-  starterKindLabel,
+  StarterBadges,
   StarterVmSetupPanels,
   useStarterSetupState,
   validateStarterFields,
@@ -177,6 +177,9 @@ function StarterCatalogRow({
   expanded,
   pendingEnable,
   busy,
+  updateAvailable,
+  updating,
+  onUpdate,
   onToggleExpand,
   onToggleSwitch,
   onSaveConfig,
@@ -192,6 +195,9 @@ function StarterCatalogRow({
   expanded: boolean;
   pendingEnable: boolean;
   busy: boolean;
+  updateAvailable: boolean;
+  updating: boolean;
+  onUpdate: () => void;
   onToggleExpand: () => void;
   onToggleSwitch: (checked: boolean) => void;
   onSaveConfig: (values: Record<string, string>) => Promise<void>;
@@ -282,12 +288,21 @@ function StarterCatalogRow({
           )}
           <StarterIcon starter={starter} />
           <span className="truncate text-sm font-medium">{starter.name}</span>
-          <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
-            {starterKindLabel(starter)}
-          </Badge>
+          <StarterBadges starter={starter} />
         </button>
 
         <div className="flex shrink-0 items-center gap-2.5">
+          {updateAvailable && (
+            <Button
+              type="button"
+              variant="outline"
+              size="xs"
+              disabled={updating}
+              onClick={onUpdate}
+            >
+              {updating ? "Updating…" : "Update"}
+            </Button>
+          )}
           {starterStatusBadge(starter, enabled, readiness, profile.config.starterConfig)}
           {enabled && hasDetailContent && (
             <Button type="button" variant="ghost" size="xs" onClick={onToggleExpand}>
@@ -482,6 +497,27 @@ export function ProfileSettingsSection({
     onSuccess: applyProfileUpdate,
   });
 
+  const [updatingStarterIds, setUpdatingStarterIds] = useState<Record<string, boolean>>({});
+
+  const updateStarterMutation = useMutation({
+    onMutate: (starter: StarterSummary) => {
+      setUpdatingStarterIds((prev) => ({ ...prev, [starter.id]: true }));
+    },
+    onSettled: (_data, _error, starter) => {
+      setUpdatingStarterIds((prev) => ({ ...prev, [starter.id]: false }));
+    },
+    mutationFn: async (starter: StarterSummary) =>
+      unwrapJson(
+        await appClient.profiles[":profileId"].starters[":starterId"].update.$post({
+          param: { profileId, starterId: starter.id },
+        }),
+      ),
+    onSuccess: (data, starter) => {
+      applyProfileUpdate(data);
+      toast.add({ type: "success", title: `Updated ${starter.name} from the library` });
+    },
+  });
+
   const clearModelOverrideMutation = useMutation({
     mutationFn: async () =>
       unwrapJson(
@@ -550,6 +586,7 @@ export function ProfileSettingsSection({
   }
 
   const enabledSet = new Set(profile.config.starters);
+  const updateSet = new Set(profile.starterUpdates);
   const enabledSummaries = starters.filter((starter) => enabledSet.has(starter.id));
   const missingInstallEntries = selectInstallEntries(
     enabledSummaries,
@@ -753,6 +790,9 @@ export function ProfileSettingsSection({
                       expanded={expandedStarters[starter.id] === true}
                       pendingEnable={pendingEnableIds[starter.id] === true}
                       busy={updateStartersMutation.isPending}
+                      updateAvailable={updateSet.has(starter.id)}
+                      updating={updatingStarterIds[starter.id] === true}
+                      onUpdate={() => updateStarterMutation.mutate(starter)}
                       onToggleExpand={() =>
                         setExpandedStarters((prev) => ({
                           ...prev,
@@ -776,6 +816,9 @@ export function ProfileSettingsSection({
         {statusError !== null && <FieldError>{statusError.message}</FieldError>}
         {updateStartersMutation.error !== null && (
           <FieldError>{updateStartersMutation.error.message}</FieldError>
+        )}
+        {updateStarterMutation.error !== null && (
+          <FieldError>{updateStarterMutation.error.message}</FieldError>
         )}
       </section>
 

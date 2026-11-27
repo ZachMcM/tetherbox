@@ -5,6 +5,7 @@ export type SettingsTab =
   | "secrets"
   | "integrations"
   | "tools"
+  | "library"
   | "profiles"
   | `profile:${string}`;
 
@@ -15,6 +16,7 @@ export const SETTINGS_NAV = [
   { tab: "secrets", label: "Secrets" },
   { tab: "integrations", label: "Integrations" },
   { tab: "tools", label: "CLI tools" },
+  { tab: "library", label: "Starter library" },
   { tab: "profiles", label: "Profiles" },
 ] as const;
 

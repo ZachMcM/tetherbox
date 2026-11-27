@@ -95,6 +95,7 @@ async function toProfileDetail(
     pollJobs: poller.list(profile.id),
     reminders: reminders.list(profile.id),
     issues: load.issues,
+    starterUpdates: await catalog.updatesFor(profile),
   };
 }
 
@@ -209,8 +210,18 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
         turns.finishProfileDeletion(id);
       }
     },
+    async updateProfileStarter(id, starterId) {
+      await catalog.updateProfileCopy({ profile: requireProfile(id), starterId });
+
+      const loaded = await reloadProfileOrThrow(id);
+
+      return toProfileDetail(loaded, poller, reminders, catalog);
+    },
     listStarters() {
       return catalog.summaries();
+    },
+    removeLibraryStarter(starterId) {
+      return catalog.remove(starterId);
     },
     listCliStatuses() {
       return clis.listStatuses();

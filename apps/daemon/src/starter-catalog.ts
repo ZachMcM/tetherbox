@@ -29,9 +29,22 @@ import { describe, loadStarterDirs, type LoadedProfile } from "./profiles.ts";
 
 const SKIPPED_NAMES = new Set([".git", "node_modules"]);
 
-const syncStateSchema = z.record(z.string(), z.record(z.string(), z.string()));
+const syncStateSchema = z.object({
+  seen: z.record(z.string(), z.record(z.string(), z.string())),
+  removed: z.array(z.string()),
+});
 
 type SyncState = z.infer<typeof syncStateSchema>;
+
+const EMPTY_SYNC_STATE: SyncState = { seen: {}, removed: [] };
+
+function withSeen(
+  state: SyncState,
+  profileId: string,
+  seen: Readonly<Record<string, string>>,
+): SyncState {
+  return { ...state, seen: { ...state.seen, [profileId]: { ...state.seen[profileId], ...seen } } };
+}
 
 type CatalogStarter = Starter & { readonly source: StarterSource };
 
@@ -85,7 +98,8 @@ export class StarterCatalog {
   readonly #stagingDir: string;
   readonly #syncStatePath: string;
   #library = new Map<string, Starter>();
-  #syncState: SyncState = {};
+  #libraryHashes = new Map<string, string>();
+  #syncState: SyncState = EMPTY_SYNC_STATE;
   #queue: Promise<void> = Promise.resolve();
 
   constructor(dataDir: string) {
@@ -118,16 +132,15 @@ export class StarterCatalog {
       return syncStateSchema.parse(JSON.parse(await readFile(this.#syncStatePath, "utf8")));
     } catch (error) {
       if (isMissing(error)) {
-        return {};
+        return EMPTY_SYNC_STATE;
       }
 
       throw error;
     }
   }
 
-  async #recordSeen(profileId: string, seen: Readonly<Record<string, string>>): Promise<void> {
-    const onDisk: SyncState = await this.#readSyncState().catch(() => ({}));
-    const merged: SyncState = { ...onDisk, [profileId]: { ...onDisk[profileId], ...seen } };
+  async #saveSyncState(update: (state: SyncState) => SyncState): Promise<void> {
+    const merged = update(await this.#readSyncState().catch(() => EMPTY_SYNC_STATE));
     const tempPath = `${this.#syncStatePath}.${process.pid}.tmp`;
 
     await writeFile(tempPath, `${JSON.stringify(merged, null, 2)}\n`);
@@ -148,11 +161,19 @@ export class StarterCatalog {
       });
 
       this.#library = new Map(loaded.map((starter) => [starter.id, starter]));
+      this.#libraryHashes = new Map();
+
+      for (const starter of loaded) {
+        this.#libraryHashes.set(
+          starter.id,
+          await hashDir(join(this.#libraryDir, starterPath(starter))),
+        );
+      }
 
       try {
         this.#syncState = await this.#readSyncState();
       } catch (error) {
-        this.#syncState = {};
+        this.#syncState = EMPTY_SYNC_STATE;
         issues.push({
           file: this.#syncStatePath,
           message: `resetting library sync state: ${describe(error)}`,
@@ -182,6 +203,7 @@ export class StarterCatalog {
     return this.#serialize(async () => {
       const issues: ProfileIssue[] = [];
       const seen: Record<string, string> = {};
+      const restored: string[] = [];
 
       for (const starter of profile.authoredStarters) {
         const source = join(profile.dir, starterPath(starter));
@@ -206,14 +228,26 @@ export class StarterCatalog {
 
         try {
           const contentHash = await hashDir(source);
+          const removed = this.#syncState.removed.includes(starter.id);
+          const seenHash = this.#syncState.seen[profile.id]?.[starter.id];
 
-          if (existing !== undefined && this.#syncState[profile.id]?.[starter.id] === contentHash) {
+          if (seenHash === undefined && existing !== undefined) {
+            seen[starter.id] = contentHash;
+            continue;
+          }
+
+          if (seenHash === contentHash && (existing !== undefined || removed)) {
             continue;
           }
 
           await this.#copyToLibrary(source, starter);
           this.#library.set(starter.id, starter);
+          this.#libraryHashes.set(starter.id, contentHash);
           seen[starter.id] = contentHash;
+
+          if (removed) {
+            restored.push(starter.id);
+          }
         } catch (error) {
           issues.push({
             file: source,
@@ -228,7 +262,10 @@ export class StarterCatalog {
 
       try {
         await commitAll(this.#libraryDir, `Sync from profile ${profile.id}`);
-        await this.#recordSeen(profile.id, seen);
+        await this.#saveSyncState((state) => ({
+          ...withSeen(state, profile.id, seen),
+          removed: state.removed.filter((id) => !restored.includes(id)),
+        }));
       } catch (error) {
         issues.push({
           file: this.#libraryDir,
@@ -306,11 +343,81 @@ export class StarterCatalog {
     }
 
     return this.#serialize(async () => {
+      await rm(destination, { recursive: true, force: true });
       await cp(join(this.#libraryDir, path), destination, {
         recursive: true,
         verbatimSymlinks: true,
       });
-      await this.#recordSeen(profileId, { [starter.id]: await hashDir(destination) });
+
+      const contentHash = await hashDir(destination);
+
+      await this.#saveSyncState((state) =>
+        withSeen(state, profileId, { [starter.id]: contentHash }),
+      );
+    });
+  }
+
+  async updatesFor(profile: LoadedProfile): Promise<string[]> {
+    const updates: string[] = [];
+
+    for (const id of this.enabledIds(profile)) {
+      const starter = this.#library.get(id);
+      const seenHash = this.#syncState.seen[profile.id]?.[id];
+
+      if (
+        starter === undefined ||
+        seenHash === undefined ||
+        seenHash === this.#libraryHashes.get(id)
+      ) {
+        continue;
+      }
+
+      try {
+        if ((await hashDir(join(profile.dir, starterPath(starter)))) === seenHash) {
+          updates.push(id);
+        }
+      } catch (error) {
+        if (!isMissing(error)) {
+          throw error;
+        }
+      }
+    }
+
+    return updates;
+  }
+
+  updateProfileCopy({
+    profile,
+    starterId,
+  }: {
+    profile: LoadedProfile;
+    starterId: string;
+  }): Promise<void> {
+    const starter = this.get(starterId);
+
+    if (starter?.source !== "library" || !this.enabledIds(profile).includes(starterId)) {
+      throw new RpcError(400, `"${starterId}" is not a library starter enabled in this profile`);
+    }
+
+    return this.copyInto({ profileId: profile.id, profileDir: profile.dir, starter });
+  }
+
+  remove(starterId: string): Promise<void> {
+    return this.#serialize(async () => {
+      const starter = this.#library.get(starterId);
+
+      if (starter === undefined) {
+        throw new RpcError(404, `"${starterId}" is not in the starter library`);
+      }
+
+      await rm(join(this.#libraryDir, starterPath(starter)), { recursive: true, force: true });
+      await commitAll(this.#libraryDir, `Remove ${starterId}`);
+      this.#library.delete(starterId);
+      this.#libraryHashes.delete(starterId);
+      await this.#saveSyncState((state) => ({
+        ...state,
+        removed: state.removed.includes(starterId) ? state.removed : [...state.removed, starterId],
+      }));
     });
   }
 

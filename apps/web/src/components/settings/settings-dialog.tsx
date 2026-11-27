@@ -7,6 +7,7 @@ import { AppearanceSection } from "./appearance-section.tsx";
 import { CliToolsSection } from "./cli-tools-section.tsx";
 import { GeneralSection } from "./general-section.tsx";
 import { IntegrationsSection } from "./integrations-section.tsx";
+import { LibrarySection } from "./library-section.tsx";
 import { ProfileSettingsSection } from "./profile-section.tsx";
 import { ProfilesSection } from "./profiles-section.tsx";
 import { ProvidersSection } from "./providers-section.tsx";
@@ -91,6 +92,7 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
           {activeTab === "secrets" && <SecretsSection />}
           {activeTab === "integrations" && <IntegrationsSection />}
           {activeTab === "tools" && <CliToolsSection />}
+          {activeTab === "library" && <LibrarySection />}
           {activeTab === "profiles" && (
             <ProfilesSection onOpenProfile={(id) => setTab(`profile:${id}`)} />
           )}
