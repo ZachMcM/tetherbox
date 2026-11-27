@@ -1,5 +1,5 @@
 export * from "./api/app/client.ts";
-export * from "./api/app/routes.ts";
+export * from "./api/app/routes/index.ts";
 export * from "./api/app/schemas.ts";
 export * from "./api/errors.ts";
 export * from "./auth-request.ts";

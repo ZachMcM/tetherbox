@@ -2,7 +2,7 @@ import { chmod, mkdir, rm } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createAdaptorServer } from "@hono/node-server";
 import { createInternalApi } from "@tetherbox/core";
-import { createInternalHandlers, type InternalHandlerDeps } from "./handlers.ts";
+import { createInternalHandlers, type InternalHandlerDeps } from "./handlers/index.ts";
 
 export interface InternalServerDeps extends InternalHandlerDeps {
   socketPath: string;

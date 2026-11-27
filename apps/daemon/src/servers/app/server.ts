@@ -4,7 +4,7 @@ import { createAppApi } from "@tetherbox/core";
 import { Hono } from "hono";
 import { createAuthRoutes, requireAppToken } from "./auth.ts";
 import { createEventStreamHandler } from "./event-stream.ts";
-import { createAppHandlers, type AppHandlerDeps } from "./handlers.ts";
+import { createAppHandlers, type AppHandlerDeps } from "./handlers/index.ts";
 import { createOAuthCallbackHandler } from "./oauth-callback.ts";
 
 export interface AppServerDeps extends AppHandlerDeps {

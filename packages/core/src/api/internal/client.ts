@@ -1,6 +1,6 @@
 import { hc } from "hono/client";
 import { Agent, fetch as undiciFetch } from "undici";
-import type { InternalApi } from "./routes.ts";
+import type { InternalApi } from "./routes/index.ts";
 import { RUN_TOKEN_HEADER, SECRET_KEY_HEADER } from "../headers.ts";
 
 const SOCKET_ORIGIN = "http://tetherbox";

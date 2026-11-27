@@ -1,14 +1,14 @@
 import { Hono } from "hono";
-import { RpcError } from "../errors.ts";
-import { createCliRoutes, type CliHandlers } from "./routes/clis.ts";
-import { createLlmRoutes, type LlmHandlers } from "./routes/llm.ts";
-import { createOAuthRoutes, type OAuthHandlers } from "./routes/oauth.ts";
-import { createProfileRoutes, type ProfileHandlers } from "./routes/profiles.ts";
-import { createPushRoutes, type PushHandlers } from "./routes/push.ts";
-import { createSecretRoutes, type SecretHandlers } from "./routes/secrets.ts";
-import { createSessionRoutes, type SessionHandlers } from "./routes/sessions.ts";
-import { createSettingsRoutes, type SettingsHandlers } from "./routes/settings.ts";
-import { createStarterRoutes, type StarterHandlers } from "./routes/starters.ts";
+import { RpcError } from "../../errors.ts";
+import { createCliRoutes, type CliHandlers } from "./clis.ts";
+import { createLlmRoutes, type LlmHandlers } from "./llm.ts";
+import { createOAuthRoutes, type OAuthHandlers } from "./oauth.ts";
+import { createProfileRoutes, type ProfileHandlers } from "./profiles.ts";
+import { createPushRoutes, type PushHandlers } from "./push.ts";
+import { createSecretRoutes, type SecretHandlers } from "./secrets.ts";
+import { createSessionRoutes, type SessionHandlers } from "./sessions.ts";
+import { createSettingsRoutes, type SettingsHandlers } from "./settings.ts";
+import { createStarterRoutes, type StarterHandlers } from "./starters.ts";
 
 export type {
   CliHandlers,

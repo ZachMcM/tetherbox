@@ -1,5 +1,5 @@
 import { hc } from "hono/client";
-import type { AppApi } from "./routes.ts";
+import type { AppApi } from "./routes/index.ts";
 
 export interface AppClientOptions {
   baseUrl?: string;
