@@ -143,9 +143,10 @@ export async function updateProfileOnDisk(
   const nextStarterIds = input.starters ?? current.starters;
   const resolvedStarters = resolveStartersOrThrow(nextStarterIds);
   const nextStarterSet = new Set(resolvedStarters.map((starter) => starter.id));
+  const nextModel = input.model === null ? undefined : (input.model ?? current.model);
   const updated = profileConfigSchema.parse({
     name: input.name ?? current.name,
-    model: input.model ?? current.model,
+    model: nextModel,
     starters: resolvedStarters.map((starter) => starter.id),
     starterConfig: input.starterConfig ?? current.starterConfig,
   });
@@ -193,5 +194,9 @@ export function listStarterSummaries(): StarterSummary[] {
     ...("oauthPreset" in starter && starter.oauthPreset !== undefined
       ? { oauthPreset: starter.oauthPreset }
       : {}),
+    ...("cli" in starter
+      ? { cli: { binary: starter.cli.binary, hasAuth: "auth" in starter.cli } }
+      : {}),
+    ...("setupNote" in starter ? { setupNote: starter.setupNote } : {}),
   }));
 }

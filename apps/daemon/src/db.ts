@@ -2,11 +2,14 @@ import { chmodSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
+  modelRefSchema,
   profileIdSchema,
   registeredPollJobSchema,
   scheduledReminderSchema,
   sessionRecordSchema,
+  type AppSettings,
   type EntryName,
+  type ModelRef,
   type ProfileId,
   type PushSubscriptionRecord,
   type RegisteredPollJob,
@@ -15,6 +18,7 @@ import {
   type SessionRecord,
   type SessionStatus,
   type SessionTriggerKind,
+  type UpdateAppSettingsInput,
 } from "@tetherbox/core";
 import { z } from "zod";
 
@@ -26,11 +30,17 @@ const sessionRowSchema = z.object({
   title: z.string(),
   trigger_kind: z.string(),
   status: z.string(),
+  model_json: z.string().nullable(),
   created_at: z.string(),
   updated_at: z.string(),
   last_read_at: z.string().nullable(),
   unread_alert: z.number().int(),
   error_message: z.string().nullable(),
+});
+
+const appSettingRowSchema = z.object({
+  key: z.string(),
+  value_json: z.string(),
 });
 
 const pollJobRowSchema = z.object({
@@ -94,7 +104,40 @@ const MIGRATIONS: readonly string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  `
+  CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,
+    value_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  );
+
+  ALTER TABLE sessions ADD COLUMN model_json TEXT;
+  `,
 ];
+
+function parseJsonColumn<T>({
+  column,
+  schema,
+  raw,
+  fallback,
+}: {
+  column: string;
+  schema: z.ZodType<T>;
+  raw: string | null | undefined;
+  fallback: T;
+}): T {
+  if (raw === null || raw === undefined) {
+    return fallback;
+  }
+
+  try {
+    return schema.parse(JSON.parse(raw));
+  } catch (error) {
+    console.error(`ignoring unreadable stored ${column}`, error);
+
+    return fallback;
+  }
+}
 
 function mapSessionRow(raw: unknown): SessionRecord {
   const row = sessionRowSchema.parse(raw);
@@ -105,6 +148,12 @@ function mapSessionRow(raw: unknown): SessionRecord {
     title: row.title,
     triggerKind: row.trigger_kind,
     status: row.status,
+    model: parseJsonColumn({
+      column: "sessions.model_json",
+      schema: modelRefSchema.nullable(),
+      raw: row.model_json,
+      fallback: null,
+    }),
     createdAt: row.created_at,
     updatedAt: row.updated_at,
     lastReadAt: row.last_read_at,
@@ -195,20 +244,73 @@ export class DaemonDb {
     return Number(result.changes);
   }
 
+  getAppSettings(): AppSettings {
+    const rows = this.#db
+      .prepare("SELECT key, value_json FROM app_settings")
+      .all()
+      .map((raw) => appSettingRowSchema.parse(raw));
+    const map = new Map(rows.map((row) => [row.key, row.value_json]));
+
+    const defaultModel = parseJsonColumn({
+      column: "app_settings.default_model",
+      schema: modelRefSchema.nullable(),
+      raw: map.get("default_model"),
+      fallback: null,
+    });
+    const onboardingCompleted = parseJsonColumn({
+      column: "app_settings.onboarding_completed",
+      schema: z.boolean(),
+      raw: map.get("onboarding_completed"),
+      fallback: false,
+    });
+
+    return { defaultModel, onboardingCompleted };
+  }
+
+  updateAppSettings(input: UpdateAppSettingsInput): AppSettings {
+    const now = new Date().toISOString();
+    const upsert = this.#db.prepare(
+      `INSERT INTO app_settings (key, value_json, updated_at)
+       VALUES (?, ?, ?)
+       ON CONFLICT (key) DO UPDATE SET
+         value_json = excluded.value_json,
+         updated_at = excluded.updated_at`,
+    );
+
+    if (input.defaultModel !== undefined) {
+      upsert.run("default_model", JSON.stringify(input.defaultModel), now);
+    }
+
+    if (input.onboardingCompleted !== undefined) {
+      upsert.run("onboarding_completed", JSON.stringify(input.onboardingCompleted), now);
+    }
+
+    return this.getAppSettings();
+  }
+
   createSession(input: {
     id: SessionId;
     profileId: ProfileId;
     title: string;
     triggerKind: SessionTriggerKind;
+    model: ModelRef | null;
   }): SessionRecord {
     const now = new Date().toISOString();
 
     this.#db
       .prepare(
-        `INSERT INTO sessions (id, profile_id, title, trigger_kind, status, created_at, updated_at, last_read_at, unread_alert, error_message)
-         VALUES (?, ?, ?, ?, 'idle', ?, ?, NULL, 0, NULL)`,
+        `INSERT INTO sessions (id, profile_id, title, trigger_kind, status, model_json, created_at, updated_at, last_read_at, unread_alert, error_message)
+         VALUES (?, ?, ?, ?, 'idle', ?, ?, ?, NULL, 0, NULL)`,
       )
-      .run(input.id, input.profileId, input.title, input.triggerKind, now, now);
+      .run(
+        input.id,
+        input.profileId,
+        input.title,
+        input.triggerKind,
+        input.model === null ? null : JSON.stringify(input.model),
+        now,
+        now,
+      );
 
     return {
       id: input.id,
@@ -216,6 +318,7 @@ export class DaemonDb {
       title: input.title,
       triggerKind: input.triggerKind,
       status: "idle",
+      model: input.model,
       createdAt: now,
       updatedAt: now,
       lastReadAt: null,
@@ -258,6 +361,14 @@ export class DaemonDb {
     const row = this.#db
       .prepare("UPDATE sessions SET title = ? WHERE id = ? RETURNING *")
       .get(title, id);
+
+    return row === undefined ? undefined : mapSessionRow(row);
+  }
+
+  updateSessionModel(id: SessionId, model: ModelRef | null): SessionRecord | undefined {
+    const row = this.#db
+      .prepare("UPDATE sessions SET model_json = ? WHERE id = ? RETURNING *")
+      .get(model === null ? null : JSON.stringify(model), id);
 
     return row === undefined ? undefined : mapSessionRow(row);
   }

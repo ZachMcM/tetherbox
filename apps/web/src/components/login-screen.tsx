@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { KeyRoundIcon } from "lucide-react";
+import { useRouter } from "@tanstack/react-router";
 import { Button } from "@tetherbox/ui/components/button";
 import {
   Card,
@@ -15,13 +15,15 @@ import { loginWithToken, queryKeys } from "../lib/api.ts";
 
 export function LoginScreen() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [token, setToken] = useState("");
 
   const mutation = useMutation({
     mutationFn: loginWithToken,
-    onSuccess: () => {
+    onSuccess: async () => {
       setToken("");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.auth });
+      await queryClient.invalidateQueries({ queryKey: queryKeys.auth });
+      await router.invalidate();
     },
   });
 
@@ -39,9 +41,6 @@ export function LoginScreen() {
     <div className="flex min-h-svh items-center justify-center bg-background p-4">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <div className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary text-primary-foreground">
-            <KeyRoundIcon className="size-4" />
-          </div>
           <CardTitle>Sign in to Tetherbox</CardTitle>
           <CardDescription>Enter the daemon app token to unlock this browser.</CardDescription>
         </CardHeader>

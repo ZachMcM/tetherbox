@@ -31,7 +31,7 @@ export type CreateProfileInput = z.infer<typeof createProfileInputSchema>;
 
 export const updateProfileInputSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  model: modelRefSchema.optional(),
+  model: modelRefSchema.nullable().optional(),
   starters: z.array(z.string().min(1)).optional(),
   starterConfig: starterConfigSchema.optional(),
 });
@@ -45,19 +45,34 @@ export type UpdateMemoryInput = z.infer<typeof updateMemoryInputSchema>;
 export const createSessionInputSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   prompt: z.string().trim().min(1).optional(),
+  model: modelRefSchema.optional(),
 });
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
 
 export const sendSessionMessageInputSchema = z.object({
   text: z.string().trim().min(1),
+  model: modelRefSchema.optional(),
 });
 export type SendSessionMessageInput = z.infer<typeof sendSessionMessageInputSchema>;
 
 export const updateSessionInputSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   markRead: z.boolean().optional(),
+  model: modelRefSchema.nullable().optional(),
 });
 export type UpdateSessionInput = z.infer<typeof updateSessionInputSchema>;
+
+export const appSettingsSchema = z.object({
+  defaultModel: modelRefSchema.nullable(),
+  onboardingCompleted: z.boolean(),
+});
+export type AppSettings = z.infer<typeof appSettingsSchema>;
+
+export const updateAppSettingsInputSchema = z.object({
+  defaultModel: modelRefSchema.nullable().optional(),
+  onboardingCompleted: z.boolean().optional(),
+});
+export type UpdateAppSettingsInput = z.infer<typeof updateAppSettingsInputSchema>;
 
 export const setSecretInputSchema = z.object({
   value: z.string().trim().min(1),
@@ -117,6 +132,11 @@ export interface StarterSummary {
   configFields: readonly StarterConfigField[];
   secrets: readonly StarterSecret[];
   oauthPreset?: OAuthPresetId;
+  cli?: {
+    binary: string;
+    hasAuth: boolean;
+  };
+  setupNote?: string;
 }
 
 export interface LlmProviderStatus {
@@ -125,6 +145,15 @@ export interface LlmProviderStatus {
   hasApiKey: boolean;
   oauthLabel?: string;
   oauthExpires?: string;
+}
+
+export interface LlmModelOption {
+  provider: LlmProvider;
+  auth: LlmAuthKind;
+  id: string;
+  name: string;
+  reasoning: boolean;
+  contextWindow: number;
 }
 
 export type OAuthPresetSummary = Pick<

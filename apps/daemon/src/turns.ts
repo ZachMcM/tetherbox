@@ -41,6 +41,7 @@ interface ActiveRun {
   context: RunContext;
   runToken: string;
   controller: AbortController;
+  model: ModelRef;
 }
 
 export interface TurnRunnerDeps {
@@ -91,7 +92,13 @@ export class TurnRunner {
     this.#deps = deps;
   }
 
-  enqueue(profileId: ProfileId, trigger: TurnTrigger, existingSessionId?: SessionId): SessionId {
+  enqueue(
+    profileId: ProfileId,
+    trigger: TurnTrigger,
+    options: { sessionId?: SessionId | undefined; model?: ModelRef | undefined } = {},
+  ): SessionId {
+    const { sessionId: existingSessionId, model } = options;
+
     if (this.#closing || this.#deletingProfiles.has(profileId)) {
       throw new RpcError(409, `profile "${profileId}" is not accepting turns`);
     }
@@ -116,9 +123,16 @@ export class TurnRunner {
         profileId,
         title: deriveSessionTitle(trigger),
         triggerKind: trigger.kind,
+        model: model ?? null,
       });
 
       this.#deps.events.emit({ kind: "session_updated", session: created });
+    } else if (model !== undefined) {
+      const updated = this.#deps.db.updateSessionModel(sessionId, model);
+
+      if (updated !== undefined) {
+        this.#deps.events.emit({ kind: "session_updated", session: updated });
+      }
     }
 
     const previous = this.#queues.get(sessionId) ?? Promise.resolve();
@@ -128,7 +142,7 @@ export class TurnRunner {
           return;
         }
 
-        await this.#run(profileId, sessionId, trigger);
+        await this.#run(profileId, sessionId, trigger, model);
       })
       .catch((error: unknown) => {
         console.error(`turn for profile ${profileId} session ${sessionId} failed`, error);
@@ -208,6 +222,10 @@ export class TurnRunner {
     return this.#runsByToken.get(token)?.context;
   }
 
+  resolveRunModel(runId: RunId): ModelRef | undefined {
+    return this.#runsById.get(runId)?.model;
+  }
+
   notify(context: RunContext, input: NotifyInput): void {
     const run = this.#active(context);
 
@@ -281,12 +299,51 @@ export class TurnRunner {
     }
   }
 
-  async #run(profileId: ProfileId, sessionId: SessionId, trigger: TurnTrigger): Promise<void> {
+  #resolveModel(sessionId: SessionId, profileModel: ModelRef | undefined): ModelRef | undefined {
+    return (
+      this.#deps.db.getSession(sessionId)?.model ??
+      profileModel ??
+      this.#deps.db.getAppSettings().defaultModel ??
+      undefined
+    );
+  }
+
+  async #run(
+    profileId: ProfileId,
+    sessionId: SessionId,
+    trigger: TurnTrigger,
+    requestedModel: ModelRef | undefined,
+  ): Promise<void> {
     const { config, registry, events } = this.#deps;
     const profile = registry.get(profileId);
 
     if (profile === undefined) {
       this.#setSessionStatus(sessionId, "error", `Profile "${profileId}" is not loaded.`);
+
+      return;
+    }
+
+    let model: ModelRef | undefined;
+
+    try {
+      model = requestedModel ?? this.#resolveModel(sessionId, profile.config.model);
+    } catch (error) {
+      console.error(`could not resolve the model for session ${sessionId}`, error);
+      this.#setSessionStatus(
+        sessionId,
+        "error",
+        "Could not read this session's model settings. Check the daemon logs.",
+      );
+
+      return;
+    }
+
+    if (model === undefined) {
+      this.#setSessionStatus(
+        sessionId,
+        "error",
+        "No model selected and no default model configured. Configure a provider and default model in Settings.",
+      );
 
       return;
     }
@@ -298,6 +355,7 @@ export class TurnRunner {
       context: { runId, profileId, sessionId },
       runToken,
       controller,
+      model,
     };
 
     // Register before any await so abort/cancelSession sees the run during auth and mkdir.
@@ -308,7 +366,6 @@ export class TurnRunner {
     let finishError: string | null = null;
 
     try {
-      const { model } = profile.config;
       let modelAuth: TurnModelAuth | undefined;
 
       try {
@@ -391,8 +448,11 @@ export class TurnRunner {
         this.#activeBySession.delete(sessionId);
       }
 
-      if (started && !this.#deletedSessions.has(sessionId)) {
+      if (started || finishStatus === "error") {
         this.#setSessionStatus(sessionId, finishStatus, finishError);
+      }
+
+      if (started && !this.#deletedSessions.has(sessionId)) {
         events.emit({
           kind: "turn_finished",
           profileId,

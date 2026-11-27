@@ -13,12 +13,15 @@ export const appClient = createAppClient();
 
 export const queryKeys = {
   auth: ["auth"] as const,
+  settings: ["settings"] as const,
   profiles: ["profiles"] as const,
   profile: (profileId: string) => ["profiles", profileId] as const,
+  starters: ["starters"] as const,
   sessions: ["sessions"] as const,
   session: (sessionId: string) => ["sessions", sessionId] as const,
   secrets: ["secrets"] as const,
   llmStatus: ["llm", "status"] as const,
+  llmModels: ["llm", "models"] as const,
   oauthStatus: ["oauth", "status"] as const,
 };
 

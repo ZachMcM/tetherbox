@@ -15,6 +15,7 @@ import {
   createInternalClient,
   createSecretProxyFetch,
   profileLayout,
+  resolveWebSearchMode,
   RUN_TOKEN_HEADER,
   type TurnInput,
   type TurnStreamEvent,
@@ -23,7 +24,7 @@ import { startLlmForwarder } from "./llm-forwarder.ts";
 import { loadProfileModules } from "./modules.ts";
 import { formatTrigger, loadSystemPromptAppendix, readProfileConfig } from "./prompt.ts";
 import { createBuiltinTools } from "./tools.ts";
-import { createWebSearchExtension, resolveWebSearchMode } from "./web-search.ts";
+import { createWebSearchExtension } from "./web-search.ts";
 
 const builtinSkillsDir = fileURLToPath(new URL("../skills", import.meta.url));
 const PLACEHOLDER_OAUTH_LIFETIME_MS = 365 * 24 * 60 * 60 * 1000;

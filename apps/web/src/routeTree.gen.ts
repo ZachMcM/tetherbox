@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OnboardingRouteImport } from './routes/onboarding'
 import { Route as ProfilesProfileIdRouteImport } from './routes/profiles/$profileId'
 import { Route as SessionsSessionIdRouteImport } from './routes/sessions/$sessionId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const OnboardingRoute = OnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ProfilesProfileIdRoute = ProfilesProfileIdRouteImport.update({
@@ -31,30 +37,40 @@ const SessionsSessionIdRoute = SessionsSessionIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/onboarding': typeof OnboardingRoute
   '/profiles/$profileId': typeof ProfilesProfileIdRoute
   '/sessions/$sessionId': typeof SessionsSessionIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/onboarding': typeof OnboardingRoute
   '/profiles/$profileId': typeof ProfilesProfileIdRoute
   '/sessions/$sessionId': typeof SessionsSessionIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/onboarding': typeof OnboardingRoute
   '/profiles/$profileId': typeof ProfilesProfileIdRoute
   '/sessions/$sessionId': typeof SessionsSessionIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/profiles/$profileId' | '/sessions/$sessionId'
+  fullPaths:
+    '/' | '/onboarding' | '/profiles/$profileId' | '/sessions/$sessionId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/profiles/$profileId' | '/sessions/$sessionId'
-  id: '__root__' | '/' | '/profiles/$profileId' | '/sessions/$sessionId'
+  to: '/' | '/onboarding' | '/profiles/$profileId' | '/sessions/$sessionId'
+  id:
+    | '__root__'
+    | '/'
+    | '/onboarding'
+    | '/profiles/$profileId'
+    | '/sessions/$sessionId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  OnboardingRoute: typeof OnboardingRoute
   ProfilesProfileIdRoute: typeof ProfilesProfileIdRoute
   SessionsSessionIdRoute: typeof SessionsSessionIdRoute
 }
@@ -66,6 +82,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/onboarding': {
+      id: '/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof OnboardingRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/profiles/$profileId': {
@@ -87,6 +110,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  OnboardingRoute: OnboardingRoute,
   ProfilesProfileIdRoute: ProfilesProfileIdRoute,
   SessionsSessionIdRoute: SessionsSessionIdRoute,
 }

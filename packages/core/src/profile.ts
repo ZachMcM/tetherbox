@@ -97,7 +97,7 @@ export const starterConfigFlagsSchema = z
 
 export const profileConfigSchema = z.object({
   name: z.string().min(1),
-  model: modelRefSchema,
+  model: modelRefSchema.optional(),
   starters: z.array(z.string().min(1)).default([]),
   starterConfig: starterConfigSchema.default({}),
 });

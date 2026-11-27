@@ -1,28 +1,39 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import type { ModelRef } from "@tetherbox/core/app";
 import { Trash2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
 import { Spinner } from "@tetherbox/ui/components/spinner";
+import { resolveAvailableModel } from "../../components/model-picker.tsx";
 import { SessionComposer } from "../../components/session-composer.tsx";
 import { SessionTranscript } from "../../components/session-transcript.tsx";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
 import { useLiveTurn } from "../../lib/live-store.ts";
+import {
+  appSettingsQueryOptions,
+  llmModelsQueryOptions,
+  profilesQueryOptions,
+} from "../../lib/queries.ts";
 import { buildDisplayItems } from "../../lib/transcript.ts";
 
 function SessionView({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const liveTurn = useLiveTurn(sessionId);
+  const [chosenModel, setChosenModel] = useState<ModelRef | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: queryKeys.session(sessionId),
     queryFn: async () =>
       unwrapJson(await appClient.sessions[":sessionId"].$get({ param: { sessionId } })),
   });
+  const profilesQuery = useQuery(profilesQueryOptions);
+  const settingsQuery = useQuery(appSettingsQueryOptions);
+  const modelsQuery = useQuery(llmModelsQueryOptions);
 
   const markReadMutation = useMutation({
     mutationFn: async (id: string) =>
@@ -34,12 +45,28 @@ function SessionView({ sessionId }: { sessionId: string }) {
       ),
   });
 
+  const updateModelMutation = useMutation({
+    mutationFn: async (model: ModelRef) =>
+      unwrapJson(
+        await appClient.sessions[":sessionId"].$patch({
+          param: { sessionId },
+          json: { model },
+        }),
+      ),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.session(sessionId), (previous: typeof sessionQuery.data) =>
+        previous === undefined ? previous : { ...previous, session: data.session },
+      );
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
+    },
+  });
+
   const sendMutation = useMutation({
-    mutationFn: async (text: string) =>
+    mutationFn: async ({ text, model }: { text: string; model: ModelRef }) =>
       unwrapJson(
         await appClient.sessions[":sessionId"].messages.$post({
           param: { sessionId },
-          json: { text },
+          json: { text, model },
         }),
       ),
   });
@@ -98,8 +125,21 @@ function SessionView({ sessionId }: { sessionId: string }) {
     );
   }
 
+  const profile = profilesQuery.data?.profiles.find((entry) => entry.id === session.profileId);
+  const models = modelsQuery.data?.models ?? [];
+  const activeModel = resolveAvailableModel(models, [
+    chosenModel,
+    session.model,
+    profile?.config.model,
+    settingsQuery.data?.defaultModel,
+  ]);
+
   const running = session.status === "running" || liveTurn !== undefined;
-  const composerError = sendMutation.error?.message ?? abortMutation.error?.message ?? null;
+  const composerError =
+    sendMutation.error?.message ??
+    abortMutation.error?.message ??
+    updateModelMutation.error?.message ??
+    null;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -142,8 +182,22 @@ function SessionView({ sessionId }: { sessionId: string }) {
         disabled={sendMutation.isPending}
         aborting={abortMutation.isPending}
         error={composerError}
+        models={models}
+        model={activeModel}
+        onModelChange={(model) => {
+          setChosenModel(model);
+          updateModelMutation.mutate(model);
+        }}
+        onConfigureProviders={() =>
+          void navigate({
+            to: ".",
+            search: (prev) => ({ ...prev, settings: "providers" }),
+          })
+        }
         onSend={async (text) => {
-          await sendMutation.mutateAsync(text);
+          if (activeModel !== null) {
+            await sendMutation.mutateAsync({ text, model: activeModel });
+          }
         }}
         onAbort={() => abortMutation.mutate()}
       />

@@ -148,7 +148,7 @@ function ProfileGroup({
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
                       <DropdownMenuItem
-                        variant="destructive"
+                        variant="destructive-outline"
                         onClick={() => onDeleteSession(session.id)}
                       >
                         <Trash2Icon className="size-3.5" />

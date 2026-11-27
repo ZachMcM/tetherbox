@@ -35,11 +35,14 @@ import {
   sendSessionMessageInputSchema,
   setSecretInputSchema,
   startPresetOAuthInputSchema,
+  updateAppSettingsInputSchema,
   updateMemoryInputSchema,
   updateProfileInputSchema,
   updateSessionInputSchema,
+  type AppSettings,
   type CreateProfileInput,
   type CreateSessionInput,
+  type LlmModelOption,
   type LlmOAuthFlowState,
   type LlmProviderStatus,
   type OAuthPresetSummary,
@@ -48,7 +51,9 @@ import {
   type SetSecretInput,
   type StarterSummary,
   type StartPresetOAuthInput,
+  type UpdateAppSettingsInput,
   type UpdateProfileInput,
+  type SendSessionMessageInput,
   type UpdateSessionInput,
 } from "./app-schemas.ts";
 
@@ -62,6 +67,9 @@ const llmProviderParam = z.object({ provider: llmProviderSchema });
 const oauthPresetParam = z.object({ preset: oauthPresetSchema });
 
 export interface AppApiHandlers {
+  getSettings(): AppSettings;
+  updateSettings(input: UpdateAppSettingsInput): AppSettings;
+
   listProfiles(): Promise<ProfileSummary[]> | ProfileSummary[];
   getProfile(id: ProfileId): Promise<ProfileDetail>;
   createProfile(input: CreateProfileInput): Promise<ProfileDetail>;
@@ -75,7 +83,10 @@ export interface AppApiHandlers {
   listSessions(profileId?: ProfileId): SessionRecord[];
   createSession(profileId: ProfileId, input: CreateSessionInput): SessionRecord;
   getSession(sessionId: SessionId): Promise<{ session: SessionRecord; entries: TranscriptEntry[] }>;
-  sendSessionMessage(sessionId: SessionId, text: string): { accepted: true; sessionId: SessionId };
+  sendSessionMessage(
+    sessionId: SessionId,
+    input: SendSessionMessageInput,
+  ): { accepted: true; sessionId: SessionId };
   abortSession(sessionId: SessionId): { aborted: boolean };
   updateSession(sessionId: SessionId, input: UpdateSessionInput): SessionRecord;
   deleteSession(sessionId: SessionId): Promise<void>;
@@ -88,7 +99,8 @@ export interface AppApiHandlers {
     providers: LlmProviderStatus[];
     oauthLogins: LlmOAuthStatusEntry[];
   }>;
-  startLlmOAuth(provider: LlmProvider): Promise<LlmOAuthFlowState>;
+  listLlmModels(): Promise<{ models: LlmModelOption[] }>;
+  startLlmOAuth(provider: LlmProvider, origin: string): Promise<LlmOAuthFlowState>;
   getLlmOAuthFlow(flowId: string): LlmOAuthFlowState;
   respondLlmOAuthFlow(flowId: string, value: string): LlmOAuthFlowState;
   cancelLlmOAuthFlow(flowId: string): { cancelled: boolean };
@@ -187,6 +199,10 @@ export function createAppApi(handlers: AppApiHandlers) {
         500,
       );
     })
+    .get("/settings", (c) => c.json(handlers.getSettings(), 200))
+    .patch("/settings", zValidator("json", updateAppSettingsInputSchema), (c) =>
+      c.json(handlers.updateSettings(c.req.valid("json")), 200),
+    )
     .get("/profiles", async (c) => c.json({ profiles: await handlers.listProfiles() }, 200))
     .post("/profiles", zValidator("json", createProfileInputSchema), async (c) =>
       c.json({ profile: await handlers.createProfile(c.req.valid("json")) }, 201),
@@ -264,7 +280,7 @@ export function createAppApi(handlers: AppApiHandlers) {
       zValidator("json", sendSessionMessageInputSchema),
       (c) =>
         c.json(
-          handlers.sendSessionMessage(c.req.valid("param").sessionId, c.req.valid("json").text),
+          handlers.sendSessionMessage(c.req.valid("param").sessionId, c.req.valid("json")),
           202,
         ),
     )
@@ -307,8 +323,17 @@ export function createAppApi(handlers: AppApiHandlers) {
       return c.body(null, 204);
     })
     .get("/llm/status", async (c) => c.json(await handlers.getLlmStatus(), 200))
+    .get("/llm/models", async (c) => c.json(await handlers.listLlmModels(), 200))
     .post("/llm/oauth/:provider/start", zValidator("param", llmProviderParam), async (c) =>
-      c.json({ flow: await handlers.startLlmOAuth(c.req.valid("param").provider) }, 200),
+      c.json(
+        {
+          flow: await handlers.startLlmOAuth(
+            c.req.valid("param").provider,
+            requestOrigin(c.req.url, c.req.raw.headers),
+          ),
+        },
+        200,
+      ),
     )
     .get("/llm/oauth/flows/:flowId", (c) =>
       c.json({ flow: handlers.getLlmOAuthFlow(c.req.param("flowId")) }, 200),

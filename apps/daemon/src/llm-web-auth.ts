@@ -12,7 +12,61 @@ import type { LlmOAuth } from "./llm-oauth.ts";
 
 const FLOW_ACTIVE_TIMEOUT_MS = 5 * 60_000;
 const FLOW_TTL_MS = 10 * 60_000;
-const INITIAL_WAIT_MS = 150;
+const INITIAL_WAIT_MS = 3_000;
+const MANUAL_PROMPT_FALLBACK_MS = 15_000;
+
+const PREFERRED_LOGIN_METHOD: Readonly<
+  Partial<Record<LlmProvider, { readonly local: string; readonly remote: string }>>
+> = {
+  anthropic: { local: "browser", remote: "copy_code" },
+  "openai-codex": { local: "browser", remote: "device_code" },
+};
+
+function isLoopbackOrigin(origin: string): boolean {
+  const parsed = URL.parse(origin);
+
+  if (parsed === null) {
+    return false;
+  }
+
+  const host = parsed.hostname;
+
+  return host === "localhost" || host === "127.0.0.1" || host === "[::1]";
+}
+
+function isInitialReady(state: LlmOAuthFlowState): boolean {
+  if (state.status !== "pending") {
+    return true;
+  }
+
+  return state.events.some((event) => event.kind === "auth_url" || event.kind === "device_code");
+}
+
+function autoAnswerPrompt(
+  provider: LlmProvider,
+  prompt: AuthPrompt,
+  isLocal: boolean,
+): string | undefined {
+  if (prompt.type === "select") {
+    const methods = PREFERRED_LOGIN_METHOD[provider];
+
+    if (methods === undefined) {
+      return undefined;
+    }
+
+    const preferred = isLocal ? methods.local : methods.remote;
+
+    return prompt.options.some((option) => option.id === preferred)
+      ? preferred
+      : prompt.options[0]?.id;
+  }
+
+  if (provider === "github-copilot" && prompt.type === "text") {
+    return "";
+  }
+
+  return undefined;
+}
 
 interface ActiveFlow {
   state: LlmOAuthFlowState;
@@ -95,13 +149,14 @@ export class LlmWebAuthManager {
     this.#llmOAuth = llmOAuth;
   }
 
-  async start(provider: LlmProvider): Promise<LlmOAuthFlowState> {
+  async start(provider: LlmProvider, origin: string): Promise<LlmOAuthFlowState> {
     this.#prune();
 
     if (getLlmOAuthProvider(provider) === undefined) {
       throw new RpcError(400, `provider "${provider}" does not support OAuth login`);
     }
 
+    const isLocal = isLoopbackOrigin(origin);
     const id = randomUUID();
     const controller = new AbortController();
     const timeout = setTimeout(() => {
@@ -123,8 +178,10 @@ export class LlmWebAuthManager {
     this.#flows.set(id, flow);
 
     const notifyActivity = () => {
-      flow.onActivity?.();
-      flow.onActivity = undefined;
+      if (isInitialReady(flow.state)) {
+        flow.onActivity?.();
+        flow.onActivity = undefined;
+      }
     };
 
     const interaction: ProviderAuthInteraction = {
@@ -139,33 +196,54 @@ export class LlmWebAuthManager {
           ...(prompt.signal ? [prompt.signal] : []),
         ]);
 
-        return new Promise<string>((resolve, reject) => {
-          if (signal.aborted) {
-            reject(new Error("Login cancelled"));
+        if (signal.aborted) {
+          return Promise.reject(new Error("Login cancelled"));
+        }
 
-            return;
-          }
+        const autoAnswer = autoAnswerPrompt(provider, prompt, isLocal);
+
+        if (autoAnswer !== undefined) {
+          return Promise.resolve(autoAnswer);
+        }
+
+        const deferManualPrompt =
+          isLocal &&
+          prompt.type === "manual_code" &&
+          flow.state.events.some((event) => event.kind === "auth_url");
+
+        return new Promise<string>((resolve, reject) => {
+          let revealTimer: ReturnType<typeof setTimeout> | undefined;
 
           const onAbort = () => {
+            clearTimeout(revealTimer);
             flow.resolvePendingPrompt = undefined;
             reject(new Error("Login cancelled"));
           };
 
-          signal.addEventListener("abort", onAbort, { once: true });
-          flow.state = {
-            id: flow.state.id,
-            provider: flow.state.provider,
-            events: flow.state.events,
-            status: "waiting_input",
-            prompt: mapAuthPrompt(prompt),
-            error: null,
-          };
-          flow.resolvePendingPrompt = (value) => {
-            signal.removeEventListener("abort", onAbort);
-            resolve(value);
+          const reveal = () => {
+            flow.state = {
+              id: flow.state.id,
+              provider: flow.state.provider,
+              events: flow.state.events,
+              status: "waiting_input",
+              prompt: mapAuthPrompt(prompt),
+              error: null,
+            };
+            flow.resolvePendingPrompt = (value) => {
+              signal.removeEventListener("abort", onAbort);
+              resolve(value);
+            };
+
+            notifyActivity();
           };
 
-          notifyActivity();
+          signal.addEventListener("abort", onAbort, { once: true });
+
+          if (deferManualPrompt) {
+            revealTimer = setTimeout(reveal, MANUAL_PROMPT_FALLBACK_MS);
+          } else {
+            reveal();
+          }
         });
       },
     };
@@ -219,7 +297,7 @@ export class LlmWebAuthManager {
       });
 
     await new Promise<void>((resolve) => {
-      if (flow.state.events.length > 0 || flow.state.status !== "pending") {
+      if (isInitialReady(flow.state)) {
         resolve();
 
         return;

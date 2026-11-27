@@ -120,7 +120,12 @@ export function GeneralSection({
           title="Browser authentication"
           description="Clear this browser's daemon auth cookie."
           control={
-            <Button variant="destructive" size="sm" onClick={onLogout} disabled={loggingOut}>
+            <Button
+              variant="destructive-outline"
+              size="sm"
+              onClick={onLogout}
+              disabled={loggingOut}
+            >
               <LogOutIcon className="size-3.5" />
               <span>Sign out</span>
             </Button>

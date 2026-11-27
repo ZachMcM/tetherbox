@@ -121,6 +121,7 @@ export interface LlmOAuth {
   login(provider: LlmProvider, interaction: ProviderAuthInteraction): Promise<OAuthLoginSummary>;
   logout(provider: LlmProvider): Promise<void>;
   list(): Promise<OAuthLoginSummary[]>;
+  credential(provider: LlmProvider): Promise<OAuthCredential | undefined>;
   agentAuth(provider: LlmProvider): Promise<TurnModelAuth | undefined>;
   access(provider: LlmProvider): Promise<LlmAccess | undefined>;
 }
@@ -183,6 +184,9 @@ export function createLlmOAuth(dataDir: string): LlmOAuth {
         provider: key,
         expires: value.expires,
       }));
+    },
+    credential(provider) {
+      return files.read(provider);
     },
     async agentAuth(provider) {
       const credential = await files.read(provider);

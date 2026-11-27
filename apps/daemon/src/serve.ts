@@ -41,7 +41,11 @@ export async function serveDaemon(
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
-    turns.enqueue(profile.id, { kind: "cron", job: name, prompt: job.prompt }, job.sessionId);
+    turns.enqueue(
+      profile.id,
+      { kind: "cron", job: name, prompt: job.prompt },
+      { sessionId: job.sessionId },
+    );
   });
   const poller = new Poller(db, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
@@ -50,7 +54,7 @@ export async function serveDaemon(
       turns.enqueue(
         profileId,
         { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
-        registered.sessionId,
+        { sessionId: registered.sessionId },
       );
     }
   });
@@ -61,7 +65,7 @@ export async function serveDaemon(
       turns.enqueue(
         profileId,
         { kind: "reminder", name: reminder.name, prompt: reminder.prompt },
-        reminder.sessionId,
+        { sessionId: reminder.sessionId },
       );
     }
   });

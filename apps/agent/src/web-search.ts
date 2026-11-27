@@ -1,32 +1,5 @@
 import type { ExtensionFactory } from "@earendil-works/pi-coding-agent";
-import type { LlmProvider } from "@tetherbox/core";
-
-export type WebSearchMode =
-  | "openrouter"
-  | "openai-responses"
-  | "anthropic-messages"
-  | "google-generative-ai";
-
-export function resolveWebSearchMode(
-  provider: LlmProvider,
-  api: string,
-): WebSearchMode | undefined {
-  if (provider === "openrouter") {
-    return "openrouter";
-  }
-
-  switch (api) {
-    case "openai-responses":
-    case "openai-codex-responses":
-      return "openai-responses";
-    case "anthropic-messages":
-      return "anthropic-messages";
-    case "google-generative-ai":
-      return "google-generative-ai";
-    default:
-      return undefined;
-  }
-}
+import type { WebSearchMode } from "@tetherbox/core";
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

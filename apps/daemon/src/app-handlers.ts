@@ -19,6 +19,7 @@ import {
 import type { DaemonConfig } from "./config.ts";
 import type { DaemonDb } from "./db.ts";
 import type { DaemonEventBus } from "./events.ts";
+import { listAvailableLlmModels, llmApiKeyProviders } from "./llm-models.ts";
 import type { LlmOAuth } from "./llm-oauth.ts";
 import type { LlmWebAuthManager } from "./llm-web-auth.ts";
 import { formatExpiry, toOAuthStatusEntry, type OAuthStore } from "./oauth.ts";
@@ -142,6 +143,13 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
   };
 
   return {
+    getSettings() {
+      return db.getAppSettings();
+    },
+    updateSettings(input) {
+      return db.updateAppSettings(input);
+    },
+
     listProfiles() {
       return registry.all().map((profile) => toProfileSummary(profile, poller, reminders));
     },
@@ -215,7 +223,11 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
       requireProfile(profileId);
 
       if (input.prompt !== undefined) {
-        const sessionId = turns.enqueue(profileId, { kind: "user", text: input.prompt });
+        const sessionId = turns.enqueue(
+          profileId,
+          { kind: "user", text: input.prompt },
+          { model: input.model },
+        );
         const created =
           input.title !== undefined
             ? db.renameSession(sessionId, input.title)
@@ -238,6 +250,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
         profileId,
         title: input.title ?? DEFAULT_SESSION_TITLE,
         triggerKind: "user",
+        model: input.model ?? null,
       });
 
       events.emit({ kind: "session_updated", session: created });
@@ -250,7 +263,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
 
       return { session, entries };
     },
-    sendSessionMessage(sessionId, text) {
+    sendSessionMessage(sessionId, { text, model }) {
       const session = requireSession(sessionId);
 
       requireProfile(session.profileId);
@@ -263,7 +276,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
         }
       }
 
-      turns.enqueue(session.profileId, { kind: "user", text }, sessionId);
+      turns.enqueue(session.profileId, { kind: "user", text }, { sessionId, model });
 
       return { accepted: true, sessionId };
     },
@@ -281,6 +294,10 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
 
       if (input.markRead === true) {
         session = db.markSessionRead(sessionId) ?? session;
+      }
+
+      if (input.model !== undefined) {
+        session = db.updateSessionModel(sessionId, input.model) ?? session;
       }
 
       events.emit({ kind: "session_updated", session });
@@ -312,11 +329,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
 
     async getLlmStatus() {
       const [storedSecrets, oauthLoginsRaw] = await Promise.all([secrets.list(), llmOAuth.list()]);
-      const apiKeyProviders = new Set(
-        storedSecrets.flatMap((entry) =>
-          entry.binding.kind === "llm" ? [entry.binding.provider] : [],
-        ),
-      );
+      const apiKeyProviders = llmApiKeyProviders(storedSecrets);
       const oauthLogins = oauthLoginsRaw.map((login) => ({
         provider: login.provider,
         expires: formatExpiry(login.expires),
@@ -337,8 +350,11 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
 
       return { providers, oauthLogins };
     },
-    startLlmOAuth(provider) {
-      return llmWebAuth.start(provider);
+    async listLlmModels() {
+      return { models: await listAvailableLlmModels({ secrets, llmOAuth }) };
+    },
+    startLlmOAuth(provider, origin) {
+      return llmWebAuth.start(provider, origin);
     },
     getLlmOAuthFlow(flowId) {
       return llmWebAuth.get(flowId);

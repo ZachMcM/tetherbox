@@ -1,39 +1,119 @@
-import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { LlmProvider, ModelRef } from "@tetherbox/core/app";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
+import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../../lib/api.ts";
+import {
+  appSettingsQueryOptions,
+  llmModelsQueryOptions,
+  llmStatusQueryOptions,
+  secretsQueryOptions,
+} from "../../lib/queries.ts";
+import {
+  findProviderApiKey,
+  isProviderConnected,
+  LlmProviderAuthPanel,
+} from "../auth-setup-panels.tsx";
+import { ModelPicker } from "../model-picker.tsx";
+import { ProviderIcon } from "../provider-icons.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 
 export function ProvidersSection() {
-  const llmQuery = useQuery({
-    queryKey: queryKeys.llmStatus,
-    queryFn: async () => unwrapJson(await appClient.llm.status.$get()),
+  const queryClient = useQueryClient();
+  const [activeProviderId, setActiveProviderId] = useState<LlmProvider | null>(null);
+  const llmQuery = useQuery(llmStatusQueryOptions);
+  const secretsQuery = useQuery(secretsQueryOptions);
+  const settingsQuery = useQuery(appSettingsQueryOptions);
+  const modelsQuery = useQuery(llmModelsQueryOptions);
+
+  const defaultModelMutation = useMutation({
+    mutationFn: async (defaultModel: ModelRef) =>
+      unwrapJson(await appClient.settings.$patch({ json: { defaultModel } })),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.settings, data);
+    },
   });
 
   const providers = llmQuery.data?.providers ?? [];
+  const secrets = secretsQuery.data?.secrets ?? [];
+  const models = modelsQuery.data?.models ?? [];
+  const defaultModel = settingsQuery.data?.defaultModel ?? null;
+
+  const activeProvider =
+    activeProviderId === null
+      ? undefined
+      : providers.find((entry) => entry.provider === activeProviderId);
+
+  if (activeProvider !== undefined) {
+    return (
+      <div className="space-y-6">
+        <SectionHeader
+          onBack={() => setActiveProviderId(null)}
+          title={
+            <span className="inline-flex items-center gap-2.5">
+              <ProviderIcon provider={activeProvider.provider} className="size-5" />
+              <span>Configure {activeProvider.provider}</span>
+            </span>
+          }
+          description="Credentials are stored by the daemon and injected through the LLM proxy."
+        />
+        <LlmProviderAuthPanel
+          key={activeProvider.provider}
+          provider={activeProvider}
+          boundApiKey={findProviderApiKey(secrets, activeProvider.provider)}
+        />
+      </div>
+    );
+  }
 
   let content = (
     <>
-      {providers.map((item) => (
-        <SettingRow
-          key={item.provider}
-          title={item.provider}
-          control={
-            <div className="flex items-center gap-2">
-              {item.hasApiKey && <Badge variant="secondary">api-key</Badge>}
-              {item.oauthExpires !== undefined && <Badge variant="secondary">oauth</Badge>}
-              {!item.hasApiKey && item.oauthExpires === undefined && (
-                <span className="text-xs text-muted-foreground">unset</span>
-              )}
-              {/* TODO: Wire per-provider API key and OAuth login configuration in Phase 4 */}
-              <Button variant="outline" size="xs" disabled>
-                Configure
-              </Button>
-            </div>
-          }
-        />
-      ))}
+      {providers.map((item) => {
+        const boundKey = findProviderApiKey(secrets, item.provider);
+        const descriptionParts: string[] = [];
+
+        if (boundKey !== undefined) {
+          descriptionParts.push(boundKey);
+        }
+
+        if (item.oauthExpires !== undefined) {
+          descriptionParts.push(`${item.oauthLabel ?? "OAuth"} · expires ${item.oauthExpires}`);
+        } else if (item.oauthLabel !== undefined && !item.hasApiKey) {
+          descriptionParts.push(item.oauthLabel);
+        }
+
+        return (
+          <SettingRow
+            key={item.provider}
+            title={
+              <span className="inline-flex items-center gap-2">
+                <ProviderIcon provider={item.provider} className="size-4" />
+                <span>{item.provider}</span>
+              </span>
+            }
+            description={descriptionParts.length > 0 ? descriptionParts.join(" · ") : undefined}
+            control={
+              <div className="flex items-center gap-2">
+                {item.hasApiKey && <Badge>api-key</Badge>}
+                {item.oauthExpires !== undefined && <Badge>oauth</Badge>}
+                {!isProviderConnected(item) && (
+                  <span className="text-xs text-muted-foreground">unset</span>
+                )}
+                <Button
+                  variant="outline"
+                  size="xs"
+                  onClick={() => setActiveProviderId(item.provider)}
+                >
+                  Configure
+                </Button>
+              </div>
+            }
+          />
+        );
+      })}
     </>
   );
 
@@ -51,8 +131,34 @@ export function ProvidersSection() {
     <div className="space-y-6">
       <SectionHeader
         title="Models & Providers"
-        description="Configured API keys and OAuth logins available to profiles."
+        description="Connect LLM providers and choose the default model for new conversations and background runs."
       />
+
+      <section className="space-y-2">
+        <div>
+          <h3 className="text-sm font-semibold">Default model</h3>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Used for new conversations, cron jobs, webhooks, reminders, and poll jobs unless
+            overridden in the composer.
+          </p>
+        </div>
+        {modelsQuery.isPending || settingsQuery.isPending ? (
+          <div className="flex justify-center py-2">
+            <Spinner className="size-4 text-muted-foreground" />
+          </div>
+        ) : (
+          <ModelPicker
+            models={models}
+            value={defaultModel}
+            disabled={defaultModelMutation.isPending}
+            onChange={(model) => defaultModelMutation.mutate(model)}
+            placeholder="Choose default model…"
+          />
+        )}
+        {defaultModelMutation.error !== null && (
+          <FieldError>{defaultModelMutation.error.message}</FieldError>
+        )}
+      </section>
 
       <SettingGroup title="Providers">{content}</SettingGroup>
     </div>

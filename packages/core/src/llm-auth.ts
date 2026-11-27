@@ -130,3 +130,30 @@ export const llmOAuthStatusEntrySchema = z.object({
 });
 export const llmOAuthStatusListSchema = z.array(llmOAuthStatusEntrySchema);
 export type LlmOAuthStatusEntry = z.infer<typeof llmOAuthStatusEntrySchema>;
+
+export type WebSearchMode =
+  | "openrouter"
+  | "openai-responses"
+  | "anthropic-messages"
+  | "google-generative-ai";
+
+export function resolveWebSearchMode(
+  provider: LlmProvider,
+  api: string,
+): WebSearchMode | undefined {
+  if (provider === "openrouter") {
+    return "openrouter";
+  }
+
+  switch (api) {
+    case "openai-responses":
+    case "openai-codex-responses":
+      return "openai-responses";
+    case "anthropic-messages":
+      return "anthropic-messages";
+    case "google-generative-ai":
+      return "google-generative-ai";
+    default:
+      return undefined;
+  }
+}

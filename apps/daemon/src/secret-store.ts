@@ -66,15 +66,17 @@ export function createFileSecretStore(dataDir: string): SecretStore {
       if (secret.binding.kind === "llm") {
         const { provider } = secret.binding;
 
-        for (const existing of await list()) {
-          if (
-            existing.key !== key &&
-            existing.binding.kind === "llm" &&
-            existing.binding.provider === provider
-          ) {
+        for (const existingKey of await files.keys()) {
+          if (existingKey === key) {
+            continue;
+          }
+
+          const existing = await files.read(existingKey);
+
+          if (existing?.binding.kind === "llm" && existing.binding.provider === provider) {
             throw new RpcError(
               409,
-              `LLM provider "${provider}" is already bound to ${existing.key}; update or delete ${existing.key} first`,
+              `LLM provider "${provider}" is already bound to ${existingKey}; update or delete ${existingKey} first`,
             );
           }
         }

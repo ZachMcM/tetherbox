@@ -1,6 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import type { ModelRef } from "@tetherbox/core/app";
 import { ArrowUpIcon, MessageSquarePlusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import {
@@ -21,9 +22,14 @@ import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/nativ
 import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
 import { CreateProfileDialog } from "../components/create-profile-dialog.tsx";
+import { ModelPicker, resolveAvailableModel } from "../components/model-picker.tsx";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
 import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
-import { profilesQueryOptions } from "../lib/queries.ts";
+import {
+  appSettingsQueryOptions,
+  llmModelsQueryOptions,
+  profilesQueryOptions,
+} from "../lib/queries.ts";
 
 interface HomeSearch {
   profile?: string;
@@ -37,19 +43,38 @@ function HomePage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState("");
+  const [chosenModel, setChosenModel] = useState<ModelRef | null>(null);
 
   const profilesQuery = useQuery(profilesQueryOptions);
-  const profiles = profilesQuery.data?.profiles ?? [];
+  const settingsQuery = useQuery(appSettingsQueryOptions);
+  const modelsQuery = useQuery(llmModelsQueryOptions);
 
-  const activeProfileId =
-    profiles.find((profile) => profile.id === requestedProfile)?.id ?? profiles[0]?.id;
+  const profiles = profilesQuery.data?.profiles ?? [];
+  const models = modelsQuery.data?.models ?? [];
+
+  const activeProfile = profiles.find((profile) => profile.id === requestedProfile) ?? profiles[0];
+  const activeProfileId = activeProfile?.id;
+
+  const activeModel = resolveAvailableModel(models, [
+    chosenModel,
+    activeProfile?.config.model,
+    settingsQuery.data?.defaultModel,
+  ]);
 
   const startConversationMutation = useMutation({
-    mutationFn: async ({ profileId, text }: { profileId: string; text: string }) => {
+    mutationFn: async ({
+      profileId,
+      text,
+      model,
+    }: {
+      profileId: string;
+      text: string;
+      model: ModelRef;
+    }) => {
       const { session } = await unwrapJson(
         await appClient.profiles[":profileId"].sessions.$post({
           param: { profileId },
-          json: { prompt: text },
+          json: { prompt: text, model },
         }),
       );
 
@@ -65,11 +90,20 @@ function HomePage() {
   const submit = () => {
     const trimmed = draft.trim();
 
-    if (trimmed === "" || activeProfileId === undefined || startConversationMutation.isPending) {
+    if (
+      trimmed === "" ||
+      activeProfileId === undefined ||
+      activeModel === null ||
+      startConversationMutation.isPending
+    ) {
       return;
     }
 
-    startConversationMutation.mutate({ profileId: activeProfileId, text: trimmed });
+    startConversationMutation.mutate({
+      profileId: activeProfileId,
+      text: trimmed,
+      model: activeModel,
+    });
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -118,7 +152,7 @@ function HomePage() {
                 Start a conversation
               </h1>
               <p className="mt-1 text-sm text-muted-foreground">
-                Pick a profile below and send a message to launch a new Pi session.
+                Pick a profile and model below to launch a new Pi session.
               </p>
             </div>
 
@@ -133,26 +167,42 @@ function HomePage() {
                 disabled={startConversationMutation.isPending}
               />
               <InputGroupAddon align="block-end" className="justify-between gap-2 px-3 pb-2.5">
-                <NativeSelect
-                  aria-label="Target profile"
-                  size="sm"
-                  value={activeProfileId ?? ""}
-                  onChange={(event) => {
-                    const nextId = event.target.value;
+                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                  <NativeSelect
+                    aria-label="Target profile"
+                    size="sm"
+                    value={activeProfileId ?? ""}
+                    onChange={(event) => {
+                      const nextId = event.target.value;
 
-                    void navigate({
-                      to: "/",
-                      search: (prev) => ({ ...prev, profile: nextId }),
-                      replace: true,
-                    });
-                  }}
-                >
-                  {profiles.map((profile) => (
-                    <NativeSelectOption key={profile.id} value={profile.id}>
-                      {profile.config.name}
-                    </NativeSelectOption>
-                  ))}
-                </NativeSelect>
+                      void navigate({
+                        to: "/",
+                        search: (prev) => ({ ...prev, profile: nextId }),
+                        replace: true,
+                      });
+                    }}
+                  >
+                    {profiles.map((profile) => (
+                      <NativeSelectOption key={profile.id} value={profile.id}>
+                        {profile.config.name}
+                      </NativeSelectOption>
+                    ))}
+                  </NativeSelect>
+
+                  <ModelPicker
+                    compact
+                    side="top"
+                    models={models}
+                    value={activeModel}
+                    onChange={setChosenModel}
+                    onConfigureProviders={() =>
+                      void navigate({
+                        to: ".",
+                        search: (prev) => ({ ...prev, settings: "providers" }),
+                      })
+                    }
+                  />
+                </div>
 
                 <InputGroupButton
                   variant="default"
@@ -161,7 +211,8 @@ function HomePage() {
                   disabled={
                     startConversationMutation.isPending ||
                     draft.trim() === "" ||
-                    activeProfileId === undefined
+                    activeProfileId === undefined ||
+                    activeModel === null
                   }
                   aria-label="Send message"
                 >

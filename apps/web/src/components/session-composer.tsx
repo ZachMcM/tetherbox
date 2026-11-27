@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import type { LlmModelOption, ModelRef } from "@tetherbox/core/app";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
   InputGroup,
@@ -7,12 +8,17 @@ import {
   InputGroupTextarea,
 } from "@tetherbox/ui/components/input-group";
 import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
+import { ModelPicker } from "./model-picker.tsx";
 
 export function SessionComposer({
   running,
   disabled,
   aborting = false,
   error = null,
+  models,
+  model,
+  onModelChange,
+  onConfigureProviders,
   onSend,
   onAbort,
 }: {
@@ -20,6 +26,10 @@ export function SessionComposer({
   disabled: boolean;
   aborting?: boolean;
   error?: string | null;
+  models: readonly LlmModelOption[];
+  model: ModelRef | null;
+  onModelChange: (model: ModelRef) => void;
+  onConfigureProviders: () => void;
   onSend: (text: string) => Promise<void>;
   onAbort: () => void;
 }) {
@@ -29,7 +39,7 @@ export function SessionComposer({
   const submit = async () => {
     const trimmed = value.trim();
 
-    if (trimmed === "" || disabled) {
+    if (trimmed === "" || disabled || model === null) {
       return;
     }
 
@@ -63,10 +73,21 @@ export function SessionComposer({
             className="max-h-48 min-h-12 resize-none px-4 py-3 text-sm"
             disabled={disabled}
           />
-          <InputGroupAddon align="block-end" className="justify-between px-3 pb-2.5">
-            <span className="text-xs text-muted-foreground">
-              {running ? "Streaming live from Pi session" : "Ready"}
-            </span>
+          <InputGroupAddon align="block-end" className="justify-between gap-2 px-3 pb-2.5">
+            <div className="flex min-w-0 items-center gap-2">
+              <ModelPicker
+                compact
+                side="top"
+                models={models}
+                value={model}
+                disabled={running}
+                onChange={onModelChange}
+                onConfigureProviders={onConfigureProviders}
+              />
+              {running && (
+                <span className="hidden text-xs text-muted-foreground sm:inline">Streaming…</span>
+              )}
+            </div>
             <div className="flex items-center gap-1.5">
               {running && (
                 <InputGroupButton
@@ -84,7 +105,7 @@ export function SessionComposer({
                 variant="default"
                 size="icon-sm"
                 onClick={() => void submit()}
-                disabled={disabled || value.trim() === ""}
+                disabled={disabled || value.trim() === "" || model === null}
                 aria-label="Send message"
               >
                 <ArrowUpIcon className="size-4" />

@@ -66,7 +66,7 @@ export async function startInternalServer({
     }),
     proxyWithSecret: (_run, request) => proxyWithSecret({ secrets, oauth }, request),
     proxyLlm(run, provider, request) {
-      const model = registry.get(run.profileId)?.config.model;
+      const model = turns.resolveRunModel(run.runId);
       const authKind = model?.provider === provider ? model.auth : "api-key";
 
       return proxyLlm({ secrets, oauth: llmOAuth }, { provider, authKind, request });

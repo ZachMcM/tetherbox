@@ -1,10 +1,34 @@
 import type { ReactNode } from "react";
+import { ArrowLeftIcon } from "lucide-react";
+import { Button } from "@tetherbox/ui/components/button";
 
-export function SectionHeader({ title, description }: { title: string; description: string }) {
+export function SectionHeader({
+  title,
+  description,
+  onBack,
+}: {
+  title: ReactNode;
+  description: string;
+  onBack?: (() => void) | undefined;
+}) {
   return (
-    <div>
-      <h2 className="font-heading text-xl font-semibold tracking-tight">{title}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    <div className="space-y-4">
+      {onBack !== undefined && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="xs"
+          className="-ml-2 text-muted-foreground"
+          onClick={onBack}
+        >
+          <ArrowLeftIcon className="size-3.5" />
+          <span>Back</span>
+        </Button>
+      )}
+      <div>
+        <h2 className="font-heading text-xl font-semibold tracking-tight">{title}</h2>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
     </div>
   );
 }
@@ -36,8 +60,8 @@ export function SettingRow({
   description,
   control,
 }: {
-  title: string;
-  description?: string;
+  title: ReactNode;
+  description?: string | undefined;
   control: ReactNode;
 }) {
   return (

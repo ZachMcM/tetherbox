@@ -121,7 +121,7 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
 
           <div className="pt-2">
             <Button
-              variant="destructive"
+              variant="destructive-outline"
               size="sm"
               className="w-full justify-start"
               onClick={() => logoutMutation.mutate()}
@@ -144,7 +144,14 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
           {activeTab === "providers" && <ProvidersSection />}
           {activeTab === "secrets" && <SecretsSection />}
           {activeTab === "integrations" && <IntegrationsSection />}
-          {profileId !== undefined && <ProfileSettingsSection profileId={profileId} />}
+          {profileId !== undefined && (
+            <ProfileSettingsSection
+              key={profileId}
+              profileId={profileId}
+              onOpenSettingsTab={setTab}
+              onDeleted={() => setTab("general")}
+            />
+          )}
         </div>
       </DialogContent>
     </Dialog>

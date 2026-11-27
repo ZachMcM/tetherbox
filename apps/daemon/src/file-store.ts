@@ -20,6 +20,7 @@ export interface KeyedJsonStore<K extends string, V> {
   read(key: K): Promise<V | undefined>;
   write(key: K, value: V): Promise<void>;
   delete(key: K): Promise<void>;
+  keys(): Promise<K[]>;
   entries(): Promise<Array<{ key: K; value: V }>>;
 }
 
@@ -84,14 +85,19 @@ export function createKeyedJsonStore<K extends string, V>({
     async delete(key) {
       await rm(fileFor(key), { force: true });
     },
+    keys,
     async entries() {
       const items: Array<{ key: K; value: V }> = [];
 
       for (const key of await keys()) {
-        const value = await read(key);
+        try {
+          const value = await read(key);
 
-        if (value !== undefined) {
-          items.push({ key, value });
+          if (value !== undefined) {
+            items.push({ key, value });
+          }
+        } catch (error) {
+          console.error(`skipping unreadable entry ${key} in ${dir}`, error);
         }
       }
 
