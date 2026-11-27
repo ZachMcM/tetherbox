@@ -1,11 +1,12 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type {
-  OAuthPresetSummary,
-  OAuthStatusEntry,
-  ProfileDetail,
-  StarterConfig,
-  StarterSummary,
+import {
+  webhookPath,
+  type OAuthPresetSummary,
+  type OAuthStatusEntry,
+  type ProfileDetail,
+  type StarterConfig,
+  type StarterSummary,
 } from "@tetherbox/core/app";
 import {
   AlertCircleIcon,
@@ -866,7 +867,8 @@ export function ProfileSettingsSection({
             profile.webhooks.length > 0
               ? profile.webhooks
                   .map(
-                    ({ name, webhook }) => `/hooks/${profile.id}/${name} (${webhook.verify.kind})`,
+                    ({ name, webhook }) =>
+                      `${webhookPath(profile.id, name)} (${webhook.verify.kind})`,
                   )
                   .join(", ")
               : undefined

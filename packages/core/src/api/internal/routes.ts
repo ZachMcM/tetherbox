@@ -9,42 +9,29 @@ import {
   type RunId,
   type SecretKey,
   type SessionId,
-} from "../ids.ts";
-import { llmProviderSchema, type LlmProvider } from "../llm-auth.ts";
+} from "../../ids.ts";
+import { llmProviderSchema, type LlmProvider } from "../../llm-auth.ts";
 import {
   registerPollJobInputSchema,
   type RegisteredPollJob,
   type RegisterPollJobInput,
-} from "../poll.ts";
-import type { ProfileValidation } from "../profile.ts";
+} from "../../poll.ts";
+import type { ProfileValidation } from "../../profile.ts";
 import {
   scheduleReminderInputSchema,
   type ScheduledReminder,
   type ScheduleReminderInput,
-} from "../reminder.ts";
-import type { SecretCheckResult } from "../secrets.ts";
-import { bearerToken, RUN_TOKEN_HEADER } from "./headers.ts";
-
-export class RpcError extends Error {
-  readonly status: 400 | 404 | 409;
-
-  constructor(status: 400 | 404 | 409, message: string) {
-    super(message);
-    this.status = status;
-  }
-}
+} from "../../reminder.ts";
+import type { SecretCheckResult } from "../../secrets.ts";
+import { RpcError } from "../errors.ts";
+import { bearerToken, RUN_TOKEN_HEADER } from "../headers.ts";
+import { notifyInputSchema, type NotifyInput } from "./schemas.ts";
 
 export interface RunContext {
   runId: RunId;
   profileId: ProfileId;
   sessionId: SessionId;
 }
-
-export const notifyInputSchema = z.object({
-  title: z.string().trim().min(1).max(120).optional(),
-  body: z.string().trim().min(1).max(1000),
-});
-export type NotifyInput = z.infer<typeof notifyInputSchema>;
 
 export interface InternalApiHandlers {
   resolveRun(runToken: string): RunContext | undefined;

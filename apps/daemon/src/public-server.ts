@@ -1,5 +1,10 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { entryNameSchema, profileIdSchema, type WebhookVerification } from "@tetherbox/core";
+import {
+  entryNameSchema,
+  profileIdSchema,
+  webhookPath,
+  type WebhookVerification,
+} from "@tetherbox/core";
 import { Hono } from "hono";
 import type { ProfileRegistry } from "./profiles.ts";
 import type { SecretStore } from "./secret-store.ts";
@@ -59,7 +64,7 @@ function parseBody(body: string): unknown {
 export function createPublicServer({ registry, secrets, turns }: PublicServerDeps) {
   return new Hono()
     .get("/health", (c) => c.json({ ok: true }))
-    .post("/hooks/:profileId/:name", async (c) => {
+    .post(webhookPath(":profileId", ":name"), async (c) => {
       const profileId = profileIdSchema.safeParse(c.req.param("profileId"));
       const name = entryNameSchema.safeParse(c.req.param("name"));
       const profile = profileId.success ? registry.get(profileId.data) : undefined;

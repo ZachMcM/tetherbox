@@ -1,8 +1,8 @@
 import { z } from "zod";
-import { profileIdSchema, type EntryName, type ProfileId } from "../ids.ts";
-import type { LlmAuthKind, LlmProvider } from "../llm-auth.ts";
-import { oauthScopeModeSchema, type OAuthPreset, type OAuthProviderConfig } from "../oauth.ts";
-import type { RegisteredPollJob } from "../poll.ts";
+import { profileIdSchema, type EntryName, type ProfileId } from "../../ids.ts";
+import type { LlmAuthKind, LlmProvider } from "../../llm-auth.ts";
+import { oauthScopeModeSchema, type OAuthPreset, type OAuthProviderConfig } from "../../oauth.ts";
+import type { RegisteredPollJob } from "../../poll.ts";
 import {
   modelSelectionSchema,
   profileConfigSchema,
@@ -12,10 +12,10 @@ import {
   type ProfileConfig,
   type ProfileIssue,
   type Webhook,
-} from "../profile.ts";
-import type { Starter, StarterSource } from "../starter.ts";
-import type { ScheduledReminder } from "../reminder.ts";
-import { secretBindingSchema } from "../secrets.ts";
+} from "../../profile.ts";
+import type { Starter, StarterSource } from "../../starter.ts";
+import type { ScheduledReminder } from "../../reminder.ts";
+import { secretBindingSchema } from "../../secrets.ts";
 
 export const createProfileInputSchema = profileConfigSchema.extend({
   id: profileIdSchema,
