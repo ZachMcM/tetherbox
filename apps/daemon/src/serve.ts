@@ -40,7 +40,7 @@ export async function serveDaemon(
 
   const events = new DaemonEventBus();
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
-  const clis = new CliManager(config.agent.user);
+  const clis = new CliManager(config.agent.user, events);
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
     turns.enqueue(

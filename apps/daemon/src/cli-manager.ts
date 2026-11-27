@@ -19,11 +19,13 @@ import {
   type Starter,
   type StarterCli,
 } from "@tetherbox/starters";
+import type { DaemonEvent, DaemonEventBus } from "./events.ts";
 
 const PROBE_TIMEOUT_MS = 10_000;
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
 const AUTH_TIMEOUT_MS = 5 * 60_000;
 const INITIAL_AUTH_WAIT_MS = 2_000;
+const OUTPUT_EMIT_INTERVAL_MS = 100;
 const SETTLED_TTL_MS = 10 * 60_000;
 const MAX_OUTPUT_CHARS = 32_000;
 
@@ -172,14 +174,18 @@ interface CaptureResult {
   stderr: string;
 }
 
-interface ActiveInstallJob {
+interface EmitTarget {
+  emitTimer?: ReturnType<typeof setTimeout> | undefined;
+}
+
+interface ActiveInstallJob extends EmitTarget {
   state: CliInstallJobState;
   child: ChildProcess;
   timeout: ReturnType<typeof setTimeout>;
   settledAt?: number | undefined;
 }
 
-interface ActiveAuthFlow {
+interface ActiveAuthFlow extends EmitTarget {
   state: CliAuthFlowState;
   child: ChildProcess;
   timeout: ReturnType<typeof setTimeout>;
@@ -192,17 +198,47 @@ function cloneAuthState(state: CliAuthFlowState): CliAuthFlowState {
   return { ...state, events: [...state.events] };
 }
 
+function installUpdated(job: ActiveInstallJob): DaemonEvent {
+  return { kind: "cli_install_updated", job: { ...job.state } };
+}
+
+function authUpdated(flow: ActiveAuthFlow): DaemonEvent {
+  return { kind: "cli_auth_updated", flow: cloneAuthState(flow.state) };
+}
+
 /**
  * Probes, installs (in user space under `~/.local`), and authenticates starter CLIs as the
  * unprivileged agent user so the web app can manage CLI starters without SSH or root.
  */
 export class CliManager {
   readonly #agentUser: string | undefined;
+  readonly #events: DaemonEventBus;
   readonly #installJobs = new Map<string, ActiveInstallJob>();
   readonly #authFlows = new Map<string, ActiveAuthFlow>();
+  #stopped = false;
 
-  constructor(agentUser: string | undefined) {
+  constructor(agentUser: string | undefined, events: DaemonEventBus) {
     this.#agentUser = agentUser;
+    this.#events = events;
+  }
+
+  #emitNow(target: EmitTarget, toEvent: () => DaemonEvent): void {
+    clearTimeout(target.emitTimer);
+    target.emitTimer = undefined;
+
+    if (!this.#stopped) {
+      this.#events.emit(toEvent());
+    }
+  }
+
+  #scheduleEmit(target: EmitTarget, toEvent: () => DaemonEvent): void {
+    if (this.#stopped || target.emitTimer !== undefined) {
+      return;
+    }
+
+    target.emitTimer = setTimeout(() => {
+      this.#emitNow(target, toEvent);
+    }, OUTPUT_EMIT_INTERVAL_MS);
   }
 
   #spawnAgent(
@@ -401,12 +437,14 @@ export class CliManager {
     };
 
     this.#installJobs.set(id, job);
+    this.#emitNow(job, () => installUpdated(job));
 
     const onChunk = (chunk: Buffer) => {
       job.state = {
         ...job.state,
         output: appendOutput(job.state.output, chunk.toString("utf8")),
       };
+      this.#scheduleEmit(job, () => installUpdated(job));
     };
 
     child.stdout?.on("data", onChunk);
@@ -423,6 +461,7 @@ export class CliManager {
         output: job.state.output,
         error: error.message,
       };
+      this.#emitNow(job, () => installUpdated(job));
     });
 
     child.once("close", (code, signal) => {
@@ -442,6 +481,7 @@ export class CliManager {
           output: job.state.output,
           error: null,
         };
+        this.#emitNow(job, () => installUpdated(job));
 
         return;
       }
@@ -456,6 +496,7 @@ export class CliManager {
           ? `Install timed out after ${Math.round(INSTALL_TIMEOUT_MS / 60_000)} minutes`
           : `Install exited with ${signal ?? `code ${code ?? 1}`}`,
       };
+      this.#emitNow(job, () => installUpdated(job));
     });
 
     return { ...job.state };
@@ -544,6 +585,7 @@ export class CliManager {
     };
 
     this.#authFlows.set(id, flow);
+    this.#emitNow(flow, () => authUpdated(flow));
 
     const notifyReady = () => {
       if (
@@ -561,8 +603,11 @@ export class CliManager {
         return;
       }
 
+      const prevEventCount = flow.state.events.length;
+      const prevPrompt = flow.state.prompt;
       const nextOutput = appendOutput(flow.state.output, chunk.toString("utf8"));
       const events = extractAuthEvents(nextOutput);
+      const nextPrompt = detectPromptLine(nextOutput);
 
       if (!flow.autoPressedEnter && /press enter to open/i.test(nextOutput)) {
         flow.autoPressedEnter = true;
@@ -576,9 +621,16 @@ export class CliManager {
         status: "running",
         events,
         output: nextOutput,
-        prompt: detectPromptLine(nextOutput),
+        prompt: nextPrompt,
         error: null,
       };
+
+      if (events.length !== prevEventCount || nextPrompt !== prevPrompt) {
+        this.#emitNow(flow, () => authUpdated(flow));
+      } else {
+        this.#scheduleEmit(flow, () => authUpdated(flow));
+      }
+
       notifyReady();
     };
 
@@ -598,6 +650,7 @@ export class CliManager {
         prompt: null,
         error: error.message,
       };
+      this.#emitNow(flow, () => authUpdated(flow));
       notifyReady();
     });
 
@@ -637,6 +690,7 @@ export class CliManager {
         };
       }
 
+      this.#emitNow(flow, () => authUpdated(flow));
       notifyReady();
     });
 
@@ -696,6 +750,7 @@ export class CliManager {
       ...flow.state,
       prompt: null,
     };
+    this.#emitNow(flow, () => authUpdated(flow));
 
     return cloneAuthState(flow.state);
   }
@@ -721,6 +776,7 @@ export class CliManager {
         prompt: null,
         error: "Login cancelled",
       };
+      this.#emitNow(flow, () => authUpdated(flow));
       flow.child.kill("SIGTERM");
     }
 
@@ -728,8 +784,11 @@ export class CliManager {
   }
 
   stopAll(): void {
+    this.#stopped = true;
+
     for (const job of this.#installJobs.values()) {
       clearTimeout(job.timeout);
+      clearTimeout(job.emitTimer);
 
       if (job.state.status === "running") {
         job.child.kill("SIGTERM");
@@ -738,6 +797,7 @@ export class CliManager {
 
     for (const flow of this.#authFlows.values()) {
       clearTimeout(flow.timeout);
+      clearTimeout(flow.emitTimer);
 
       if (flow.state.status === "running") {
         flow.child.kill("SIGTERM");

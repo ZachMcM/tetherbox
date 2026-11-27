@@ -50,7 +50,7 @@ function RootLayout() {
   const settingsQuery = useQuery({ ...appSettingsQueryOptions, enabled: authenticated });
   const isOnboardingRoute = pathname === "/onboarding";
 
-  useDaemonEvents(authenticated && !isOnboardingRoute);
+  useDaemonEvents(authenticated);
 
   if (authQuery.isPending || (authenticated && settingsQuery.data === undefined)) {
     return (

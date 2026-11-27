@@ -164,34 +164,6 @@ export interface StarterCliStatusEntry {
   status: StarterCliStatus;
 }
 
-interface CliInstallJobBase {
-  id: string;
-  starterId: string;
-  binary: string;
-  output: string;
-}
-
-export type CliInstallJobState =
-  | (CliInstallJobBase & { status: "running" | "completed"; error: null })
-  | (CliInstallJobBase & { status: "failed"; error: string });
-
-export type CliAuthFlowEvent =
-  | { kind: "auth_url"; url: string }
-  | { kind: "device_code"; verificationUri: string; userCode: string };
-
-interface CliAuthFlowBase {
-  id: string;
-  starterId: string;
-  binary: string;
-  events: CliAuthFlowEvent[];
-  output: string;
-}
-
-export type CliAuthFlowState =
-  | (CliAuthFlowBase & { status: "running"; prompt: string | null; error: null })
-  | (CliAuthFlowBase & { status: "completed"; prompt: null; error: null })
-  | (CliAuthFlowBase & { status: "failed" | "cancelled"; prompt: null; error: string });
-
 export interface LlmProviderStatus {
   provider: LlmProvider;
   supportedAuth: readonly LlmAuthKind[];

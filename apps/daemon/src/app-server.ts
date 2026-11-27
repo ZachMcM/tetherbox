@@ -53,6 +53,10 @@ function matchesEventFilter(
   profileId: ProfileId | undefined,
   sessionId: string | undefined,
 ): boolean {
+  if (event.kind === "cli_install_updated" || event.kind === "cli_auth_updated") {
+    return profileId === undefined && sessionId === undefined;
+  }
+
   if (event.kind === "session_updated") {
     if (profileId !== undefined && event.session.profileId !== profileId) {
       return false;

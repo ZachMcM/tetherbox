@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { cliAuthFlowStateSchema, cliInstallJobStateSchema } from "./cli.ts";
 import { profileIdSchema, runIdSchema, sessionIdSchema } from "./ids.ts";
 import { modelSelectionSchema } from "./profile.ts";
 import { turnStreamEventSchema, turnTriggerSchema } from "./turn.ts";
@@ -82,6 +83,14 @@ export const daemonEventSchema = z.discriminatedUnion("kind", [
     sessionId: sessionIdSchema,
     title: z.string().optional(),
     body: z.string(),
+  }),
+  z.object({
+    kind: z.literal("cli_install_updated"),
+    job: cliInstallJobStateSchema,
+  }),
+  z.object({
+    kind: z.literal("cli_auth_updated"),
+    flow: cliAuthFlowStateSchema,
   }),
 ]);
 export type DaemonEvent = z.infer<typeof daemonEventSchema>;

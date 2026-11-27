@@ -42,8 +42,6 @@ import {
   updateProfileInputSchema,
   updateSessionInputSchema,
   type AppSettings,
-  type CliAuthFlowState,
-  type CliInstallJobState,
   type CreateProfileInput,
   type CreateSessionInput,
   type LlmModelOption,
@@ -61,6 +59,7 @@ import {
   type SendSessionMessageInput,
   type UpdateSessionInput,
 } from "./app-schemas.ts";
+import type { CliAuthFlowState, CliInstallJobState } from "../cli.ts";
 
 export * from "./app-schemas.ts";
 

@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type {
-  CliAuthFlowState,
-  CliInstallJobState,
-  StarterCliStatusEntry,
-} from "@tetherbox/core/app";
+import type { CliInstallJobState, StarterCliStatusEntry } from "@tetherbox/core/app";
 import {
   CheckCircle2Icon,
   CheckIcon,
@@ -21,7 +17,14 @@ import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
-import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
+import { appClient, unwrapJson } from "../lib/api.ts";
+import {
+  upsertCliAuthFlow,
+  upsertCliInstallJob,
+  useCliAuthFlow,
+  useCliInstallJobs,
+  watchCliAuthFlow,
+} from "../lib/live-store.ts";
 import { openAuthWindow } from "./auth-setup-panels.tsx";
 
 export interface CliInstallRunner {
@@ -34,87 +37,22 @@ export interface CliInstallRunner {
 
 export function useCliInstallRunner(): CliInstallRunner {
   const queryClient = useQueryClient();
-  const [jobs, setJobs] = useState<Record<string, CliInstallJobState>>({});
+  const jobs = useCliInstallJobs();
   const [starting, setStarting] = useState<Record<string, boolean>>({});
-  const jobsRef = useRef(jobs);
-  const handledRef = useRef<Set<string>>(new Set());
-
-  jobsRef.current = jobs;
-
-  const runningJobKey = Object.values(jobs)
-    .filter((job) => job.status === "running")
-    .map((job) => job.id)
-    .toSorted()
-    .join(",");
+  const [startedJobIds, setStartedJobIds] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
-    if (runningJobKey === "") {
+    const settled = Object.values(jobs).filter(
+      (job) => job.status !== "running" && startedJobIds.has(job.id),
+    );
+
+    if (settled.length === 0) {
       return;
     }
 
-    let cancelled = false;
-    const poll = async () => {
-      const activeJobs = Object.values(jobsRef.current).filter((job) => job.status === "running");
-
-      if (activeJobs.length === 0) {
-        return;
-      }
-
-      const updates = await Promise.all(
-        activeJobs.map(async (job) => {
-          try {
-            const result = await unwrapJson(
-              await appClient.clis.installs[":jobId"].$get({ param: { jobId: job.id } }),
-            );
-
-            return result.job;
-          } catch {
-            return job;
-          }
-        }),
-      );
-
-      if (cancelled) {
-        return;
-      }
-
-      setJobs((prev) => {
-        const next = { ...prev };
-
-        for (const job of updates) {
-          next[job.starterId] = job;
-        }
-
-        return next;
-      });
-    };
-
-    const timer = setInterval(() => {
-      void poll();
-    }, 1000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [runningJobKey]);
-
-  useEffect(() => {
-    let shouldInvalidate = false;
-
-    for (const job of Object.values(jobs)) {
-      if (job.status === "running" || handledRef.current.has(job.id)) {
-        continue;
-      }
-
-      handledRef.current.add(job.id);
-      shouldInvalidate = true;
-
+    for (const job of settled) {
       if (job.status === "completed") {
-        toast.add({
-          type: "success",
-          title: `Installed ${job.binary}`,
-        });
+        toast.add({ type: "success", title: `Installed ${job.binary}` });
       } else {
         toast.add({
           type: "error",
@@ -124,30 +62,34 @@ export function useCliInstallRunner(): CliInstallRunner {
       }
     }
 
-    if (shouldInvalidate) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cliStatus });
-    }
-  }, [jobs, queryClient]);
+    setStartedJobIds(
+      (prev) => new Set([...prev].filter((id) => !settled.some((job) => job.id === id))),
+    );
+  }, [jobs, startedJobIds]);
 
-  const installOne = useCallback(async (starterId: string) => {
-    setStarting((prev) => ({ ...prev, [starterId]: true }));
+  const installOne = useCallback(
+    async (starterId: string) => {
+      setStarting((prev) => ({ ...prev, [starterId]: true }));
 
-    try {
-      const result = await unwrapJson(
-        await appClient.clis[":starterId"].install.$post({ param: { starterId } }),
-      );
+      try {
+        const result = await unwrapJson(
+          await appClient.clis[":starterId"].install.$post({ param: { starterId } }),
+        );
 
-      setJobs((prev) => ({ ...prev, [starterId]: result.job }));
-    } catch (error) {
-      toast.add({
-        type: "error",
-        title: `Could not start ${starterId} install`,
-        description: error instanceof Error ? error.message : String(error),
-      });
-    } finally {
-      setStarting((prev) => ({ ...prev, [starterId]: false }));
-    }
-  }, []);
+        setStartedJobIds((prev) => new Set(prev).add(result.job.id));
+        upsertCliInstallJob(result.job, queryClient);
+      } catch (error) {
+        toast.add({
+          type: "error",
+          title: `Could not start ${starterId} install`,
+          description: error instanceof Error ? error.message : String(error),
+        });
+      } finally {
+        setStarting((prev) => ({ ...prev, [starterId]: false }));
+      }
+    },
+    [queryClient],
+  );
 
   const installAll = useCallback(
     async (starterIds: readonly string[]) => {
@@ -157,7 +99,8 @@ export function useCliInstallRunner(): CliInstallRunner {
   );
 
   const isAnyRunning =
-    runningJobKey !== "" || Object.values(starting).some((isStarting) => isStarting);
+    Object.values(jobs).some((job) => job.status === "running") ||
+    Object.values(starting).some((isStarting) => isStarting);
 
   return { jobs, starting, isAnyRunning, installOne, installAll };
 }
@@ -311,7 +254,8 @@ export function CliAuthFlowPanel({
   installRunner: CliInstallRunner;
 }) {
   const queryClient = useQueryClient();
-  const [flow, setFlow] = useState<CliAuthFlowState | null>(null);
+  const [flowId, setFlowId] = useState<string | null>(null);
+  const flow = useCliAuthFlow(flowId);
   const [responseInput, setResponseInput] = useState("");
   const [copiedCode, setCopiedCode] = useState(false);
   const [showOutput, setShowOutput] = useState(false);
@@ -348,7 +292,8 @@ export function CliAuthFlowPanel({
       openedUrlRef.current = null;
       setResponseInput("");
       setCopiedCode(false);
-      setFlow(data.flow);
+      watchCliAuthFlow(data.flow, queryClient);
+      setFlowId(data.flow.id);
     },
     onError: (error) => {
       toast.add({
@@ -360,24 +305,26 @@ export function CliAuthFlowPanel({
   });
 
   const respondMutation = useMutation({
-    mutationFn: async ({ flowId, value }: { flowId: string; value: string }) =>
+    mutationFn: async ({ id, value }: { id: string; value: string }) =>
       unwrapJson(
         await appClient.clis.auth.flows[":flowId"].respond.$post({
-          param: { flowId },
+          param: { flowId: id },
           json: { value },
         }),
       ),
     onSuccess: (data) => {
       setResponseInput("");
-      setFlow(data.flow);
+      upsertCliAuthFlow(data.flow, queryClient);
     },
   });
 
   const cancelMutation = useMutation({
-    mutationFn: async (flowId: string) =>
-      unwrapJson(await appClient.clis.auth.flows[":flowId"].cancel.$post({ param: { flowId } })),
+    mutationFn: async (id: string) =>
+      unwrapJson(
+        await appClient.clis.auth.flows[":flowId"].cancel.$post({ param: { flowId: id } }),
+      ),
     onSuccess: () => {
-      setFlow(null);
+      setFlowId(null);
       setResponseInput("");
     },
   });
@@ -407,36 +354,6 @@ export function CliAuthFlowPanel({
   }, []);
 
   useEffect(() => {
-    if (activeFlowId === undefined) {
-      return;
-    }
-
-    let cancelled = false;
-    const poll = async () => {
-      try {
-        const result = await unwrapJson(
-          await appClient.clis.auth.flows[":flowId"].$get({ param: { flowId: activeFlowId } }),
-        );
-
-        if (!cancelled) {
-          setFlow(result.flow);
-        }
-      } catch {
-        // Keep latest state on transient poll failure.
-      }
-    };
-
-    const timer = setInterval(() => {
-      void poll();
-    }, 1000);
-
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
-  }, [activeFlowId]);
-
-  useEffect(() => {
     if (authUrl !== undefined && openedUrlRef.current !== authUrl) {
       openedUrlRef.current = authUrl;
       openAuthWindow(authUrl);
@@ -451,12 +368,11 @@ export function CliAuthFlowPanel({
     handledFlowIdRef.current = flow.id;
 
     if (flow.status === "completed") {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.cliStatus });
       toast.add({
         type: "success",
         title: `${entry.name} signed in`,
       });
-      setFlow(null);
+      setFlowId(null);
     } else if (flow.status === "failed") {
       toast.add({
         type: "error",
@@ -465,13 +381,13 @@ export function CliAuthFlowPanel({
       });
       setShowOutput(true);
     }
-  }, [flow, entry.name, queryClient]);
+  }, [flow, entry.name]);
 
   const handleRespond = (event: FormEvent) => {
     event.preventDefault();
 
     if (activeFlow !== null) {
-      respondMutation.mutate({ flowId: activeFlow.id, value: responseInput });
+      respondMutation.mutate({ id: activeFlow.id, value: responseInput });
     }
   };
 
