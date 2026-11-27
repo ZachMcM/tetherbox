@@ -1,7 +1,10 @@
 import { serve } from "@hono/node-server";
 import { loadOrCreateAppToken } from "./servers/app/app-token.ts";
 import { createAppServer } from "./servers/app/server.ts";
-import { CliManager } from "./cli-manager.ts";
+import { AgentProcessRunner } from "./clis/agent-process.ts";
+import { CliAuthFlows } from "./clis/auth-flows.ts";
+import { CliInstallJobs } from "./clis/install-jobs.ts";
+import { CliStatusProbe } from "./clis/status.ts";
 import type { DaemonConfig } from "./config.ts";
 import { openDaemonDb } from "./db/database.ts";
 import { DaemonEventBus } from "./events.ts";
@@ -42,7 +45,10 @@ export async function serveDaemon(
   const events = new DaemonEventBus();
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
   const catalog = new StarterCatalog(config.dataDir);
-  const clis = new CliManager({ agentUser: config.agent.user, events, catalog });
+  const agentRunner = new AgentProcessRunner(config.agent.user);
+  const cliStatus = new CliStatusProbe({ runner: agentRunner, catalog });
+  const cliInstalls = new CliInstallJobs({ runner: agentRunner, catalog, events });
+  const cliAuthFlows = new CliAuthFlows({ runner: agentRunner, catalog, events });
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
     turns.enqueue(
@@ -136,7 +142,9 @@ export async function serveDaemon(
       llmOAuth,
       llmWebAuth,
       oauth,
-      clis,
+      cliStatus,
+      cliInstalls,
+      cliAuthFlows,
       catalog,
       shutdownSignal: shutdownController.signal,
     }).fetch,
@@ -171,7 +179,8 @@ export async function serveDaemon(
       poller.stopAll();
       reminders.stopAll();
       llmWebAuth.stopAll();
-      clis.stopAll();
+      cliInstalls.stop();
+      cliAuthFlows.stop();
       shutdownController.abort();
       internal.close();
       publicServer.close();

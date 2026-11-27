@@ -1,5 +1,7 @@
 import type { AppApiHandlers } from "@tetherbox/core";
-import type { CliManager } from "../../cli-manager.ts";
+import type { CliAuthFlows } from "../../clis/auth-flows.ts";
+import type { CliInstallJobs } from "../../clis/install-jobs.ts";
+import type { CliStatusProbe } from "../../clis/status.ts";
 import type { DaemonConfig } from "../../config.ts";
 import type { DaemonDb } from "../../db/database.ts";
 import type { DaemonEventBus } from "../../events.ts";
@@ -38,7 +40,9 @@ export interface AppHandlerDeps {
   llmOAuth: LlmOAuth;
   llmWebAuth: LlmWebAuthManager;
   oauth: OAuthStore;
-  clis: CliManager;
+  cliStatus: CliStatusProbe;
+  cliInstalls: CliInstallJobs;
+  cliAuthFlows: CliAuthFlows;
   catalog: StarterCatalog;
 }
 
