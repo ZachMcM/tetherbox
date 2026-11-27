@@ -16,13 +16,12 @@ import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
 import { openAuthWindow } from "../../lib/auth-window.ts";
 import { parseDomainsList, splitList } from "../../lib/lists.ts";
 import { oauthStatusQueryOptions } from "../../lib/queries.ts";
+import { AuthorizationPendingAlert } from "../auth-setup/authorization-pending-alert.tsx";
 import {
-  AuthorizationPendingAlert,
-  describePresetLogin,
-  findPresetLogin,
   OAuthPresetConnectForm,
   OAuthPresetCredentialsForm,
-} from "../auth-setup-panels.tsx";
+} from "../auth-setup/oauth-preset-forms.tsx";
+import { describePresetLogin, findPresetLogin } from "../../lib/auth-status.ts";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 
 type IntegrationSubView =

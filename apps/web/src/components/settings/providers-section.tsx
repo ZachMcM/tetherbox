@@ -12,11 +12,8 @@ import {
   llmStatusQueryOptions,
   secretsQueryOptions,
 } from "../../lib/queries.ts";
-import {
-  findProviderApiKey,
-  isProviderConnected,
-  LlmProviderAuthPanel,
-} from "../auth-setup-panels.tsx";
+import { LlmProviderAuthPanel } from "../auth-setup/llm-provider-auth-panel.tsx";
+import { findProviderApiKey, isProviderConnected } from "../../lib/auth-status.ts";
 import { EffortPicker } from "../effort-picker.tsx";
 import { ModelPicker } from "../model-picker.tsx";
 import { ProviderIcon } from "../provider-icons.tsx";

@@ -23,11 +23,8 @@ import {
   secretsQueryOptions,
   startersQueryOptions,
 } from "../lib/queries.ts";
-import {
-  findPresetLogin,
-  OAuthPresetInlineCard,
-  StarterSecretInlineCard,
-} from "./auth-setup-panels.tsx";
+import { OAuthPresetInlineCard, StarterSecretInlineCard } from "./auth-setup/inline-cards.tsx";
+import { findPresetLogin } from "../lib/auth-status.ts";
 import { CliAuthFlowPanel } from "./cli-setup/cli-auth-flow-panel.tsx";
 import { useCliInstallRunner, type CliInstallRunner } from "./cli-setup/use-cli-install-runner.ts";
 import { StarterIcon } from "./starter-icons.tsx";
