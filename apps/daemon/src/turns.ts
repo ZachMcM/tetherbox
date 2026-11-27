@@ -50,7 +50,7 @@ export interface TurnRunnerDeps {
   llmOAuth: LlmOAuth;
   db: DaemonDb;
   events: DaemonEventBus;
-  onProfileReloaded(profile: LoadedProfile): ProfileIssue[];
+  onProfileReloaded(profile: LoadedProfile): Promise<ProfileIssue[]>;
 }
 
 function deriveSessionTitle(trigger: TurnTrigger): string {
@@ -485,7 +485,7 @@ export class TurnRunner {
 
     const issues =
       load.kind === "loaded"
-        ? [...load.issues, ...this.#deps.onProfileReloaded(load.profile)]
+        ? [...load.issues, ...(await this.#deps.onProfileReloaded(load.profile))]
         : load.issues;
 
     for (const issue of issues) {

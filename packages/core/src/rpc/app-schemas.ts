@@ -1,12 +1,7 @@
 import { z } from "zod";
 import { profileIdSchema, type EntryName, type ProfileId } from "../ids.ts";
 import type { LlmAuthKind, LlmProvider } from "../llm-auth.ts";
-import {
-  oauthScopeModeSchema,
-  type OAuthPreset,
-  type OAuthPresetId,
-  type OAuthProviderConfig,
-} from "../oauth.ts";
+import { oauthScopeModeSchema, type OAuthPreset, type OAuthProviderConfig } from "../oauth.ts";
 import type { RegisteredPollJob } from "../poll.ts";
 import {
   modelSelectionSchema,
@@ -16,11 +11,9 @@ import {
   type CronJob,
   type ProfileConfig,
   type ProfileIssue,
-  type StarterCategory,
-  type StarterConfigField,
-  type StarterSecret,
   type Webhook,
 } from "../profile.ts";
+import type { Starter, StarterSource } from "../starter.ts";
 import type { ScheduledReminder } from "../reminder.ts";
 import { secretBindingSchema } from "../secrets.ts";
 
@@ -131,20 +124,10 @@ export interface ProfileDetail {
   issues: ProfileIssue[];
 }
 
-export interface StarterSummary {
-  id: string;
-  name: string;
-  kind: "skill" | "module";
-  category: StarterCategory;
-  configFields: readonly StarterConfigField[];
-  secrets: readonly StarterSecret[];
-  oauthPreset?: OAuthPresetId;
-  cli?: {
-    binary: string;
-    hasAuth: boolean;
-  };
-  setupNote?: string;
-}
+export type StarterSummary = Omit<Starter, "cli"> & {
+  source: StarterSource;
+  cli?: { binary: string; hasAuth: boolean };
+};
 
 export type StarterCliStatus =
   | { kind: "missing" }

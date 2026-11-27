@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
-import { access, cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import {
   profileConfigSchema,
   profileLayout,
@@ -9,13 +7,13 @@ import {
   type CreateProfileInput,
   type ProfileConfig,
   type ProfileId,
-  type StarterSummary,
+  starterPath,
   type UpdateProfileInput,
 } from "@tetherbox/core";
-import { resolveStarters, starters, templatesDir, type Starter } from "@tetherbox/starters";
 import { isMissing } from "./file-store.ts";
-
-const execFileAsync = promisify(execFile);
+import { commitAll, initRepo } from "./git-repo.ts";
+import { loadProfile } from "./profiles.ts";
+import type { StarterCatalog } from "./starter-catalog.ts";
 
 function isAlreadyExists(error: unknown): boolean {
   return error instanceof Error && "code" in error && error.code === "EEXIST";
@@ -29,20 +27,6 @@ async function pathExists(path: string): Promise<boolean> {
   } catch {
     return false;
   }
-}
-
-function resolveStartersOrThrow(ids: readonly string[]): Starter[] {
-  try {
-    return resolveStarters(ids);
-  } catch (error) {
-    throw new RpcError(400, error instanceof Error ? error.message : String(error));
-  }
-}
-
-async function readProfileConfigFile(profileDir: string): Promise<ProfileConfig> {
-  return profileConfigSchema.parse(
-    JSON.parse(await readFile(join(profileDir, profileLayout.config), "utf8")),
-  );
 }
 
 async function writeProfileConfigFile(
@@ -71,11 +55,16 @@ export async function writeProfileMemoryFile(profileDir: string, content: string
   await writeFile(join(profileDir, profileLayout.memory), content);
 }
 
-export async function createProfileOnDisk(
-  profilesDir: string,
-  input: CreateProfileInput,
-): Promise<ProfileConfig> {
-  const selectedStarters = resolveStartersOrThrow(input.starters);
+export async function createProfileOnDisk({
+  profilesDir,
+  catalog,
+  input,
+}: {
+  profilesDir: string;
+  catalog: StarterCatalog;
+  input: CreateProfileInput;
+}): Promise<ProfileConfig> {
+  const selectedStarters = catalog.resolve(input.starters);
   const profileConfig = profileConfigSchema.parse({
     name: input.name,
     model: input.model,
@@ -101,25 +90,11 @@ export async function createProfileOnDisk(
     await writeFile(join(profileDir, profileLayout.memory), `# ${profileConfig.name}\n`);
 
     for (const starter of selectedStarters) {
-      await cp(join(templatesDir, starter.path), join(profileDir, starter.path), {
-        recursive: true,
-      });
+      await catalog.copyInto({ profileId: input.id, profileDir, starter });
     }
 
-    await execFileAsync("git", ["init", "-q"], { cwd: profileDir });
-    await execFileAsync("git", ["config", "user.name", "Tetherbox"], { cwd: profileDir });
-    await execFileAsync("git", ["config", "user.email", "tetherbox@localhost"], {
-      cwd: profileDir,
-    });
-    await execFileAsync("git", ["config", "commit.gpgsign", "false"], { cwd: profileDir });
-    await execFileAsync("git", ["add", "-A"], { cwd: profileDir });
-    await execFileAsync(
-      "git",
-      ["commit", "-q", "--no-verify", "--no-gpg-sign", "-m", "Initialize profile"],
-      {
-        cwd: profileDir,
-      },
-    );
+    await initRepo(profileDir);
+    await commitAll(profileDir, "Initialize profile");
   } catch (error) {
     await rm(profileDir, { recursive: true, force: true });
     throw error;
@@ -128,20 +103,32 @@ export async function createProfileOnDisk(
   return profileConfig;
 }
 
-export async function updateProfileOnDisk(
-  profilesDir: string,
-  id: ProfileId,
-  input: UpdateProfileInput,
-): Promise<ProfileConfig> {
+export async function updateProfileOnDisk({
+  profilesDir,
+  catalog,
+  id,
+  input,
+}: {
+  profilesDir: string;
+  catalog: StarterCatalog;
+  id: ProfileId;
+  input: UpdateProfileInput;
+}): Promise<ProfileConfig> {
   const profileDir = join(profilesDir, id);
 
   if (!(await pathExists(profileDir))) {
     throw new RpcError(404, `profile "${id}" does not exist`);
   }
 
-  const current = await readProfileConfigFile(profileDir);
-  const nextStarterIds = input.starters ?? current.starters;
-  const resolvedStarters = resolveStartersOrThrow(nextStarterIds);
+  const load = await loadProfile(id, profileDir);
+
+  if (load.kind === "invalid") {
+    throw new RpcError(400, load.issues.map((issue) => issue.message).join("; "));
+  }
+
+  const current = load.profile.config;
+  const currentStarterIds = catalog.enabledIds(load.profile);
+  const resolvedStarters = catalog.resolve(input.starters ?? currentStarterIds);
   const nextStarterSet = new Set(resolvedStarters.map((starter) => starter.id));
   const nextModel = input.model === null ? undefined : (input.model ?? current.model);
   const updated = profileConfigSchema.parse({
@@ -152,19 +139,19 @@ export async function updateProfileOnDisk(
   });
 
   for (const starter of resolvedStarters) {
-    const destination = join(profileDir, starter.path);
+    const destination = join(profileDir, starterPath(starter));
 
     if (!(await pathExists(destination))) {
-      await cp(join(templatesDir, starter.path), destination, { recursive: true });
+      await catalog.copyInto({ profileId: id, profileDir, starter });
     }
   }
 
   if (input.starters !== undefined) {
-    const removedIds = current.starters.filter((starterId) => !nextStarterSet.has(starterId));
+    const removedIds = currentStarterIds.filter((starterId) => !nextStarterSet.has(starterId));
 
-    for (const starter of starters) {
+    for (const starter of catalog.all()) {
       if (removedIds.includes(starter.id)) {
-        await rm(join(profileDir, starter.path), { recursive: true, force: true });
+        await rm(join(profileDir, starterPath(starter)), { recursive: true, force: true });
       }
     }
   }
@@ -182,27 +169,4 @@ export async function deleteProfileOnDisk(profilesDir: string, id: ProfileId): P
   }
 
   await rm(profileDir, { recursive: true, force: true });
-}
-
-export function listStarterSummaries(): StarterSummary[] {
-  return starters.map((starter) => ({
-    id: starter.id,
-    name: starter.name,
-    kind: starter.kind,
-    category: starter.category,
-    configFields: "configFields" in starter ? starter.configFields : [],
-    secrets: starter.secrets,
-    ...("oauthPreset" in starter && starter.oauthPreset !== undefined
-      ? { oauthPreset: starter.oauthPreset }
-      : {}),
-    ...("cli" in starter
-      ? {
-          cli: {
-            binary: starter.cli.binary,
-            hasAuth: "auth" in starter.cli && starter.cli.auth !== undefined,
-          },
-        }
-      : {}),
-    ...("setupNote" in starter ? { setupNote: starter.setupNote } : {}),
-  }));
 }

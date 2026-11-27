@@ -15,5 +15,6 @@ export * from "./rpc/client.ts";
 export * from "./rpc/headers.ts";
 export * from "./secrets.ts";
 export * from "./session.ts";
+export * from "./starter.ts";
 export * from "./skill.ts";
 export * from "./turn.ts";

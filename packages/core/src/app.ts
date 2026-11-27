@@ -10,4 +10,5 @@ export * from "./rpc/app-api.ts";
 export * from "./rpc/app-client.ts";
 export * from "./secrets.ts";
 export * from "./session.ts";
+export * from "./starter.ts";
 export * from "./turn.ts";

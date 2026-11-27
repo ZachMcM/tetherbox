@@ -17,6 +17,7 @@ import {
   type SessionRecord,
 } from "@tetherbox/core";
 import type { CliManager } from "./cli-manager.ts";
+import type { StarterCatalog } from "./starter-catalog.ts";
 import type { DaemonConfig } from "./config.ts";
 import type { DaemonDb } from "./db.ts";
 import type { DaemonEventBus } from "./events.ts";
@@ -28,7 +29,6 @@ import type { Poller } from "./poller.ts";
 import {
   createProfileOnDisk,
   deleteProfileOnDisk,
-  listStarterSummaries,
   readProfileMemoryFile,
   updateProfileOnDisk,
   writeProfileMemoryFile,
@@ -56,16 +56,18 @@ export interface AppHandlerDeps {
   llmWebAuth: LlmWebAuthManager;
   oauth: OAuthStore;
   clis: CliManager;
+  catalog: StarterCatalog;
 }
 
 function toProfileSummary(
   profile: LoadedProfile,
   poller: Poller,
   reminders: ReminderStore,
+  catalog: StarterCatalog,
 ): ProfileSummary {
   return {
     id: profile.id,
-    config: profile.config,
+    config: { ...profile.config, starters: catalog.enabledIds(profile) },
     cronCount: profile.cron.size,
     webhookCount: profile.webhooks.size,
     pollJobCount: poller.list(profile.id).length,
@@ -77,6 +79,7 @@ async function toProfileDetail(
   profile: LoadedProfile,
   poller: Poller,
   reminders: ReminderStore,
+  catalog: StarterCatalog,
 ): Promise<ProfileDetail> {
   const [memory, load] = await Promise.all([
     readProfileMemoryFile(profile.dir),
@@ -85,7 +88,7 @@ async function toProfileDetail(
 
   return {
     id: profile.id,
-    config: profile.config,
+    config: { ...profile.config, starters: catalog.enabledIds(profile) },
     memory,
     cron: [...profile.cron.entries()].map(([name, job]) => ({ name, job })),
     webhooks: [...profile.webhooks.entries()].map(([name, webhook]) => ({ name, webhook })),
@@ -111,6 +114,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
     llmWebAuth,
     oauth,
     clis,
+    catalog,
   } = deps;
 
   const requireProfile = (id: ProfileId): LoadedProfile => {
@@ -154,25 +158,25 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
     },
 
     listProfiles() {
-      return registry.all().map((profile) => toProfileSummary(profile, poller, reminders));
+      return registry.all().map((profile) => toProfileSummary(profile, poller, reminders, catalog));
     },
     async getProfile(id) {
-      return toProfileDetail(requireProfile(id), poller, reminders);
+      return toProfileDetail(requireProfile(id), poller, reminders, catalog);
     },
     async createProfile(input) {
-      await createProfileOnDisk(config.profilesDir, input);
+      await createProfileOnDisk({ profilesDir: config.profilesDir, catalog, input });
 
       const loaded = await reloadProfileOrThrow(input.id);
 
-      return toProfileDetail(loaded, poller, reminders);
+      return toProfileDetail(loaded, poller, reminders, catalog);
     },
     async updateProfile(id, input) {
       requireProfile(id);
-      await updateProfileOnDisk(config.profilesDir, id, input);
+      await updateProfileOnDisk({ profilesDir: config.profilesDir, catalog, id, input });
 
       const loaded = await reloadProfileOrThrow(id);
 
-      return toProfileDetail(loaded, poller, reminders);
+      return toProfileDetail(loaded, poller, reminders, catalog);
     },
     async updateProfileMemory(id, content) {
       const profile = requireProfile(id);
@@ -206,7 +210,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
       }
     },
     listStarters() {
-      return listStarterSummaries();
+      return catalog.summaries();
     },
     listCliStatuses() {
       return clis.listStatuses();

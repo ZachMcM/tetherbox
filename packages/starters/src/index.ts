@@ -1,77 +1,28 @@
 import { fileURLToPath } from "node:url";
 import {
-  secretBindingSchema,
-  secretInjectionSchema,
-  secretKeySchema,
-  type OAuthPresetId,
+  starterSchema,
   type SecretInjection,
-  type StarterCategory,
-  type StarterConfigField,
-  type StarterSecret,
+  type Starter,
+  type StarterCliInstall,
+  type StarterInput,
 } from "@tetherbox/core";
 
-export type { StarterCategory, StarterConfigField, StarterSecret };
-
-export interface StarterCliInstall {
-  readonly description: string;
-  readonly command: readonly [string, ...string[]];
-}
-
-export interface StarterCliAuth {
-  readonly checkCommand?: readonly [string, ...string[]];
-  readonly loginCommand: readonly [string, ...string[]];
-}
-
-export interface StarterCli {
-  readonly binary: string;
-  readonly install?: StarterCliInstall;
-  readonly auth?: StarterCliAuth;
-}
-
-export interface StarterCliAuthEntry {
-  readonly starterId: string;
-  readonly cli: StarterCli & { readonly auth: StarterCliAuth };
-}
+type StarterSecretInput = NonNullable<StarterInput["secrets"]>[number];
 
 function proxySecret(
   key: string,
   domains: [string, ...string[]],
   inject: SecretInjection = { kind: "bearer" },
-): StarterSecret {
-  return {
-    kind: "fixed",
-    key: secretKeySchema.parse(key),
-    binding: secretBindingSchema.parse({
-      kind: "proxy",
-      domains,
-      inject,
-    }),
-  };
+): StarterSecretInput {
+  return { kind: "fixed", key, binding: { kind: "proxy", domains, inject } };
 }
 
-interface PromptDomainProxySecretInput {
-  readonly key: string;
-  readonly inject?: SecretInjection;
-  readonly domainPrompt: string;
-  readonly domainPlaceholder: string;
-  readonly fromConfigUrl?: { readonly starterId: string; readonly key: string };
-}
+type PromptDomainSecretInput = Extract<StarterSecretInput, { kind: "prompt-domain" }>;
 
-function promptDomainProxySecret({
-  key,
-  inject = { kind: "bearer" },
-  domainPrompt,
-  domainPlaceholder,
-  fromConfigUrl,
-}: PromptDomainProxySecretInput): StarterSecret {
-  return {
-    kind: "prompt-domain",
-    key: secretKeySchema.parse(key),
-    inject: secretInjectionSchema.parse(inject),
-    domainPrompt,
-    domainPlaceholder,
-    ...(fromConfigUrl !== undefined ? { fromConfigUrl } : {}),
-  };
+function promptDomainProxySecret(
+  input: Omit<PromptDomainSecretInput, "kind" | "inject"> & { inject?: SecretInjection },
+): StarterSecretInput {
+  return { kind: "prompt-domain", inject: { kind: "bearer" }, ...input };
 }
 
 function npmUserInstall(packageName: string, postInstall?: string): StarterCliInstall {
@@ -100,37 +51,14 @@ const GH_USER_INSTALL_SCRIPT = [
   'install -m 0755 "$TMP/gh_${VER}_${OS}_${ARCH}/bin/gh" "$HOME/.local/bin/gh"',
 ].join("; ");
 
-interface StarterBase {
-  readonly id: string;
-  readonly name: string;
-  readonly category: StarterCategory;
-  readonly secrets: readonly StarterSecret[];
-  readonly oauthPreset?: OAuthPresetId;
-  readonly cli?: StarterCli;
-  readonly configFields?: readonly StarterConfigField[];
-  readonly setupNote?: string;
-}
-
-export type Starter =
-  | (StarterBase & {
-      readonly kind: "skill";
-      readonly path: `skills/${string}`;
-    })
-  | (StarterBase & {
-      readonly kind: "module";
-      readonly path: `modules/${string}`;
-    });
-
 export const templatesDir = fileURLToPath(new URL("../templates", import.meta.url));
 
-export const starters = [
+const builtinStarters = [
   {
     kind: "skill",
     id: "gh",
     name: "GitHub CLI",
     category: "cli",
-    path: "skills/gh",
-    secrets: [],
     cli: {
       binary: "gh",
       install: {
@@ -148,8 +76,6 @@ export const starters = [
     id: "browser",
     name: "Agent Browser",
     category: "cli",
-    path: "skills/browser",
-    secrets: [],
     cli: {
       binary: "agent-browser",
       install: {
@@ -163,8 +89,6 @@ export const starters = [
     id: "orca",
     name: "Orca",
     category: "harness",
-    path: "skills/orca",
-    secrets: [],
     configFields: [
       {
         key: "target",
@@ -182,8 +106,6 @@ export const starters = [
     id: "rex",
     name: "Rex",
     category: "harness",
-    path: "skills/rex",
-    secrets: [],
     cli: {
       binary: "rex",
       install: {
@@ -210,8 +132,6 @@ export const starters = [
     id: "paseo",
     name: "Paseo",
     category: "harness",
-    path: "skills/paseo",
-    secrets: [],
     cli: {
       binary: "paseo",
       install: npmUserInstall("@getpaseo/cli"),
@@ -233,8 +153,6 @@ export const starters = [
     id: "opencode",
     name: "OpenCode",
     category: "harness",
-    path: "skills/opencode",
-    secrets: [],
     cli: {
       binary: "opencode",
       install: npmUserInstall("opencode-ai"),
@@ -255,8 +173,6 @@ export const starters = [
     id: "claude",
     name: "Claude Code",
     category: "harness",
-    path: "skills/claude",
-    secrets: [],
     cli: {
       binary: "claude",
       install: npmUserInstall("@anthropic-ai/claude-code"),
@@ -271,7 +187,6 @@ export const starters = [
     id: "t3code",
     name: "T3 Code",
     category: "harness",
-    path: "modules/t3code",
     configFields: [
       {
         key: "endpointUrl",
@@ -294,7 +209,6 @@ export const starters = [
     id: "cursor",
     name: "Cursor",
     category: "harness",
-    path: "modules/cursor",
     secrets: [proxySecret("CURSOR_API_KEY", ["api.cursor.com"])],
   },
   {
@@ -302,7 +216,6 @@ export const starters = [
     id: "devin",
     name: "Devin",
     category: "harness",
-    path: "modules/devin",
     configFields: [
       {
         key: "orgId",
@@ -318,7 +231,6 @@ export const starters = [
     id: "slack",
     name: "Slack",
     category: "integration",
-    path: "modules/slack",
     secrets: [proxySecret("SLACK_BOT_TOKEN", ["slack.com"])],
   },
   {
@@ -326,8 +238,6 @@ export const starters = [
     id: "gcal",
     name: "Google Calendar",
     category: "integration",
-    path: "modules/gcal",
-    secrets: [],
     oauthPreset: "gcal",
   },
   {
@@ -335,8 +245,6 @@ export const starters = [
     id: "gdrive",
     name: "Google Drive",
     category: "integration",
-    path: "modules/gdrive",
-    secrets: [],
     oauthPreset: "gdrive",
   },
   {
@@ -344,8 +252,6 @@ export const starters = [
     id: "gmail",
     name: "Gmail",
     category: "integration",
-    path: "modules/gmail",
-    secrets: [],
     oauthPreset: "gmail",
   },
   {
@@ -353,7 +259,6 @@ export const starters = [
     id: "sentry",
     name: "Sentry",
     category: "integration",
-    path: "modules/sentry",
     configFields: [
       {
         key: "apiBaseUrl",
@@ -383,7 +288,6 @@ export const starters = [
     id: "jira",
     name: "Jira",
     category: "integration",
-    path: "modules/jira",
     configFields: [
       {
         key: "siteUrl",
@@ -409,7 +313,6 @@ export const starters = [
     id: "linear",
     name: "Linear",
     category: "integration",
-    path: "modules/linear",
     secrets: [
       proxySecret("LINEAR_API_KEY", ["api.linear.app"], {
         kind: "header",
@@ -422,50 +325,16 @@ export const starters = [
     id: "notion",
     name: "Notion",
     category: "integration",
-    path: "modules/notion",
     secrets: [proxySecret("NOTION_API_KEY", ["api.notion.com"])],
   },
-] as const satisfies readonly Starter[];
+] satisfies StarterInput[];
 
-export type StarterId = (typeof starters)[number]["id"];
+export const starters: readonly Starter[] = builtinStarters.map((starter) =>
+  starterSchema.parse(starter),
+);
 
 const startersById = new Map<string, Starter>(starters.map((starter) => [starter.id, starter]));
 
 export function getStarter(id: string): Starter | undefined {
   return startersById.get(id);
-}
-
-export function resolveStarters(ids: readonly string[]): Starter[] {
-  const seen = new Set<string>();
-  const resolved: Starter[] = [];
-
-  for (const id of ids) {
-    if (seen.has(id)) {
-      continue;
-    }
-
-    const starter = startersById.get(id);
-
-    if (starter === undefined) {
-      throw new Error(`unknown starter "${id}"`);
-    }
-
-    seen.add(id);
-    resolved.push(starter);
-  }
-
-  return resolved;
-}
-
-export function getCliAuthStarter(id: string): StarterCliAuthEntry | undefined {
-  const starter = startersById.get(id);
-
-  if (starter?.cli?.auth === undefined) {
-    return undefined;
-  }
-
-  return {
-    starterId: starter.id,
-    cli: { ...starter.cli, auth: starter.cli.auth },
-  };
 }

@@ -21,6 +21,7 @@ import { formatExpiry, toOAuthStatusEntry, type OAuthStore } from "./oauth.ts";
 import { signalDaemonReload } from "./pid.ts";
 import { createProfileOnDisk, updateProfileOnDisk } from "./profile-service.ts";
 import { ProfileRegistry } from "./profiles.ts";
+import { StarterCatalog } from "./starter-catalog.ts";
 import type { SecretStore } from "./secret-store.ts";
 import { withTerminalAuth } from "./terminal-auth.ts";
 
@@ -351,12 +352,10 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       const starterConfig = starterConfigFlagsSchema.parse(values["starter-config"]);
       const model = modelRefSchema.parse(modelInput(values));
 
-      await createProfileOnDisk(config.profilesDir, {
-        id,
-        name: values.name ?? id,
-        model,
-        starters: values.starter,
-        starterConfig,
+      await createProfileOnDisk({
+        profilesDir: config.profilesDir,
+        catalog: await StarterCatalog.open(config.dataDir),
+        input: { id, name: values.name ?? id, model, starters: values.starter, starterConfig },
       });
 
       // TODO: Set profileDir ownership to config.agent.user once the VM installer configures a
@@ -373,7 +372,12 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       });
       const model = modelRefSchema.parse(modelInput(values));
 
-      await updateProfileOnDisk(config.profilesDir, id, { model });
+      await updateProfileOnDisk({
+        profilesDir: config.profilesDir,
+        catalog: await StarterCatalog.open(config.dataDir),
+        id,
+        input: { model },
+      });
       await reportReload(
         config,
         `set ${id} model to ${model.provider}/${model.id} (${model.auth})`,

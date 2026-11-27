@@ -77,8 +77,62 @@ Secrets never enter the agent process. The daemon injects them on the Unix socke
 4. Pin the narrowest API hostname needed (for example `api.linear.app`, not `linear.app`).
 5. Inside tool handlers, call `ctx.fetchWithSecret(key, "https://<api.host>/...", init)` with an `https://` URL. Do not pass the secret manually in headers or query strings.
 
+## Manifest
+
+Write `modules/<name>/starter.json` next to `index.ts`. It describes what the module needs so other profiles can enable it from the web app. Do not include `id` or `kind`; the directory path sets both.
+
+```json
+{
+  "name": "Example",
+  "category": "integration",
+  "secrets": [
+    {
+      "kind": "fixed",
+      "key": "EXAMPLE_API_KEY",
+      "binding": {
+        "kind": "proxy",
+        "domains": ["api.example.com"],
+        "inject": { "kind": "bearer" }
+      }
+    }
+  ]
+}
+```
+
+- `category` is `integration`, `harness`, or `cli`.
+- List every secret the module reads. `inject` is `{ "kind": "bearer" }`, `{ "kind": "header", "name": "<Header-Name>" }`, or `{ "kind": "query", "name": "<param>" }`.
+- Use `"oauthPreset": "gcal" | "gdrive" | "gmail"` instead of a secret for a built-in OAuth preset.
+- When the user picks the API host (a self-hosted instance, for example), declare it as a config field and use a `prompt-domain` secret that reads its domain from that field:
+
+```json
+{
+  "name": "Example",
+  "category": "integration",
+  "configFields": [
+    {
+      "key": "baseUrl",
+      "kind": "url",
+      "prompt": "Example base URL",
+      "placeholder": "https://example.com"
+    }
+  ],
+  "secrets": [
+    {
+      "kind": "prompt-domain",
+      "key": "EXAMPLE_TOKEN",
+      "inject": { "kind": "bearer" },
+      "domainPrompt": "Hostname for your Example instance",
+      "domainPlaceholder": "example.com",
+      "fromConfigUrl": { "starterId": "<name>", "key": "baseUrl" }
+    }
+  ]
+}
+```
+
+- Add `"setupNote"` for any manual step the user must do outside Tetherbox.
+
 ## Validate before finishing
 
 1. Verify the module parses cleanly under Node (for example `node --input-type=module -e 'import("./modules/<name>/index.ts")'`).
-2. Run `validate_profile` and fix any reported issues.
-3. Commit the module in the profile repository.
+2. Run `validate_profile` and fix any reported issues, including ones in `starter.json`.
+3. Commit the module and its manifest in the profile repository.

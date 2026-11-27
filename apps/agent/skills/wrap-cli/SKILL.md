@@ -49,4 +49,36 @@ description: <one-line summary of when to use this CLI>
 - ...
 ```
 
-Keep recipes short and verified against the installed version on the VM. Commit the new skill to the profile repository once it works.
+Keep recipes short and verified against the installed version on the VM.
+
+## Manifest
+
+Write `skills/<name>/starter.json` next to `SKILL.md`. It tells the web app how to install and sign in to the CLI when another profile enables this skill. Do not include `id` or `kind`; the directory path sets both.
+
+```json
+{
+  "name": "Example CLI",
+  "category": "cli",
+  "cli": {
+    "binary": "example",
+    "install": {
+      "description": "Install example into ~/.local",
+      "command": ["sh", "-c", "npm install -g --prefix \"$HOME/.local\" example-cli"]
+    },
+    "auth": {
+      "checkCommand": ["example", "auth", "status"],
+      "loginCommand": ["example", "auth", "login"]
+    }
+  }
+}
+```
+
+- `category` is `cli` for a tool and `harness` for a coding agent or remote workstation tool.
+- `install.command` must be the exact user-space install you ran. Omit `install` when the binary needs root or a system package, and say so in `"setupNote"`.
+- Omit `auth` when the CLI has no login. `checkCommand` must exit 0 only when signed in.
+- Declare each `starterConfig.<name>` value the skill reads as a config field: `"configFields": [{ "key": "host", "kind": "host-port", "prompt": "...", "placeholder": "..." }]`. `kind` is `string`, `host-port`, or `url`.
+
+## Validate before finishing
+
+1. Run `validate_profile` and fix any reported issues, including ones in `starter.json`.
+2. Commit the skill and its manifest in the profile repository.

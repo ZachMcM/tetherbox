@@ -1,7 +1,6 @@
 import { z } from "zod";
-import { secretKeySchema, sessionIdSchema, type SecretKey } from "./ids.ts";
+import { secretKeySchema, sessionIdSchema } from "./ids.ts";
 import { llmAuthKindSchema, llmProviderSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
-import type { SecretBinding, SecretInjection } from "./secrets.ts";
 
 export const modelEffortSchema = z.enum([
   "off",
@@ -42,55 +41,6 @@ export const starterConfigSchema = z.record(
   z.record(z.string().min(1), z.string().min(1)),
 );
 export type StarterConfig = z.infer<typeof starterConfigSchema>;
-
-export type StarterCategory = "cli" | "harness" | "integration";
-
-export type StarterConfigFieldKind = "string" | "host-port" | "url";
-
-export interface StarterConfigField {
-  readonly key: string;
-  readonly kind: StarterConfigFieldKind;
-  readonly prompt: string;
-  readonly placeholder: string;
-}
-
-export type StarterSecret =
-  | {
-      readonly kind: "fixed";
-      readonly key: SecretKey;
-      readonly binding: SecretBinding;
-    }
-  | {
-      readonly kind: "prompt-domain";
-      readonly key: SecretKey;
-      readonly inject: SecretInjection;
-      readonly domainPrompt: string;
-      readonly domainPlaceholder: string;
-      readonly fromConfigUrl?: { readonly starterId: string; readonly key: string };
-    };
-
-export const starterConfigFieldSchemas: Readonly<
-  Record<StarterConfigFieldKind, z.ZodType<string>>
-> = {
-  string: z.string().trim().min(1, "A value is required"),
-  "host-port": z
-    .string()
-    .trim()
-    .min(1, "A host or host:port is required")
-    .refine((value) => {
-      if (/[/?#@\\]/.test(value)) {
-        return false;
-      }
-
-      const parsed = URL.parse(`http://${value}`);
-
-      return parsed !== null && parsed.hostname !== "" && parsed.pathname === "/";
-    }, "Enter a valid host or host:port (for example workstation.tailnet.ts.net:6767)"),
-  url: z
-    .string()
-    .trim()
-    .pipe(z.url({ protocol: /^https?$/, error: "Enter a valid http:// or https:// URL" })),
-};
 
 const STARTER_CONFIG_FLAG_PATTERN = /^([a-z0-9-]+)\.([A-Za-z0-9_-]+)=(.+)$/;
 

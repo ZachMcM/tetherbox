@@ -5,6 +5,7 @@ export const profileLayout = {
   skillsDir: "skills",
   modulesDir: "modules",
   moduleEntry: "index.ts",
+  starterManifest: "starter.json",
   cronDir: "cron",
   webhooksDir: "webhooks",
 } as const;

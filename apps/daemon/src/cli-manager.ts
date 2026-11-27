@@ -9,17 +9,13 @@ import {
   type CliAuthFlowEvent,
   type CliAuthFlowState,
   type CliInstallJobState,
+  type Starter,
+  type StarterCli,
   type StarterCliStatus,
   type StarterCliStatusEntry,
 } from "@tetherbox/core";
-import {
-  getCliAuthStarter,
-  getStarter,
-  starters,
-  type Starter,
-  type StarterCli,
-} from "@tetherbox/starters";
 import type { DaemonEvent, DaemonEventBus } from "./events.ts";
+import type { StarterCatalog } from "./starter-catalog.ts";
 
 const PROBE_TIMEOUT_MS = 10_000;
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
@@ -213,13 +209,23 @@ function authUpdated(flow: ActiveAuthFlow): DaemonEvent {
 export class CliManager {
   readonly #agentUser: string | undefined;
   readonly #events: DaemonEventBus;
+  readonly #catalog: StarterCatalog;
   readonly #installJobs = new Map<string, ActiveInstallJob>();
   readonly #authFlows = new Map<string, ActiveAuthFlow>();
   #stopped = false;
 
-  constructor(agentUser: string | undefined, events: DaemonEventBus) {
+  constructor({
+    agentUser,
+    events,
+    catalog,
+  }: {
+    agentUser: string | undefined;
+    events: DaemonEventBus;
+    catalog: StarterCatalog;
+  }) {
     this.#agentUser = agentUser;
     this.#events = events;
+    this.#catalog = catalog;
   }
 
   #emitNow(target: EmitTarget, toEvent: () => DaemonEvent): void {
@@ -372,9 +378,9 @@ export class CliManager {
   }
 
   async listStatuses(): Promise<StarterCliStatusEntry[]> {
-    const cliStarters: readonly (Starter & { readonly cli: StarterCli })[] = starters.flatMap(
-      (starter) => ("cli" in starter ? [starter] : []),
-    );
+    const cliStarters: readonly (Starter & { readonly cli: StarterCli })[] = this.#catalog
+      .all()
+      .flatMap((starter) => (starter.cli === undefined ? [] : [{ ...starter, cli: starter.cli }]));
 
     return Promise.all(
       cliStarters.map(async (starter) => ({
@@ -394,7 +400,7 @@ export class CliManager {
   startInstall(starterId: string): CliInstallJobState {
     this.#prune();
 
-    const starter = getStarter(starterId);
+    const starter = this.#catalog.get(starterId);
 
     if (starter?.cli === undefined) {
       throw new RpcError(400, `starter "${starterId}" does not define a CLI`);
@@ -517,7 +523,7 @@ export class CliManager {
   async startAuth(starterId: string): Promise<CliAuthFlowState> {
     this.#prune();
 
-    const entry = getCliAuthStarter(starterId);
+    const entry = this.#catalog.getCliAuth(starterId);
 
     if (entry === undefined) {
       throw new RpcError(400, `starter "${starterId}" does not support CLI login`);

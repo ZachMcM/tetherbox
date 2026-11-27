@@ -16,13 +16,15 @@ export const secretInjectionSchema = z.discriminatedUnion("kind", [
 ]);
 export type SecretInjection = z.infer<typeof secretInjectionSchema>;
 
+export const proxySecretBindingSchema = z.object({
+  kind: z.literal("proxy"),
+  domains: z.array(hostnameSchema).nonempty(),
+  inject: secretInjectionSchema,
+});
+
 export const secretBindingSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("daemon") }),
-  z.object({
-    kind: z.literal("proxy"),
-    domains: z.array(hostnameSchema).nonempty(),
-    inject: secretInjectionSchema,
-  }),
+  proxySecretBindingSchema,
   z.object({
     kind: z.literal("llm"),
     provider: llmProviderSchema,

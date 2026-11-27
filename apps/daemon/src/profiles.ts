@@ -6,14 +6,21 @@ import {
   profileConfigSchema,
   profileIdSchema,
   profileLayout,
+  starterFromManifestSchema,
+  starterKindDirs,
+  starterKindSchema,
+  starterPath,
   webhookSchema,
   type CronJob,
   type EntryName,
   type ProfileConfig,
   type ProfileId,
   type ProfileIssue,
+  type Starter,
+  type StarterKind,
   type Webhook,
 } from "@tetherbox/core";
+import { getStarter } from "@tetherbox/starters";
 import { z } from "zod";
 import { isMissing } from "./file-store.ts";
 
@@ -23,13 +30,14 @@ export interface LoadedProfile {
   config: ProfileConfig;
   cron: ReadonlyMap<EntryName, CronJob>;
   webhooks: ReadonlyMap<EntryName, Webhook>;
+  authoredStarters: readonly Starter[];
 }
 
 export type ProfileLoad =
   | { kind: "loaded"; profile: LoadedProfile; issues: ProfileIssue[] }
   | { kind: "invalid"; issues: [ProfileIssue, ...ProfileIssue[]] };
 
-function describe(error: unknown): string {
+export function describe(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
@@ -80,6 +88,64 @@ async function loadEntries<T>(
   return entries;
 }
 
+export async function loadStarterDirs({
+  root,
+  issues,
+  skip,
+}: {
+  root: string;
+  issues: ProfileIssue[];
+  skip: (id: string, kind: StarterKind) => boolean;
+}): Promise<Starter[]> {
+  const loaded: Starter[] = [];
+
+  for (const kind of starterKindSchema.options) {
+    let entries;
+
+    try {
+      entries = await readdir(join(root, starterKindDirs[kind]), { withFileTypes: true });
+    } catch (error) {
+      if (isMissing(error)) {
+        continue;
+      }
+
+      throw error;
+    }
+
+    for (const entry of entries) {
+      if (!entry.isDirectory() || skip(entry.name, kind)) {
+        continue;
+      }
+
+      const manifestPath = join(
+        root,
+        starterPath({ id: entry.name, kind }),
+        profileLayout.starterManifest,
+      );
+      const missingMessage = `missing ${profileLayout.starterManifest}; describe this ${kind} so other profiles can enable it`;
+
+      try {
+        const parsed = starterFromManifestSchema(entry.name, kind).safeParse(
+          await readJson(manifestPath),
+        );
+
+        if (parsed.success) {
+          loaded.push(parsed.data);
+        } else {
+          issues.push({ file: manifestPath, message: z.prettifyError(parsed.error) });
+        }
+      } catch (error) {
+        issues.push({
+          file: manifestPath,
+          message: isMissing(error) ? missingMessage : describe(error),
+        });
+      }
+    }
+  }
+
+  return loaded;
+}
+
 export async function loadProfile(id: ProfileId, dir: string): Promise<ProfileLoad> {
   const configPath = join(dir, profileLayout.config);
   let config: ProfileConfig;
@@ -104,12 +170,19 @@ export async function loadProfile(id: ProfileId, dir: string): Promise<ProfileLo
   const webhooksDir = join(dir, profileLayout.webhooksDir);
   const cron = await loadEntries(cronDir, cronJobSchema, issues);
   const webhooks = await loadEntries(webhooksDir, webhookSchema, issues);
+  const authoredStarters = await loadStarterDirs({
+    root: dir,
+    issues,
+    skip: (starterId, kind) =>
+      config.starters.includes(starterId) && getStarter(starterId)?.kind === kind,
+  });
   const profile: LoadedProfile = {
     id,
     dir,
     config,
     cron,
     webhooks,
+    authoredStarters,
   };
 
   return { kind: "loaded", profile, issues };

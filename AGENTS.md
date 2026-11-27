@@ -29,14 +29,18 @@ Tetherbox is a self-hosted personal assistant for engineers. It runs on a user's
 A profile is a git-backed directory under the profiles root. Sessions are grouped under their profile, backed by Pi `.jsonl` files and indexed in SQLite. Files are the source of truth for profile config, and `profileLayout` in `packages/core` names them:
 
 ```
-profile.json          name, model, enabled starters
-MEMORY.md             memory index, loaded into every turn (capped at 8 KB)
-memory/               topic files; folders get an INDEX.md
+profile.json                 name, model, enabled starters
+MEMORY.md                    memory index, loaded into every turn (capped at 8 KB)
+memory/                      topic files; folders get an INDEX.md
 skills/<name>/SKILL.md
+skills/<name>/starter.json   CLI install, login, and config the skill needs
 modules/<name>/index.ts
-cron/<name>.json      schedule and prompt
-webhooks/<name>.json  prompt and verification, served at /hooks/<profileId>/<name>
+modules/<name>/starter.json  secrets, OAuth preset, and config the module needs
+cron/<name>.json             schedule and prompt
+webhooks/<name>.json         prompt and verification, served at /hooks/<profileId>/<name>
 ```
+
+Agent-written skills and modules need a `starter.json`. Copies of enabled starters do not.
 
 The daemon validates these files with the schemas in `packages/core` at startup and reloads a profile after each of its runs exits. Files hold what a user would want versioned. Short-lived runtime state (sessions, poll jobs, reminders, push subscriptions) lives in SQLite in the daemon's data dir. Profile modules run under Node's type stripping outside any package, so they may only `import type` from `@tetherbox/core` and get everything else from `ModuleContext`.
 
@@ -45,6 +49,8 @@ The daemon validates these files with the schemas in `packages/core` at startup 
 Every profile gets the agent's built-in tools (`notify`, `web_fetch`, `check_secret`, `fetch_with_secret`, `validate_profile`, and the poll-job and reminder tools) and the built-in skills in `apps/agent/skills/` (memory, cron and webhook files, writing modules, wrapping CLIs, reverse-engineering APIs). They describe the Tetherbox contract and change with the runtime, so they are never copied into profiles.
 
 `packages/starters` holds opt-in, profile-specific skills and modules (CLIs, coding harnesses, integrations). Enabling one copies it into the profile so the agent can patch it.
+
+The starter library is a git repo at `<dataDir>/library` with the same `skills/` and `modules/` layout. After each run, the daemon copies every agent-written skill or module with a valid `starter.json` from that profile into the library, skipping copies the profile has not changed since it last synced or received them. The starter picker lists built-in and library starters together, and enabling a library starter copies it into the profile.
 
 ## Commands
 

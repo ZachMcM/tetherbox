@@ -15,6 +15,7 @@ import { ProfileRegistry } from "./profiles.ts";
 import { createPublicServer } from "./public-server.ts";
 import { ReminderStore } from "./reminders.ts";
 import { Scheduler } from "./scheduler.ts";
+import { StarterCatalog } from "./starter-catalog.ts";
 import type { SecretStore } from "./secret-store.ts";
 import { TurnRunner } from "./turns.ts";
 import { loadOrCreateVapidKeys } from "./vapid.ts";
@@ -40,7 +41,8 @@ export async function serveDaemon(
 
   const events = new DaemonEventBus();
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
-  const clis = new CliManager(config.agent.user, events);
+  const catalog = new StarterCatalog(config.dataDir);
+  const clis = new CliManager({ agentUser: config.agent.user, events, catalog });
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
     turns.enqueue(
@@ -77,15 +79,22 @@ export async function serveDaemon(
     llmOAuth,
     db,
     events,
-    onProfileReloaded: (profile) => scheduler.sync(profile),
+    onProfileReloaded: async (profile) => [
+      ...scheduler.sync(profile),
+      ...(await catalog.sync(profile)),
+    ],
   });
 
   const reloadAll = async () => {
-    for (const issue of await registry.loadAll()) {
-      console.warn(`${issue.file}: ${issue.message}`);
+    const issues = [...(await catalog.load()), ...(await registry.loadAll())];
+
+    issues.push(...scheduler.syncAll(registry.all()));
+
+    for (const profile of registry.all()) {
+      issues.push(...(await catalog.sync(profile)));
     }
 
-    for (const issue of scheduler.syncAll(registry.all())) {
+    for (const issue of issues) {
       console.warn(`${issue.file}: ${issue.message}`);
     }
   };
@@ -127,6 +136,7 @@ export async function serveDaemon(
       llmWebAuth,
       oauth,
       clis,
+      catalog,
       shutdownSignal: shutdownController.signal,
     }).fetch,
     hostname: config.appHost,
