@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
-import { ProfileSettingsSection } from "../../components/settings/profile-section.tsx";
+import { ProfileSettingsSection } from "../../components/settings/profile/profile-section.tsx";
 
 function ProfilePage() {
   const { profileId } = Route.useParams();
