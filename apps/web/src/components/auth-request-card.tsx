@@ -21,7 +21,8 @@ import {
   OAuthPresetInlineCard,
   SecretValueForm,
 } from "./auth-setup-panels.tsx";
-import { CliAuthFlowPanel, useCliInstallRunner } from "./cli-setup-panels.tsx";
+import { CliAuthFlowPanel } from "./cli-setup/cli-auth-flow-panel.tsx";
+import { useCliInstallRunner } from "./cli-setup/use-cli-install-runner.ts";
 
 type ValueRequest = Extract<AuthRequest, { kind: "value" }>;
 type OAuthRequest = Extract<AuthRequest, { kind: "oauth" }>;

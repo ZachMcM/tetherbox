@@ -30,6 +30,7 @@ import { Separator } from "@tetherbox/ui/components/separator";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../lib/api.ts";
+import { openAuthWindow } from "../lib/auth-window.ts";
 import { invalidateSecretQueries } from "../lib/queries.ts";
 
 function defaultLlmKey(provider: LlmProvider): SecretKey {
@@ -93,10 +94,6 @@ export function AuthorizationPendingAlert({ url }: { url: string }) {
       </AlertDescription>
     </Alert>
   );
-}
-
-export function openAuthWindow(url: string): void {
-  window.open(url, "_blank", "noopener,noreferrer");
 }
 
 type ActiveFlow = LlmOAuthFlowState & { status: "pending" | "waiting_input" };

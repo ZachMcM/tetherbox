@@ -28,11 +28,8 @@ import {
   OAuthPresetInlineCard,
   StarterSecretInlineCard,
 } from "./auth-setup-panels.tsx";
-import {
-  CliAuthFlowPanel,
-  useCliInstallRunner,
-  type CliInstallRunner,
-} from "./cli-setup-panels.tsx";
+import { CliAuthFlowPanel } from "./cli-setup/cli-auth-flow-panel.tsx";
+import { useCliInstallRunner, type CliInstallRunner } from "./cli-setup/use-cli-install-runner.ts";
 import { StarterIcon } from "./starter-icons.tsx";
 
 export const STARTER_CATEGORY_ORDER: readonly { category: StarterCategory; label: string }[] = [

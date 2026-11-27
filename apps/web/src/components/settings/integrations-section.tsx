@@ -13,6 +13,7 @@ import { Field, FieldDescription, FieldError, FieldLabel } from "@tetherbox/ui/c
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
+import { openAuthWindow } from "../../lib/auth-window.ts";
 import { parseDomainsList, splitList } from "../../lib/lists.ts";
 import { oauthStatusQueryOptions } from "../../lib/queries.ts";
 import {
@@ -21,7 +22,6 @@ import {
   findPresetLogin,
   OAuthPresetConnectForm,
   OAuthPresetCredentialsForm,
-  openAuthWindow,
 } from "../auth-setup-panels.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 

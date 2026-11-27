@@ -7,7 +7,7 @@ import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
-import { CliInstallCard } from "./cli-setup-panels.tsx";
+import { CliInstallCard } from "./cli-setup/cli-install-card.tsx";
 import {
   countIncompleteVmItems,
   describeStarterAdditions,

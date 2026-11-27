@@ -4,7 +4,9 @@ import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { cliStatusQueryOptions } from "../../lib/queries.ts";
-import { CliAuthFlowPanel, CliInstallCard, useCliInstallRunner } from "../cli-setup-panels.tsx";
+import { CliAuthFlowPanel } from "../cli-setup/cli-auth-flow-panel.tsx";
+import { CliInstallCard } from "../cli-setup/cli-install-card.tsx";
+import { useCliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import { SectionHeader } from "./shared.tsx";
 
 export function CliToolsSection() {

@@ -37,7 +37,8 @@ import { Switch } from "@tetherbox/ui/components/switch";
 import { Textarea } from "@tetherbox/ui/components/textarea";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
-import { CliInstallCard, type CliInstallRunner } from "../cli-setup-panels.tsx";
+import { CliInstallCard } from "../cli-setup/cli-install-card.tsx";
+import { type CliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import {
   isStarterConfigValid,
   selectInstallEntries,
