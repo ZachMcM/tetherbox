@@ -38,7 +38,7 @@ The webhook is served at `/hooks/<profile id>/<name>` on the daemon's public URL
 
 `verify` is required:
 
-- `hmac-sha256` checks the named header against an HMAC of the body. Use `check_secret` to confirm `secretKey` is set, and if it isn't, ask the user to store it in Tetherbox.
+- `hmac-sha256` checks the named header against an HMAC of the body. Use `check_secret` to confirm `secretKey` is set, and if it isn't, call `request_auth` with kind `value` and a `daemon` binding.
 - `{ "kind": "public" }` accepts any request. The URL is reachable from the internet, so use it only when the user asks for it and the sender cannot sign requests.
 
 ## Removing

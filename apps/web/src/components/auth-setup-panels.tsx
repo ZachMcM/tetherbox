@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   formatSecretInjection,
@@ -781,36 +781,33 @@ function describeStarterSecretBinding(secret: StarterSecret, derivedDomain: stri
   return `${hostLabel} (${formatSecretInjection(secret.inject)})`;
 }
 
-export function StarterSecretInlineCard({
-  secret,
-  starterConfig,
-  isConfigured,
+type SecretValueBinding = SecretBinding | { kind: "invalid"; message: string };
+
+export function SecretValueForm({
+  secretKey,
+  binding,
+  children,
 }: {
-  secret: StarterSecret;
-  starterConfig: StarterConfig;
-  isConfigured: boolean;
+  secretKey: SecretKey;
+  binding: SecretValueBinding;
+  children?: ReactNode;
 }) {
   const queryClient = useQueryClient();
-  const derivedDomain =
-    secret.kind === "prompt-domain"
-      ? domainFromStarterConfig(starterConfig, secret.fromConfigUrl)
-      : "";
-  const [customDomain, setCustomDomain] = useState<string | null>(null);
-  const domain = customDomain ?? derivedDomain;
+  const inputId = useId();
   const [value, setValue] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: async (binding: SecretBinding) =>
+    mutationFn: async (nextBinding: SecretBinding) =>
       unwrapJson(
         await appClient.secrets[":key"].$put({
-          param: { key: secret.key },
-          json: { value: value.trim(), binding },
+          param: { key: secretKey },
+          json: { value: value.trim(), binding: nextBinding },
         }),
       ),
     onSuccess: () => {
       setValue("");
-      void queryClient.invalidateQueries({ queryKey: queryKeys.secrets });
+      invalidateSecretQueries(queryClient);
     },
   });
 
@@ -823,25 +820,71 @@ export function StarterSecretInlineCard({
       return;
     }
 
-    let binding: SecretBinding;
+    if (binding.kind === "invalid") {
+      setValidationError(binding.message);
 
-    if (secret.kind === "fixed") {
-      binding = secret.binding;
-    } else {
-      const normalized = domain.trim().toLowerCase();
-
-      if (!hostnameSchema.safeParse(normalized).success) {
-        setValidationError("Enter a valid hostname without scheme or path.");
-
-        return;
-      }
-
-      binding = { kind: "proxy", domains: [normalized], inject: secret.inject };
+      return;
     }
 
     setValidationError(null);
     mutation.mutate(binding);
   };
+
+  return (
+    <form onSubmit={handleSubmit} className="space-y-2.5">
+      {children}
+      <Field>
+        <FieldLabel htmlFor={inputId} className="text-xs font-normal text-muted-foreground">
+          Value
+        </FieldLabel>
+        <div className="flex items-center gap-2">
+          <Input
+            id={inputId}
+            type="password"
+            placeholder={`Paste ${secretKey}`}
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            autoComplete="off"
+            required
+          />
+          <Button type="submit" size="sm" disabled={mutation.isPending || value.trim() === ""}>
+            {mutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        </div>
+      </Field>
+      {validationError !== null && <FieldError>{validationError}</FieldError>}
+      {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+    </form>
+  );
+}
+
+function starterSecretBinding(secret: StarterSecret, domain: string): SecretValueBinding {
+  if (secret.kind === "fixed") {
+    return secret.binding;
+  }
+
+  const normalized = domain.trim().toLowerCase();
+
+  return hostnameSchema.safeParse(normalized).success
+    ? { kind: "proxy", domains: [normalized], inject: secret.inject }
+    : { kind: "invalid", message: "Enter a valid hostname without scheme or path." };
+}
+
+export function StarterSecretInlineCard({
+  secret,
+  starterConfig,
+  isConfigured,
+}: {
+  secret: StarterSecret;
+  starterConfig: StarterConfig;
+  isConfigured: boolean;
+}) {
+  const derivedDomain =
+    secret.kind === "prompt-domain"
+      ? domainFromStarterConfig(starterConfig, secret.fromConfigUrl)
+      : "";
+  const [customDomain, setCustomDomain] = useState<string | null>(null);
+  const domain = customDomain ?? derivedDomain;
 
   return (
     <div className="space-y-2.5">
@@ -868,7 +911,7 @@ export function StarterSecretInlineCard({
       </div>
 
       {!isConfigured && (
-        <form onSubmit={handleSubmit} className="space-y-2.5">
+        <SecretValueForm secretKey={secret.key} binding={starterSecretBinding(secret, domain)}>
           {secret.kind === "prompt-domain" && (
             <Field>
               <FieldLabel
@@ -886,30 +929,7 @@ export function StarterSecretInlineCard({
               />
             </Field>
           )}
-          <Field>
-            <FieldLabel
-              htmlFor={`wizard-secret-${secret.key}`}
-              className="text-xs font-normal text-muted-foreground"
-            >
-              Value
-            </FieldLabel>
-            <div className="flex items-center gap-2">
-              <Input
-                id={`wizard-secret-${secret.key}`}
-                type="password"
-                placeholder={`Paste ${secret.key}`}
-                value={value}
-                onChange={(event) => setValue(event.target.value)}
-                required
-              />
-              <Button type="submit" size="sm" disabled={mutation.isPending || value.trim() === ""}>
-                {mutation.isPending ? "Saving…" : "Save"}
-              </Button>
-            </div>
-          </Field>
-          {validationError !== null && <FieldError>{validationError}</FieldError>}
-          {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
-        </form>
+        </SecretValueForm>
       )}
     </div>
   );

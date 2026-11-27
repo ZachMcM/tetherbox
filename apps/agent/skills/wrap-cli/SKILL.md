@@ -23,7 +23,7 @@ External CLIs manage their own auth state under the `tetherbox-agent` user's hom
 - Never store credentials in `SKILL.md`, `profile.json`, or memory.
 - Document the CLI's non-interactive status check (such as `gh auth status` or `claude auth status`) in the skill and run it when commands fail with auth errors.
 - When authentication is missing or expired, direct the user to sign in:
-  - For built-in CLI starters (`gh`, `claude`, `paseo`): Tetherbox Settings -> CLI tools in the web app.
+  - For a CLI that has a starter with a login command (built-in or in the starter library): call `request_auth` with kind `cli-login` and the starter id, then end your turn.
   - For any other wrapped CLI: run the login command on the VM as `tetherbox-agent` over `tetherbox ssh` so credentials land in `tetherbox-agent`'s home directory.
 - Some CLIs (such as Tailscale- or SSH-connected tools like `rex`, `paseo`, or `opencode`) have no login step and only need a remote host or URL. Ask the user for that non-secret host or URL once, store it in `profile.json` under `starterConfig.<name>` (not in `MEMORY.md`, which gets summarized), and reference that config key in `skills/<name>/SKILL.md`.
 
@@ -42,7 +42,7 @@ description: <one-line summary of when to use this CLI>
 ## Auth
 
 - Check: `<bin> auth status`
-- Login if missing or expired: tell the user to authenticate `<bin>` as `tetherbox-agent` (or use Tetherbox Settings -> CLI tools for built-in CLIs)
+- Login if missing or expired: call `request_auth` with kind `cli-login` and starter `<name>`
 
 ## Common commands
 

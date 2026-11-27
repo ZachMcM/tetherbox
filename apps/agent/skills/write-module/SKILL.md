@@ -41,7 +41,7 @@ export default {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
           return {
             kind: "text",
-            text: `Missing ${SECRET_KEY}. Add it in Tetherbox Settings -> Secrets pinned to api.example.com.`,
+            text: `Missing ${SECRET_KEY}. Call request_auth to ask the user for it, pinned to api.example.com.`,
           };
         }
 
@@ -70,10 +70,10 @@ Secrets never enter the agent process. The daemon injects them on the Unix socke
 
 1. Call `check_secret` with the secret key before relying on it.
 2. Confirm both that the secret exists and that its binding kind is `proxy` or `oauth` (not `daemon` or `llm`).
-3. If it is missing or has the wrong binding kind, never ask for the value in chat. Tell the user what to add in the Tetherbox web app:
-   - API keys or tokens (Settings -> Secrets): specify the exact key name, pinned API hostname (`api.host`), and injection mode (Bearer token, custom header `<Header-Name>`, or query parameter `<param>`).
-   - Built-in OAuth2 preset (`gcal`, `gdrive`, `gmail`): connect it in Settings -> Integrations.
-   - Custom OAuth2 provider: add it in Settings -> Integrations -> Add custom, with the exact secret key, auth/token URLs, pinned API hostname, and scopes.
+3. If it is missing or has the wrong binding kind, never ask for the value in chat. Call `request_auth` and end your turn:
+   - API keys or tokens: kind `value` with the exact key name and a `proxy` binding giving the pinned API hostname (`api.host`) and injection mode (`bearer`, `header` `<Header-Name>`, or `query` `<param>`).
+   - Built-in OAuth2 preset (`gcal`, `gdrive`, `gmail`): kind `oauth` with the preset id.
+   - Custom OAuth2 provider: `request_auth` cannot set these up. Tell the user to add it in Tetherbox Settings -> Integrations -> Add custom, with the exact secret key, auth/token URLs, pinned API hostname, and scopes.
 4. Pin the narrowest API hostname needed (for example `api.linear.app`, not `linear.app`).
 5. Inside tool handlers, call `ctx.fetchWithSecret(key, "https://<api.host>/...", init)` with an `https://` URL. Do not pass the secret manually in headers or query strings.
 

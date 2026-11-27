@@ -558,6 +558,7 @@ function handleDaemonEvent(queryClient: QueryClient, event: DaemonEvent): void {
           clearTurn(event.sessionId, event.runId);
         });
       void queryClient.invalidateQueries({ queryKey: queryKeys.profile(event.profileId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.cliStatus });
       break;
     case "notification":
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });

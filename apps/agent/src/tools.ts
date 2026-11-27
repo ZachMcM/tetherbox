@@ -1,5 +1,12 @@
 import { defineTool, type ToolDefinition } from "@earendil-works/pi-coding-agent";
-import type { InternalClient, ModuleContext } from "@tetherbox/core";
+import {
+  oauthPresetIds,
+  REQUEST_AUTH_TOOL_NAME,
+  requestAuthArgsSchema,
+  type AuthRequest,
+  type InternalClient,
+  type ModuleContext,
+} from "@tetherbox/core";
 import { Type } from "typebox";
 import { fetchWebPage } from "./web-fetch.ts";
 
@@ -131,6 +138,80 @@ function createProfileTools(
   });
 
   return [checkSecret, proxyFetch, validateProfile];
+}
+
+function describeAuthRequest(request: AuthRequest): string {
+  switch (request.kind) {
+    case "value":
+      return request.binding.kind === "proxy"
+        ? `${request.key} pinned to ${request.binding.domains.join(", ")}`
+        : `${request.key} for the daemon`;
+    case "oauth":
+      return `the ${request.preset} OAuth connection`;
+    case "cli-login":
+      return `the ${request.starter} CLI login`;
+    default: {
+      const exhaustive: never = request;
+
+      return exhaustive;
+    }
+  }
+}
+
+function createAuthTools(): ToolDefinition[] {
+  const requestAuth = defineTool({
+    name: REQUEST_AUTH_TOOL_NAME,
+    label: "Request auth",
+    description:
+      "Show the user a setup card in chat for auth this profile needs. Use kind `value` for an API key, token, cookie, or webhook signing secret: bind it as `proxy` (pinned to the narrowest API hostnames, for `fetch_with_secret` and modules) or `daemon` (read only by the daemon, such as a webhook `hmac-sha256` secret). Use `oauth` to connect a built-in OAuth preset, or `cli-login` to sign in to a starter's CLI. Call `check_secret` first and only request what is missing. The value never reaches you. After calling it, end your turn; the user's next message says when setup is done.",
+    exposure: "model-only",
+    parameters: Type.Object({
+      reason: Type.String({
+        minLength: 1,
+        maxLength: 500,
+        description: "One sentence shown on the card saying what this is for.",
+      }),
+      request: Type.Union([
+        Type.Object({
+          kind: Type.Literal("value"),
+          key: Type.String({ pattern: SECRET_KEY_PATTERN }),
+          binding: Type.Union([
+            Type.Object({
+              kind: Type.Literal("proxy"),
+              domains: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
+              inject: Type.Union([
+                Type.Object({ kind: Type.Literal("bearer") }),
+                Type.Object({ kind: Type.Literal("header"), name: Type.String({ minLength: 1 }) }),
+                Type.Object({ kind: Type.Literal("query"), name: Type.String({ minLength: 1 }) }),
+              ]),
+            }),
+            Type.Object({ kind: Type.Literal("daemon") }),
+          ]),
+        }),
+        Type.Object({
+          kind: Type.Literal("oauth"),
+          preset: Type.Union(oauthPresetIds.map((id) => Type.Literal(id))),
+        }),
+        Type.Object({
+          kind: Type.Literal("cli-login"),
+          starter: Type.String({ pattern: SLUG_PATTERN }),
+        }),
+      ]),
+    }),
+    async execute(_toolCallId, params) {
+      const parsed = requestAuthArgsSchema.safeParse(params);
+
+      if (!parsed.success) {
+        throw new Error(`request_auth: ${parsed.error.message}`);
+      }
+
+      return text(
+        `Showing the user a setup card for ${describeAuthRequest(parsed.data.request)}. End your turn now; their next message will say when it is done.`,
+      );
+    },
+  });
+
+  return [requestAuth];
 }
 
 function createPollTools(client: InternalClient): ToolDefinition[] {
@@ -321,6 +402,7 @@ export function createBuiltinTools(
     ...createNotificationTools(client),
     ...createWebTools(),
     ...createProfileTools(client, fetchWithSecret),
+    ...createAuthTools(),
     ...createPollTools(client),
     ...createReminderTools(client),
   ];

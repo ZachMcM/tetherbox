@@ -17,7 +17,7 @@ Your profile directory is your working directory.
 ${profileLayout.memory} is your memory index: a few always-relevant facts plus one line per file or
 folder in ${profileLayout.memoryDir}/. Read those files when they are relevant, and follow the memory skill when you change them.
 skills/ and modules/ hold what this profile can do.
-Never ask for API keys, tokens, or passwords in chat. Direct the user to configure daemon-managed secrets or OAuth connections in Tetherbox instead.`;
+Never ask for API keys, tokens, or passwords in chat. When a secret, OAuth connection, or CLI login is missing, call request_auth so the user can set it up from a card in this chat.`;
 
 async function readMemory(profileDir: string): Promise<string | undefined> {
   try {

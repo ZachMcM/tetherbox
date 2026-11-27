@@ -5,7 +5,7 @@ import {
   MessageSquareIcon,
   WrenchIcon,
 } from "lucide-react";
-import type { SessionRecord } from "@tetherbox/core/app";
+import { REQUEST_AUTH_TOOL_NAME, type SessionRecord } from "@tetherbox/core/app";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
 import { Bubble, BubbleContent } from "@tetherbox/ui/components/bubble";
 import {
@@ -42,6 +42,11 @@ import {
   type DisplayItem,
   type DisplayToolBlock,
 } from "../lib/transcript.ts";
+import {
+  AuthRequestCard,
+  parseRequestAuthArgs,
+  type AuthCompletionHandler,
+} from "./auth-request-card.tsx";
 import { Markdown } from "./markdown.tsx";
 
 function ToolStatusIcon({ status }: { status: DisplayToolBlock["status"] }) {
@@ -103,12 +108,39 @@ function ToolTraceItem({ tool, defaultOpen }: { tool: DisplayToolBlock; defaultO
   );
 }
 
+function ToolBlockView({
+  tool,
+  defaultOpen,
+  onAuthComplete,
+}: {
+  tool: DisplayToolBlock;
+  defaultOpen: boolean;
+  onAuthComplete: AuthCompletionHandler;
+}) {
+  const authArgs =
+    tool.toolName === REQUEST_AUTH_TOOL_NAME && tool.status !== "error"
+      ? parseRequestAuthArgs(tool.args)
+      : undefined;
+
+  if (authArgs !== undefined) {
+    return <AuthRequestCard args={authArgs} onComplete={onAuthComplete} />;
+  }
+
+  return (
+    <Trace>
+      <ToolTraceItem tool={tool} defaultOpen={defaultOpen} />
+    </Trace>
+  );
+}
+
 function AssistantBlockView({
   block,
   verbosity,
+  onAuthComplete,
 }: {
   block: AssistantBlock;
   verbosity: TranscriptVerbosity;
+  onAuthComplete: AuthCompletionHandler;
 }) {
   const expandTraces = verbosity === "verbose";
 
@@ -137,9 +169,7 @@ function AssistantBlockView({
       );
     case "tool":
       return (
-        <Trace>
-          <ToolTraceItem tool={block} defaultOpen={expandTraces} />
-        </Trace>
+        <ToolBlockView tool={block} defaultOpen={expandTraces} onAuthComplete={onAuthComplete} />
       );
     case "text":
       return <Markdown content={block.text} />;
@@ -167,9 +197,11 @@ function RunningIndicator() {
 export function SessionTranscript({
   session,
   items,
+  onAuthComplete,
 }: {
   session: SessionRecord;
   items: readonly DisplayItem[];
+  onAuthComplete: AuthCompletionHandler;
 }) {
   const { preferences } = usePreferences();
 
@@ -244,6 +276,7 @@ export function SessionTranscript({
                             }
                             block={block}
                             verbosity={preferences.verbosity}
+                            onAuthComplete={onAuthComplete}
                           />
                         ))
                       )}

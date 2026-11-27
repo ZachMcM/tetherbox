@@ -46,7 +46,7 @@ The daemon validates these files with the schemas in `packages/core` at startup 
 
 ## Built-in vs starters
 
-Every profile gets the agent's built-in tools (`notify`, `web_fetch`, `check_secret`, `fetch_with_secret`, `validate_profile`, and the poll-job and reminder tools) and the built-in skills in `apps/agent/skills/` (memory, cron and webhook files, writing modules, wrapping CLIs, reverse-engineering APIs). They describe the Tetherbox contract and change with the runtime, so they are never copied into profiles.
+Every profile gets the agent's built-in tools (`notify`, `web_fetch`, `check_secret`, `fetch_with_secret`, `validate_profile`, `request_auth`, and the poll-job and reminder tools) and the built-in skills in `apps/agent/skills/` (memory, cron and webhook files, writing modules, wrapping CLIs, reverse-engineering APIs). They describe the Tetherbox contract and change with the runtime, so they are never copied into profiles.
 
 `packages/starters` holds opt-in, profile-specific skills and modules (CLIs, coding harnesses, integrations). Enabling one copies it into the profile so the agent can patch it.
 

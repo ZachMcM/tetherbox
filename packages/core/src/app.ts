@@ -1,3 +1,4 @@
+export * from "./auth-request.ts";
 export * from "./cli.ts";
 export * from "./ids.ts";
 export * from "./llm-auth.ts";

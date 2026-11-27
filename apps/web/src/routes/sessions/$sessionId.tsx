@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import type { ModelSelection } from "@tetherbox/core/app";
@@ -25,6 +25,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
   const queryClient = useQueryClient();
   const liveTurn = useLiveTurn(sessionId);
   const [chosenModel, setChosenModel] = useState<ModelSelection | null>(null);
+  const pendingAuthMessages = useRef(new Set<string>());
 
   const sessionQuery = useQuery({
     queryKey: queryKeys.session(sessionId),
@@ -175,7 +176,21 @@ function SessionView({ sessionId }: { sessionId: string }) {
         </Button>
       </header>
 
-      <SessionTranscript session={session} items={items} />
+      <SessionTranscript
+        session={session}
+        items={items}
+        onAuthComplete={(message) => {
+          if (activeModel === null || pendingAuthMessages.current.has(message)) {
+            return;
+          }
+
+          pendingAuthMessages.current.add(message);
+          void sendMutation
+            .mutateAsync({ text: message, model: activeModel })
+            .catch(() => undefined)
+            .finally(() => pendingAuthMessages.current.delete(message));
+        }}
+      />
 
       <SessionComposer
         running={running}
