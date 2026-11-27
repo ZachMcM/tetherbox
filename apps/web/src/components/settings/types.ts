@@ -4,6 +4,7 @@ export type SettingsTab =
   | "providers"
   | "secrets"
   | "integrations"
+  | "profiles"
   | `profile:${string}`;
 
 export const SETTINGS_NAV = [
@@ -12,6 +13,7 @@ export const SETTINGS_NAV = [
   { tab: "providers", label: "Models & Providers" },
   { tab: "secrets", label: "Secrets" },
   { tab: "integrations", label: "Integrations" },
+  { tab: "profiles", label: "Profiles" },
 ] as const;
 
 export function parseSettingsTab(value: unknown): SettingsTab | undefined {

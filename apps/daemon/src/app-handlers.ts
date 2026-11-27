@@ -351,7 +351,19 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
       return { providers, oauthLogins };
     },
     async listLlmModels() {
-      return { models: await listAvailableLlmModels({ secrets, llmOAuth }) };
+      return {
+        models: await listAvailableLlmModels({
+          secrets,
+          llmOAuth,
+          favorites: db.listFavoriteModels(),
+        }),
+      };
+    },
+    addFavoriteModel(model) {
+      db.addFavoriteModel(model);
+    },
+    removeFavoriteModel(model) {
+      db.removeFavoriteModel(model);
     },
     startLlmOAuth(provider, origin) {
       return llmWebAuth.start(provider, origin);

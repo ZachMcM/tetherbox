@@ -1,7 +1,11 @@
-import { EyeIcon, LayersIcon, LogOutIcon, Minimize2Icon } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "@tanstack/react-router";
+import { EyeIcon, LayersIcon, LogOutIcon, Minimize2Icon, RotateCcwIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { Tabs, TabsList, TabsTrigger } from "@tetherbox/ui/components/tabs";
+import { FieldError } from "@tetherbox/ui/components/field";
 import { ToggleGroup, ToggleGroupItem } from "@tetherbox/ui/components/toggle-group";
+import { appClient, queryKeys, unwrapJson } from "../../lib/api.ts";
 import {
   usePreferences,
   type SendShortcut,
@@ -47,7 +51,18 @@ export function GeneralSection({
   onLogout: () => void;
   loggingOut: boolean;
 }) {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { preferences, updatePreferences } = usePreferences();
+
+  const rerunOnboardingMutation = useMutation({
+    mutationFn: async () =>
+      unwrapJson(await appClient.settings.$patch({ json: { onboardingCompleted: false } })),
+    onSuccess: (data) => {
+      queryClient.setQueryData(queryKeys.settings, data);
+      void navigate({ to: "/onboarding" });
+    },
+  });
   const activeVerbosity =
     VERBOSITY_OPTIONS.find((option) => option.value === preferences.verbosity) ??
     VERBOSITY_OPTIONS[1];
@@ -56,7 +71,7 @@ export function GeneralSection({
     <div className="space-y-6">
       <SectionHeader
         title="General"
-        description="Configure transcript verbosity, composer shortcuts, and browser session."
+        description="Configure transcript verbosity, composer shortcuts, guided setup, and browser session."
       />
 
       <section className="space-y-2.5">
@@ -114,6 +129,27 @@ export function GeneralSection({
           }
         />
       </SettingGroup>
+
+      <SettingGroup title="Setup">
+        <SettingRow
+          title="Guided setup"
+          description="Walk through connecting providers, picking a default model, and creating a profile."
+          control={
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => rerunOnboardingMutation.mutate()}
+              disabled={rerunOnboardingMutation.isPending}
+            >
+              <RotateCcwIcon className="size-3.5" />
+              <span>Run setup again</span>
+            </Button>
+          }
+        />
+      </SettingGroup>
+      {rerunOnboardingMutation.error !== null && (
+        <FieldError>{rerunOnboardingMutation.error.message}</FieldError>
+      )}
 
       <SettingGroup title="Session">
         <SettingRow

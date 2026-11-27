@@ -19,6 +19,7 @@ import {
   type OAuthPresetId,
   type OAuthStatusEntry,
 } from "../oauth.ts";
+import { modelRefSchema, type ModelRef } from "../profile.ts";
 import type { SecretListEntry } from "../secrets.ts";
 import {
   pushSubscriptionInputSchema,
@@ -105,6 +106,8 @@ export interface AppApiHandlers {
   respondLlmOAuthFlow(flowId: string, value: string): LlmOAuthFlowState;
   cancelLlmOAuthFlow(flowId: string): { cancelled: boolean };
   logoutLlmOAuth(provider: LlmProvider): Promise<void>;
+  addFavoriteModel(model: ModelRef): void;
+  removeFavoriteModel(model: ModelRef): void;
 
   getOAuthStatus(): Promise<{
     presets: OAuthPresetSummary[];
@@ -351,6 +354,16 @@ export function createAppApi(handlers: AppApiHandlers) {
     )
     .delete("/llm/oauth/:provider", zValidator("param", llmProviderParam), async (c) => {
       await handlers.logoutLlmOAuth(c.req.valid("param").provider);
+
+      return c.body(null, 204);
+    })
+    .put("/llm/favorites", zValidator("json", modelRefSchema), (c) => {
+      handlers.addFavoriteModel(c.req.valid("json"));
+
+      return c.body(null, 204);
+    })
+    .delete("/llm/favorites", zValidator("json", modelRefSchema), (c) => {
+      handlers.removeFavoriteModel(c.req.valid("json"));
 
       return c.body(null, 204);
     })

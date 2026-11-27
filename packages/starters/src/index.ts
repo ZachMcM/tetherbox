@@ -96,6 +96,7 @@ function npmUserInstall(packageName: string): StarterCliInstall {
 
 interface StarterBase {
   readonly id: string;
+  readonly name: string;
   readonly category: StarterCategory;
   readonly secrets: readonly StarterSecret[];
   readonly oauthPreset?: OAuthPresetId;
@@ -120,6 +121,7 @@ export const starters = [
   {
     kind: "skill",
     id: "gh",
+    name: "GitHub CLI",
     category: "cli",
     path: "skills/gh",
     secrets: [],
@@ -134,6 +136,7 @@ export const starters = [
   {
     kind: "skill",
     id: "browser",
+    name: "Agent Browser",
     category: "cli",
     path: "skills/browser",
     secrets: [],
@@ -147,6 +150,7 @@ export const starters = [
   {
     kind: "skill",
     id: "orca",
+    name: "Orca",
     category: "harness",
     path: "skills/orca",
     secrets: [],
@@ -165,6 +169,7 @@ export const starters = [
   {
     kind: "skill",
     id: "rex",
+    name: "Rex",
     category: "harness",
     path: "skills/rex",
     secrets: [],
@@ -189,6 +194,7 @@ export const starters = [
   {
     kind: "skill",
     id: "paseo",
+    name: "Paseo",
     category: "harness",
     path: "skills/paseo",
     secrets: [],
@@ -211,6 +217,7 @@ export const starters = [
   {
     kind: "skill",
     id: "opencode",
+    name: "OpenCode",
     category: "harness",
     path: "skills/opencode",
     secrets: [],
@@ -232,6 +239,7 @@ export const starters = [
   {
     kind: "skill",
     id: "claude",
+    name: "Claude Code",
     category: "harness",
     path: "skills/claude",
     secrets: [],
@@ -247,6 +255,7 @@ export const starters = [
   {
     kind: "module",
     id: "t3code",
+    name: "T3 Code",
     category: "harness",
     path: "modules/t3code",
     configFields: [
@@ -269,6 +278,7 @@ export const starters = [
   {
     kind: "module",
     id: "cursor",
+    name: "Cursor",
     category: "harness",
     path: "modules/cursor",
     secrets: [proxySecret("CURSOR_API_KEY", ["api.cursor.com"])],
@@ -276,6 +286,7 @@ export const starters = [
   {
     kind: "module",
     id: "devin",
+    name: "Devin",
     category: "harness",
     path: "modules/devin",
     configFields: [
@@ -291,6 +302,7 @@ export const starters = [
   {
     kind: "module",
     id: "slack",
+    name: "Slack",
     category: "integration",
     path: "modules/slack",
     secrets: [proxySecret("SLACK_BOT_TOKEN", ["slack.com"])],
@@ -298,6 +310,7 @@ export const starters = [
   {
     kind: "module",
     id: "gcal",
+    name: "Google Calendar",
     category: "integration",
     path: "modules/gcal",
     secrets: [],
@@ -306,6 +319,7 @@ export const starters = [
   {
     kind: "module",
     id: "gdrive",
+    name: "Google Drive",
     category: "integration",
     path: "modules/gdrive",
     secrets: [],
@@ -314,6 +328,7 @@ export const starters = [
   {
     kind: "module",
     id: "gmail",
+    name: "Gmail",
     category: "integration",
     path: "modules/gmail",
     secrets: [],
@@ -322,6 +337,7 @@ export const starters = [
   {
     kind: "module",
     id: "sentry",
+    name: "Sentry",
     category: "integration",
     path: "modules/sentry",
     configFields: [
@@ -351,6 +367,7 @@ export const starters = [
   {
     kind: "module",
     id: "jira",
+    name: "Jira",
     category: "integration",
     path: "modules/jira",
     configFields: [
@@ -376,6 +393,7 @@ export const starters = [
   {
     kind: "module",
     id: "linear",
+    name: "Linear",
     category: "integration",
     path: "modules/linear",
     secrets: [
@@ -388,6 +406,7 @@ export const starters = [
   {
     kind: "module",
     id: "notion",
+    name: "Notion",
     category: "integration",
     path: "modules/notion",
     secrets: [proxySecret("NOTION_API_KEY", ["api.notion.com"])],

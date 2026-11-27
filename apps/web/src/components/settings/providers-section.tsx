@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { LlmProvider, ModelRef } from "@tetherbox/core/app";
+import type { LlmProvider, ModelSelection } from "@tetherbox/core/app";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
@@ -30,7 +30,7 @@ export function ProvidersSection() {
   const modelsQuery = useQuery(llmModelsQueryOptions);
 
   const defaultModelMutation = useMutation({
-    mutationFn: async (defaultModel: ModelRef) =>
+    mutationFn: async (defaultModel: ModelSelection) =>
       unwrapJson(await appClient.settings.$patch({ json: { defaultModel } })),
     onSuccess: (data) => {
       queryClient.setQueryData(queryKeys.settings, data);

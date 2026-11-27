@@ -5,7 +5,7 @@ import {
   RpcError,
   runIdSchema,
   sessionIdSchema,
-  type ModelRef,
+  type ModelSelection,
   type NotifyInput,
   type ProfileId,
   type ProfileIssue,
@@ -41,7 +41,7 @@ interface ActiveRun {
   context: RunContext;
   runToken: string;
   controller: AbortController;
-  model: ModelRef;
+  model: ModelSelection;
 }
 
 export interface TurnRunnerDeps {
@@ -95,7 +95,7 @@ export class TurnRunner {
   enqueue(
     profileId: ProfileId,
     trigger: TurnTrigger,
-    options: { sessionId?: SessionId | undefined; model?: ModelRef | undefined } = {},
+    options: { sessionId?: SessionId | undefined; model?: ModelSelection | undefined } = {},
   ): SessionId {
     const { sessionId: existingSessionId, model } = options;
 
@@ -222,7 +222,7 @@ export class TurnRunner {
     return this.#runsByToken.get(token)?.context;
   }
 
-  resolveRunModel(runId: RunId): ModelRef | undefined {
+  resolveRunModel(runId: RunId): ModelSelection | undefined {
     return this.#runsById.get(runId)?.model;
   }
 
@@ -269,7 +269,7 @@ export class TurnRunner {
     return run;
   }
 
-  async #modelAuth(model: ModelRef): Promise<TurnModelAuth | undefined> {
+  async #modelAuth(model: ModelSelection): Promise<TurnModelAuth | undefined> {
     switch (model.auth) {
       case "api-key":
         return { kind: "run-token-key" };
@@ -299,7 +299,10 @@ export class TurnRunner {
     }
   }
 
-  #resolveModel(sessionId: SessionId, profileModel: ModelRef | undefined): ModelRef | undefined {
+  #resolveModel(
+    sessionId: SessionId,
+    profileModel: ModelSelection | undefined,
+  ): ModelSelection | undefined {
     return (
       this.#deps.db.getSession(sessionId)?.model ??
       profileModel ??
@@ -312,7 +315,7 @@ export class TurnRunner {
     profileId: ProfileId,
     sessionId: SessionId,
     trigger: TurnTrigger,
-    requestedModel: ModelRef | undefined,
+    requestedModel: ModelSelection | undefined,
   ): Promise<void> {
     const { config, registry, events } = this.#deps;
     const profile = registry.get(profileId);
@@ -323,7 +326,7 @@ export class TurnRunner {
       return;
     }
 
-    let model: ModelRef | undefined;
+    let model: ModelSelection | undefined;
 
     try {
       model = requestedModel ?? this.#resolveModel(sessionId, profile.config.model);

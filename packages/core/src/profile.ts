@@ -3,17 +3,39 @@ import { secretKeySchema, sessionIdSchema, type SecretKey } from "./ids.ts";
 import { llmAuthKindSchema, llmProviderSchema, supportedLlmAuthKinds } from "./llm-auth.ts";
 import type { SecretBinding, SecretInjection } from "./secrets.ts";
 
-export const modelRefSchema = z
-  .object({
-    provider: llmProviderSchema,
-    id: z.string().min(1),
-    auth: llmAuthKindSchema.default("api-key"),
-  })
-  .refine((model) => supportedLlmAuthKinds(model.provider).includes(model.auth), {
+export const modelEffortSchema = z.enum([
+  "off",
+  "minimal",
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+]);
+export type ModelEffort = z.infer<typeof modelEffortSchema>;
+
+const modelRefObjectSchema = z.object({
+  provider: llmProviderSchema,
+  id: z.string().min(1),
+  auth: llmAuthKindSchema.default("api-key"),
+});
+
+function requireSupportedAuth<T extends z.ZodType<z.infer<typeof modelRefObjectSchema>>>(
+  schema: T,
+) {
+  return schema.refine((model) => supportedLlmAuthKinds(model.provider).includes(model.auth), {
     message: "this provider does not support that auth kind",
     path: ["auth"],
   });
+}
+
+export const modelRefSchema = requireSupportedAuth(modelRefObjectSchema);
 export type ModelRef = z.infer<typeof modelRefSchema>;
+
+export const modelSelectionSchema = requireSupportedAuth(
+  modelRefObjectSchema.extend({ effort: modelEffortSchema.optional() }),
+);
+export type ModelSelection = z.infer<typeof modelSelectionSchema>;
 
 export const starterConfigSchema = z.record(
   z.string().min(1),
@@ -97,7 +119,7 @@ export const starterConfigFlagsSchema = z
 
 export const profileConfigSchema = z.object({
   name: z.string().min(1),
-  model: modelRefSchema.optional(),
+  model: modelSelectionSchema.optional(),
   starters: z.array(z.string().min(1)).default([]),
   starterConfig: starterConfigSchema.default({}),
 });

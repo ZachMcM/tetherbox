@@ -1,15 +1,13 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { FolderIcon, LogOutIcon } from "lucide-react";
-import { Button } from "@tetherbox/ui/components/button";
 import { Dialog, DialogContent, DialogTitle } from "@tetherbox/ui/components/dialog";
 import { cn } from "@tetherbox/ui/lib/utils";
 import { logout, queryKeys } from "../../lib/api.ts";
-import { profilesQueryOptions } from "../../lib/queries.ts";
 import { AppearanceSection } from "./appearance-section.tsx";
 import { GeneralSection } from "./general-section.tsx";
 import { IntegrationsSection } from "./integrations-section.tsx";
 import { ProfileSettingsSection } from "./profile-section.tsx";
+import { ProfilesSection } from "./profiles-section.tsx";
 import { ProvidersSection } from "./providers-section.tsx";
 import { SecretsSection } from "./secrets-section.tsx";
 import { SETTINGS_NAV, type SettingsTab } from "./types.ts";
@@ -18,11 +16,6 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const open = activeTab !== undefined;
-
-  const profilesQuery = useQuery({
-    ...profilesQueryOptions,
-    enabled: open,
-  });
 
   const setTab = (next: SettingsTab | undefined) => {
     void navigate({
@@ -45,7 +38,6 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
     },
   });
 
-  const profiles = profilesQuery.data?.profiles ?? [];
   const profileId = activeTab?.startsWith("profile:")
     ? activeTab.slice("profile:".length)
     : undefined;
@@ -62,75 +54,28 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
       <DialogContent className="flex h-[min(85vh,680px)] w-full max-w-[calc(100%-2rem)] gap-0 overflow-hidden bg-background p-0 text-foreground sm:max-w-4xl">
         <DialogTitle className="sr-only">Settings</DialogTitle>
 
-        <aside className="flex w-52 shrink-0 flex-col justify-between border-r border-border bg-sidebar p-3 text-sidebar-foreground">
-          <div className="space-y-5 overflow-y-auto">
-            <div className="space-y-0.5">
-              <div className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">
-                Settings
-              </div>
-              {SETTINGS_NAV.map((item) => {
-                const active = activeTab === item.tab;
+        <aside className="w-52 shrink-0 space-y-0.5 overflow-y-auto border-r border-border bg-sidebar p-3 text-sidebar-foreground">
+          <div className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">Settings</div>
+          {SETTINGS_NAV.map((item) => {
+            const active =
+              activeTab === item.tab || (item.tab === "profiles" && profileId !== undefined);
 
-                return (
-                  <button
-                    key={item.tab}
-                    type="button"
-                    onClick={() => setTab(item.tab)}
-                    className={cn(
-                      "flex w-full cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors",
-                      active
-                        ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                    )}
-                  >
-                    {item.label}
-                  </button>
-                );
-              })}
-            </div>
-
-            {profiles.length > 0 && (
-              <div className="space-y-0.5">
-                <div className="px-2.5 pb-1.5 text-xs font-medium text-muted-foreground">
-                  Profiles
-                </div>
-                {profiles.map((profile) => {
-                  const tab: SettingsTab = `profile:${profile.id}`;
-                  const active = activeTab === tab;
-
-                  return (
-                    <button
-                      key={profile.id}
-                      type="button"
-                      onClick={() => setTab(tab)}
-                      className={cn(
-                        "flex w-full cursor-pointer items-center gap-2 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors",
-                        active
-                          ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
-                          : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
-                      )}
-                    >
-                      <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{profile.config.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-
-          <div className="pt-2">
-            <Button
-              variant="destructive-outline"
-              size="sm"
-              className="w-full justify-start"
-              onClick={() => logoutMutation.mutate()}
-              disabled={logoutMutation.isPending}
-            >
-              <LogOutIcon className="size-3.5 shrink-0" />
-              <span>Sign out</span>
-            </Button>
-          </div>
+            return (
+              <button
+                key={item.tab}
+                type="button"
+                onClick={() => setTab(item.tab)}
+                className={cn(
+                  "flex w-full cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors",
+                  active
+                    ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+                    : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground",
+                )}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </aside>
 
         <div className="min-w-0 flex-1 overflow-y-auto bg-background px-8 py-6">
@@ -144,12 +89,16 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
           {activeTab === "providers" && <ProvidersSection />}
           {activeTab === "secrets" && <SecretsSection />}
           {activeTab === "integrations" && <IntegrationsSection />}
+          {activeTab === "profiles" && (
+            <ProfilesSection onOpenProfile={(id) => setTab(`profile:${id}`)} />
+          )}
           {profileId !== undefined && (
             <ProfileSettingsSection
               key={profileId}
               profileId={profileId}
+              onBack={() => setTab("profiles")}
               onOpenSettingsTab={setTab}
-              onDeleted={() => setTab("general")}
+              onDeleted={() => setTab("profiles")}
             />
           )}
         </div>

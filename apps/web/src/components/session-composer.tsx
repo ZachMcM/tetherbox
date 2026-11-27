@@ -1,5 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
-import type { LlmModelOption, ModelRef } from "@tetherbox/core/app";
+import type { LlmModelOption, ModelSelection } from "@tetherbox/core/app";
 import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
   InputGroup,
@@ -27,8 +27,8 @@ export function SessionComposer({
   aborting?: boolean;
   error?: string | null;
   models: readonly LlmModelOption[];
-  model: ModelRef | null;
-  onModelChange: (model: ModelRef) => void;
+  model: ModelSelection | null;
+  onModelChange: (model: ModelSelection) => void;
   onConfigureProviders: () => void;
   onSend: (text: string) => Promise<void>;
   onAbort: () => void;

@@ -18,6 +18,7 @@ import {
   type SecretListEntry,
   type StarterConfig,
   type StarterSecret,
+  type StarterSummary,
 } from "@tetherbox/core/app";
 import { CheckCircle2Icon, CheckIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
@@ -30,6 +31,7 @@ import { Separator } from "@tetherbox/ui/components/separator";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../lib/api.ts";
+import { StarterIcon } from "./starter-icons.tsx";
 import { invalidateSecretQueries } from "../lib/queries.ts";
 
 function defaultLlmKey(provider: LlmProvider): SecretKey {
@@ -782,12 +784,12 @@ function describeStarterSecretBinding(secret: StarterSecret, derivedDomain: stri
 }
 
 export function StarterSecretInlineCard({
-  starterId,
+  starter,
   secret,
   starterConfig,
   isConfigured,
 }: {
-  starterId: string;
+  starter: StarterSummary;
   secret: StarterSecret;
   starterConfig: StarterConfig;
   isConfigured: boolean;
@@ -850,8 +852,9 @@ export function StarterSecretInlineCard({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-semibold">{secret.key}</span>
-            <Badge variant="outline" className="text-[10px]">
-              {starterId}
+            <Badge variant="outline" className="gap-1 text-[10px]">
+              <StarterIcon starter={starter} className="size-3" />
+              <span>{starter.name}</span>
             </Badge>
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">

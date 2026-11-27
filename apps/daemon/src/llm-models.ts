@@ -1,4 +1,9 @@
-import type { Provider } from "@earendil-works/pi-ai";
+import {
+  getSupportedThinkingLevels,
+  type Api,
+  type Model,
+  type Provider,
+} from "@earendil-works/pi-ai";
 import { anthropicProvider } from "@earendil-works/pi-ai/providers/anthropic";
 import { githubCopilotProvider } from "@earendil-works/pi-ai/providers/github-copilot";
 import { googleProvider } from "@earendil-works/pi-ai/providers/google";
@@ -15,6 +20,8 @@ import {
   type LlmAuthKind,
   type LlmModelOption,
   type LlmProvider,
+  type ModelEffortOption,
+  type ModelRef,
 } from "@tetherbox/core";
 import type { LlmOAuth } from "./llm-oauth.ts";
 import type { SecretStore, SecretSummary } from "./secret-store.ts";
@@ -31,11 +38,31 @@ const PROVIDER_FACTORIES: Readonly<Record<LlmProvider, () => Provider>> = {
   "github-copilot": githubCopilotProvider,
 };
 
+const PROVIDER_EFFORT_LABELS: Readonly<Record<string, string>> = { xhigh: "Extra high" };
+
+function providerEffortLabel(value: string): string {
+  return PROVIDER_EFFORT_LABELS[value] ?? `${value.charAt(0).toUpperCase()}${value.slice(1)}`;
+}
+
+function effortOptionsFor(model: Model<Api>): ModelEffortOption[] {
+  const byProviderValue = new Map<string, ModelEffortOption>();
+
+  for (const level of getSupportedThinkingLevels(model)) {
+    const providerValue = model.thinkingLevelMap?.[level] ?? level;
+
+    if (!byProviderValue.has(providerValue) || level === providerValue) {
+      byProviderValue.set(providerValue, { level, label: providerEffortLabel(providerValue) });
+    }
+  }
+
+  return [...byProviderValue.values()];
+}
+
 async function modelsForTarget(
   deps: { llmOAuth: LlmOAuth },
   provider: LlmProvider,
   auth: LlmAuthKind,
-): Promise<LlmModelOption[]> {
+): Promise<Omit<LlmModelOption, "favorite">[]> {
   const credential = auth === "oauth" ? await deps.llmOAuth.credential(provider) : undefined;
   const catalog = PROVIDER_FACTORIES[provider]();
   const models =
@@ -52,6 +79,7 @@ async function modelsForTarget(
       name: model.name,
       reasoning: model.reasoning,
       contextWindow: model.contextWindow,
+      effortOptions: effortOptionsFor(model),
     }));
 }
 
@@ -61,9 +89,14 @@ export function llmApiKeyProviders(secrets: readonly SecretSummary[]): Set<LlmPr
   );
 }
 
+function modelKey(model: ModelRef): string {
+  return `${model.provider}:${model.auth}:${model.id}`;
+}
+
 export async function listAvailableLlmModels(deps: {
   secrets: SecretStore;
   llmOAuth: LlmOAuth;
+  favorites: readonly ModelRef[];
 }): Promise<LlmModelOption[]> {
   const [storedSecrets, oauthLogins] = await Promise.all([
     deps.secrets.list(),
@@ -98,5 +131,7 @@ export async function listAvailableLlmModels(deps: {
     }),
   );
 
-  return groups.flat();
+  const favoriteKeys = new Set(deps.favorites.map(modelKey));
+
+  return groups.flat().map((model) => ({ ...model, favorite: favoriteKeys.has(modelKey(model)) }));
 }

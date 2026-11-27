@@ -181,6 +181,7 @@ export async function runTurn(
       cwd: profileDir,
       agentDir,
       model,
+      ...(input.model.effort !== undefined ? { thinkingLevel: input.model.effort } : {}),
       modelRuntime,
       settingsManager,
       resourceLoader,

@@ -13,7 +13,7 @@ import { Button } from "@tetherbox/ui/components/button";
 import { Checkbox } from "@tetherbox/ui/components/checkbox";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
-import { cn } from "@tetherbox/ui/lib/utils";
+import { StarterIcon } from "./starter-icons.tsx";
 
 const CATEGORY_ORDER: readonly { category: StarterCategory; label: string }[] = [
   { category: "integration", label: "Integrations" },
@@ -21,12 +21,20 @@ const CATEGORY_ORDER: readonly { category: StarterCategory; label: string }[] = 
   { category: "cli", label: "CLIs" },
 ];
 
+function starterKindLabel(starter: StarterSummary): string {
+  if (starter.kind === "module") {
+    return "Module";
+  }
+
+  return starter.cli !== undefined ? "Skill + CLI" : "Skill";
+}
+
 function starterFieldKey(starterId: string, fieldKey: string): string {
   return `${starterId}.${fieldKey}`;
 }
 
 export interface MissingStarterAuth {
-  readonly secrets: readonly { starterId: string; secret: StarterSecret }[];
+  readonly secrets: readonly { starter: StarterSummary; secret: StarterSecret }[];
   readonly presets: readonly OAuthPresetId[];
 }
 
@@ -43,14 +51,14 @@ export function collectMissingStarterAuth({
   const connectedPresets = new Set(
     oauthLogins?.flatMap((entry) => (entry.kind === "preset" ? [entry.preset] : [])),
   );
-  const missingSecrets = new Map<string, { starterId: string; secret: StarterSecret }>();
+  const missingSecrets = new Map<string, { starter: StarterSummary; secret: StarterSecret }>();
   const missingPresets = new Set<OAuthPresetId>();
 
   for (const starter of starters) {
     if (secrets !== undefined) {
       for (const secret of starter.secrets) {
         if (!storedSecretKeys.has(secret.key) && !missingSecrets.has(secret.key)) {
-          missingSecrets.set(secret.key, { starterId: starter.id, secret });
+          missingSecrets.set(secret.key, { starter, secret });
         }
       }
     }
@@ -113,7 +121,7 @@ export function StarterSetupNotes({ starters }: { starters: readonly StarterSumm
     <div key={starter.id} className="space-y-1">
       {starter.cli !== undefined && (
         <div>
-          <span className="font-medium text-foreground">{starter.id}</span>:{" "}
+          <span className="font-medium text-foreground">{starter.name}</span>:{" "}
           {starter.cli.hasAuth ? (
             <>
               Run <code>tetherbox auth {starter.id}</code> on your machine to authenticate on the
@@ -128,7 +136,7 @@ export function StarterSetupNotes({ starters }: { starters: readonly StarterSumm
       )}
       {starter.setupNote !== undefined && (
         <div>
-          <span className="font-medium text-foreground">{starter.id}</span>: {starter.setupNote}
+          <span className="font-medium text-foreground">{starter.name}</span>: {starter.setupNote}
         </div>
       )}
     </div>
@@ -220,32 +228,28 @@ export function StarterSelectionFields({
           return (
             <div key={category} className="space-y-1.5">
               <div className="text-xs font-medium text-muted-foreground">{label}</div>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {group.map((starter) => {
                   const checked = selectedSet.has(starter.id);
                   const checkboxId = `${idPrefix}-starter-${starter.id}`;
 
                   return (
-                    <label
-                      key={starter.id}
-                      htmlFor={checkboxId}
-                      className={cn(
-                        "flex cursor-pointer items-center gap-2 rounded-lg border px-2.5 py-2 text-xs transition-colors",
-                        checked
-                          ? "border-primary bg-primary/5 text-foreground"
-                          : "border-border bg-card text-foreground/80 hover:bg-muted/50",
-                      )}
-                    >
-                      <Checkbox
-                        id={checkboxId}
-                        checked={checked}
-                        onCheckedChange={(value) => toggleStarter(starter.id, value)}
-                      />
-                      <span className="min-w-0 flex-1 truncate font-medium">{starter.id}</span>
-                      <Badge variant="outline" className="px-1.5 text-[10px]">
-                        {starter.kind}
-                      </Badge>
-                    </label>
+                    <FieldLabel key={starter.id} htmlFor={checkboxId} className="cursor-pointer">
+                      <Field orientation="horizontal">
+                        <Checkbox
+                          id={checkboxId}
+                          checked={checked}
+                          onCheckedChange={(value) => toggleStarter(starter.id, value)}
+                        />
+                        <StarterIcon starter={starter} />
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                          {starter.name}
+                        </span>
+                        <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
+                          {starterKindLabel(starter)}
+                        </Badge>
+                      </Field>
+                    </FieldLabel>
                   );
                 })}
               </div>
@@ -269,7 +273,7 @@ export function StarterSelectionFields({
                     htmlFor={inputId}
                     className="text-xs font-normal text-muted-foreground"
                   >
-                    <span className="font-mono text-xs text-foreground/80">{starter.id}</span>
+                    <span className="text-xs text-foreground/80">{starter.name}</span>
                     <span>{field.prompt}</span>
                   </FieldLabel>
                   <Input

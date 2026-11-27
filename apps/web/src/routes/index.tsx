@@ -1,7 +1,7 @@
 import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import type { ModelRef } from "@tetherbox/core/app";
+import type { ModelSelection } from "@tetherbox/core/app";
 import { ArrowUpIcon, MessageSquarePlusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import {
@@ -43,7 +43,7 @@ function HomePage() {
 
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState("");
-  const [chosenModel, setChosenModel] = useState<ModelRef | null>(null);
+  const [chosenModel, setChosenModel] = useState<ModelSelection | null>(null);
 
   const profilesQuery = useQuery(profilesQueryOptions);
   const settingsQuery = useQuery(appSettingsQueryOptions);
@@ -69,7 +69,7 @@ function HomePage() {
     }: {
       profileId: string;
       text: string;
-      model: ModelRef;
+      model: ModelSelection;
     }) => {
       const { session } = await unwrapJson(
         await appClient.profiles[":profileId"].sessions.$post({

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import type { ModelRef } from "@tetherbox/core/app";
+import type { ModelSelection } from "@tetherbox/core/app";
 import { Trash2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
@@ -24,7 +24,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const liveTurn = useLiveTurn(sessionId);
-  const [chosenModel, setChosenModel] = useState<ModelRef | null>(null);
+  const [chosenModel, setChosenModel] = useState<ModelSelection | null>(null);
 
   const sessionQuery = useQuery({
     queryKey: queryKeys.session(sessionId),
@@ -46,7 +46,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
   });
 
   const updateModelMutation = useMutation({
-    mutationFn: async (model: ModelRef) =>
+    mutationFn: async (model: ModelSelection) =>
       unwrapJson(
         await appClient.sessions[":sessionId"].$patch({
           param: { sessionId },
@@ -62,7 +62,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async ({ text, model }: { text: string; model: ModelRef }) =>
+    mutationFn: async ({ text, model }: { text: string; model: ModelSelection }) =>
       unwrapJson(
         await appClient.sessions[":sessionId"].messages.$post({
           param: { sessionId },

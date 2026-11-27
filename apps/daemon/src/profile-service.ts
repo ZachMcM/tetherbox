@@ -187,6 +187,7 @@ export async function deleteProfileOnDisk(profilesDir: string, id: ProfileId): P
 export function listStarterSummaries(): StarterSummary[] {
   return starters.map((starter) => ({
     id: starter.id,
+    name: starter.name,
     kind: starter.kind,
     category: starter.category,
     configFields: "configFields" in starter ? starter.configFields : [],

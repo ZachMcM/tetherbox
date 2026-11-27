@@ -27,6 +27,7 @@ import {
   startersQueryOptions,
 } from "../../lib/queries.ts";
 import { OAuthPresetInlineCard, StarterSecretInlineCard } from "../auth-setup-panels.tsx";
+import { StarterIcon } from "../starter-icons.tsx";
 import {
   collectMissingStarterAuth,
   StarterSelectionFields,
@@ -257,10 +258,10 @@ function ProfileMissingAuthSection({ profile }: { profile: ProfileDetail }) {
       </div>
 
       <div className="space-y-3">
-        {missingSecrets.map(({ starterId, secret }) => (
+        {missingSecrets.map(({ starter, secret }) => (
           <StarterSecretInlineCard
             key={secret.key}
-            starterId={starterId}
+            starter={starter}
             secret={secret}
             starterConfig={profile.config.starterConfig}
             isConfigured={false}
@@ -283,17 +284,20 @@ function ProfileMissingAuthSection({ profile }: { profile: ProfileDetail }) {
 
 export function ProfileSettingsSection({
   profileId,
+  onBack,
   onOpenSettingsTab,
   onDeleted,
 }: {
   profileId: string;
   onOpenSettingsTab: (tab: SettingsTab) => void;
   onDeleted: () => void;
+  onBack?: (() => void) | undefined;
 }) {
   const queryClient = useQueryClient();
   const [editingConfig, setEditingConfig] = useState(false);
   const [editingMemory, setEditingMemory] = useState(false);
 
+  const startersQuery = useQuery(startersQueryOptions);
   const profileQuery = useQuery({
     queryKey: queryKeys.profile(profileId),
     queryFn: async () =>
@@ -370,6 +374,10 @@ export function ProfileSettingsSection({
     );
   }
 
+  const startersById = new Map(
+    (startersQuery.data?.starters ?? []).map((starter) => [starter.id, starter]),
+  );
+  const starterName = (id: string) => startersById.get(id)?.name ?? id;
   const starterConfigEntries = Object.entries(profile.config.starterConfig).flatMap(
     ([starterId, fields]) =>
       Object.entries(fields).map(([key, value]) => ({ starterId, key, value })),
@@ -377,7 +385,11 @@ export function ProfileSettingsSection({
 
   return (
     <div className="space-y-6">
-      <SectionHeader title={profile.config.name} description={`Profile ID: ${profile.id}`} />
+      <SectionHeader
+        onBack={onBack}
+        title={profile.config.name}
+        description={`Profile ID: ${profile.id}`}
+      />
 
       {profile.issues.length > 0 && (
         <Alert variant="destructive">
@@ -421,11 +433,18 @@ export function ProfileSettingsSection({
                 <span className="text-xs text-muted-foreground">None enabled</span>
               ) : (
                 <div className="flex flex-wrap justify-end gap-1">
-                  {profile.config.starters.map((starter) => (
-                    <Badge key={starter} variant="secondary">
-                      {starter}
-                    </Badge>
-                  ))}
+                  {profile.config.starters.map((id) => {
+                    const starter = startersById.get(id);
+
+                    return (
+                      <Badge key={id} variant="secondary" className="gap-1">
+                        {starter !== undefined && (
+                          <StarterIcon starter={starter} className="size-3" />
+                        )}
+                        <span>{starterName(id)}</span>
+                      </Badge>
+                    );
+                  })}
                 </div>
               )
             }
@@ -452,12 +471,12 @@ export function ProfileSettingsSection({
               {starterConfigEntries.map((entry) => (
                 <div
                   key={`${entry.starterId}.${entry.key}`}
-                  className="flex items-center justify-between gap-4 font-mono"
+                  className="flex items-center justify-between gap-4"
                 >
                   <span className="text-muted-foreground">
-                    {entry.starterId}.{entry.key}
+                    {starterName(entry.starterId)} · <code>{entry.key}</code>
                   </span>
-                  <span className="truncate">{entry.value}</span>
+                  <span className="truncate font-mono">{entry.value}</span>
                 </div>
               ))}
             </div>

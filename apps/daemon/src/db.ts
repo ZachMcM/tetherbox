@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import {
   modelRefSchema,
+  modelSelectionSchema,
   profileIdSchema,
   registeredPollJobSchema,
   scheduledReminderSchema,
@@ -10,6 +11,7 @@ import {
   type AppSettings,
   type EntryName,
   type ModelRef,
+  type ModelSelection,
   type ProfileId,
   type PushSubscriptionRecord,
   type RegisteredPollJob,
@@ -36,6 +38,12 @@ const sessionRowSchema = z.object({
   last_read_at: z.string().nullable(),
   unread_alert: z.number().int(),
   error_message: z.string().nullable(),
+});
+
+const favoriteModelRowSchema = z.object({
+  provider: z.string(),
+  auth: z.string(),
+  model_id: z.string(),
 });
 
 const appSettingRowSchema = z.object({
@@ -113,6 +121,15 @@ const MIGRATIONS: readonly string[] = [
 
   ALTER TABLE sessions ADD COLUMN model_json TEXT;
   `,
+  `
+  CREATE TABLE favorite_models (
+    provider TEXT NOT NULL,
+    auth TEXT NOT NULL,
+    model_id TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (provider, auth, model_id)
+  );
+  `,
 ];
 
 function parseJsonColumn<T>({
@@ -150,7 +167,7 @@ function mapSessionRow(raw: unknown): SessionRecord {
     status: row.status,
     model: parseJsonColumn({
       column: "sessions.model_json",
-      schema: modelRefSchema.nullable(),
+      schema: modelSelectionSchema.nullable(),
       raw: row.model_json,
       fallback: null,
     }),
@@ -253,7 +270,7 @@ export class DaemonDb {
 
     const defaultModel = parseJsonColumn({
       column: "app_settings.default_model",
-      schema: modelRefSchema.nullable(),
+      schema: modelSelectionSchema.nullable(),
       raw: map.get("default_model"),
       fallback: null,
     });
@@ -288,12 +305,52 @@ export class DaemonDb {
     return this.getAppSettings();
   }
 
+  listFavoriteModels(): ModelRef[] {
+    return this.#db
+      .prepare("SELECT provider, auth, model_id FROM favorite_models ORDER BY created_at")
+      .all()
+      .flatMap((raw) => {
+        const row = favoriteModelRowSchema.parse(raw);
+        const parsed = modelRefSchema.safeParse({
+          provider: row.provider,
+          auth: row.auth,
+          id: row.model_id,
+        });
+
+        if (!parsed.success) {
+          console.error(
+            `ignoring unreadable favorite model ${row.provider}/${row.auth}/${row.model_id}`,
+          );
+
+          return [];
+        }
+
+        return [parsed.data];
+      });
+  }
+
+  addFavoriteModel(model: ModelRef): void {
+    this.#db
+      .prepare(
+        `INSERT INTO favorite_models (provider, auth, model_id, created_at)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT DO NOTHING`,
+      )
+      .run(model.provider, model.auth, model.id, new Date().toISOString());
+  }
+
+  removeFavoriteModel(model: ModelRef): void {
+    this.#db
+      .prepare("DELETE FROM favorite_models WHERE provider = ? AND auth = ? AND model_id = ?")
+      .run(model.provider, model.auth, model.id);
+  }
+
   createSession(input: {
     id: SessionId;
     profileId: ProfileId;
     title: string;
     triggerKind: SessionTriggerKind;
-    model: ModelRef | null;
+    model: ModelSelection | null;
   }): SessionRecord {
     const now = new Date().toISOString();
 
@@ -365,7 +422,7 @@ export class DaemonDb {
     return row === undefined ? undefined : mapSessionRow(row);
   }
 
-  updateSessionModel(id: SessionId, model: ModelRef | null): SessionRecord | undefined {
+  updateSessionModel(id: SessionId, model: ModelSelection | null): SessionRecord | undefined {
     const row = this.#db
       .prepare("UPDATE sessions SET model_json = ? WHERE id = ? RETURNING *")
       .get(model === null ? null : JSON.stringify(model), id);

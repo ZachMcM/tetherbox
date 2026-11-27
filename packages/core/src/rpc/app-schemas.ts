@@ -9,8 +9,9 @@ import {
 } from "../oauth.ts";
 import type { RegisteredPollJob } from "../poll.ts";
 import {
-  modelRefSchema,
+  modelSelectionSchema,
   profileConfigSchema,
+  type ModelEffort,
   starterConfigSchema,
   type CronJob,
   type ProfileConfig,
@@ -31,7 +32,7 @@ export type CreateProfileInput = z.infer<typeof createProfileInputSchema>;
 
 export const updateProfileInputSchema = z.object({
   name: z.string().trim().min(1).optional(),
-  model: modelRefSchema.nullable().optional(),
+  model: modelSelectionSchema.nullable().optional(),
   starters: z.array(z.string().min(1)).optional(),
   starterConfig: starterConfigSchema.optional(),
 });
@@ -45,31 +46,31 @@ export type UpdateMemoryInput = z.infer<typeof updateMemoryInputSchema>;
 export const createSessionInputSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   prompt: z.string().trim().min(1).optional(),
-  model: modelRefSchema.optional(),
+  model: modelSelectionSchema.optional(),
 });
 export type CreateSessionInput = z.infer<typeof createSessionInputSchema>;
 
 export const sendSessionMessageInputSchema = z.object({
   text: z.string().trim().min(1),
-  model: modelRefSchema.optional(),
+  model: modelSelectionSchema.optional(),
 });
 export type SendSessionMessageInput = z.infer<typeof sendSessionMessageInputSchema>;
 
 export const updateSessionInputSchema = z.object({
   title: z.string().trim().min(1).max(120).optional(),
   markRead: z.boolean().optional(),
-  model: modelRefSchema.nullable().optional(),
+  model: modelSelectionSchema.nullable().optional(),
 });
 export type UpdateSessionInput = z.infer<typeof updateSessionInputSchema>;
 
 export const appSettingsSchema = z.object({
-  defaultModel: modelRefSchema.nullable(),
+  defaultModel: modelSelectionSchema.nullable(),
   onboardingCompleted: z.boolean(),
 });
 export type AppSettings = z.infer<typeof appSettingsSchema>;
 
 export const updateAppSettingsInputSchema = z.object({
-  defaultModel: modelRefSchema.nullable().optional(),
+  defaultModel: modelSelectionSchema.nullable().optional(),
   onboardingCompleted: z.boolean().optional(),
 });
 export type UpdateAppSettingsInput = z.infer<typeof updateAppSettingsInputSchema>;
@@ -127,6 +128,7 @@ export interface ProfileDetail {
 
 export interface StarterSummary {
   id: string;
+  name: string;
   kind: "skill" | "module";
   category: StarterCategory;
   configFields: readonly StarterConfigField[];
@@ -147,6 +149,11 @@ export interface LlmProviderStatus {
   oauthExpires?: string;
 }
 
+export interface ModelEffortOption {
+  level: ModelEffort;
+  label: string;
+}
+
 export interface LlmModelOption {
   provider: LlmProvider;
   auth: LlmAuthKind;
@@ -154,6 +161,8 @@ export interface LlmModelOption {
   name: string;
   reasoning: boolean;
   contextWindow: number;
+  effortOptions: ModelEffortOption[];
+  favorite: boolean;
 }
 
 export type OAuthPresetSummary = Pick<

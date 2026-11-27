@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { profileIdSchema, runIdSchema, sessionIdSchema } from "./ids.ts";
-import { modelRefSchema } from "./profile.ts";
+import { modelSelectionSchema } from "./profile.ts";
 import { turnStreamEventSchema, turnTriggerSchema } from "./turn.ts";
 
 export const sessionTriggerKindSchema = z.enum(["user", "cron", "webhook", "poll", "reminder"]);
@@ -15,7 +15,7 @@ export const sessionRecordSchema = z.object({
   title: z.string().min(1),
   triggerKind: sessionTriggerKindSchema,
   status: sessionStatusSchema,
-  model: modelRefSchema.nullable(),
+  model: modelSelectionSchema.nullable(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   lastReadAt: z.iso.datetime().nullable(),
