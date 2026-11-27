@@ -12,7 +12,7 @@ import { resolveAvailableModel } from "../../components/model-picker.tsx";
 import { SessionComposer } from "../../components/session-composer.tsx";
 import { SessionTranscript } from "../../components/session-transcript.tsx";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
-import { useLiveTurn } from "../../lib/live-store.ts";
+import { useLiveTurn } from "../../lib/live/turn-store.ts";
 import {
   appSettingsQueryOptions,
   llmModelsQueryOptions,

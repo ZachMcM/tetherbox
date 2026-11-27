@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import type { CliInstallJobState } from "@tetherbox/core/app";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, unwrapJson } from "../../lib/api.ts";
-import { upsertCliInstallJob, useCliInstallJobs } from "../../lib/live-store.ts";
+import { upsertCliInstallJob, useCliInstallJobs } from "../../lib/live/cli-store.ts";
 
 export interface CliInstallRunner {
   readonly jobs: Readonly<Record<string, CliInstallJobState>>;

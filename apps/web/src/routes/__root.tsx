@@ -15,7 +15,7 @@ import { AppSidebar } from "../components/app-sidebar.tsx";
 import { LoginScreen } from "../components/login-screen.tsx";
 import { SettingsDialog } from "../components/settings/settings-dialog.tsx";
 import { parseSettingsTab, type SettingsTab } from "../components/settings/types.ts";
-import { useDaemonEvents } from "../lib/live-store.ts";
+import { useDaemonEvents } from "../lib/live/daemon-events.ts";
 import { appSettingsQueryOptions, authQueryOptions } from "../lib/queries.ts";
 
 interface RootRouterContext {

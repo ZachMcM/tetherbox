@@ -8,7 +8,7 @@ import {
   upsertCliAuthFlow,
   useCliAuthFlow as useLiveCliAuthFlow,
   watchCliAuthFlow,
-} from "../../lib/live-store.ts";
+} from "../../lib/live/cli-store.ts";
 
 function cancelFlowRequest(flowId: string) {
   return appClient.clis.auth.flows[":flowId"].cancel.$post({ param: { flowId } });
