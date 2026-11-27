@@ -28,6 +28,7 @@ import {
   LlmProviderAuthPanel,
 } from "./auth-setup-panels.tsx";
 import { CreateProfileForm } from "./create-profile-form.tsx";
+import { EffortPicker } from "./effort-picker.tsx";
 import { ModelPicker, resolveAvailableModel } from "./model-picker.tsx";
 import { ProviderIcon } from "./provider-icons.tsx";
 
@@ -190,12 +191,21 @@ export function OnboardingScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <ModelPicker
-              models={models}
-              value={effectiveDefaultModel}
-              onChange={setSelectedModel}
-              placeholder="Choose a default model…"
-            />
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <ModelPicker
+                  models={models}
+                  value={effectiveDefaultModel}
+                  onChange={setSelectedModel}
+                  placeholder="Choose a default model…"
+                />
+              </div>
+              <EffortPicker
+                models={models}
+                value={effectiveDefaultModel}
+                onChange={setSelectedModel}
+              />
+            </div>
             {completeMutation.error !== null && (
               <FieldError>{completeMutation.error.message}</FieldError>
             )}

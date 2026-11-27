@@ -22,6 +22,7 @@ import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/nativ
 import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
 import { CreateProfileDialog } from "../components/create-profile-dialog.tsx";
+import { EffortPicker } from "../components/effort-picker.tsx";
 import { ModelPicker, resolveAvailableModel } from "../components/model-picker.tsx";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
 import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
@@ -201,6 +202,12 @@ function HomePage() {
                         search: (prev) => ({ ...prev, settings: "providers" }),
                       })
                     }
+                  />
+                  <EffortPicker
+                    compact
+                    models={models}
+                    value={activeModel}
+                    onChange={setChosenModel}
                   />
                 </div>
 

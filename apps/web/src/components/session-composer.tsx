@@ -8,6 +8,7 @@ import {
   InputGroupTextarea,
 } from "@tetherbox/ui/components/input-group";
 import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
+import { EffortPicker } from "./effort-picker.tsx";
 import { ModelPicker } from "./model-picker.tsx";
 
 export function SessionComposer({
@@ -83,6 +84,13 @@ export function SessionComposer({
                 disabled={running}
                 onChange={onModelChange}
                 onConfigureProviders={onConfigureProviders}
+              />
+              <EffortPicker
+                compact
+                models={models}
+                value={model}
+                disabled={running}
+                onChange={onModelChange}
               />
               {running && (
                 <span className="hidden text-xs text-muted-foreground sm:inline">Streaming…</span>

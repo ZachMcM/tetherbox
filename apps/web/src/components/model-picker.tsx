@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@tetherbox/ui/components/tabs";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@tetherbox/ui/components/tooltip";
 import { cn } from "@tetherbox/ui/lib/utils";
 import { appClient, expectOk, queryKeys } from "../lib/api.ts";
+import { modelRefsEqual, nearestEffort, PI_DEFAULT_EFFORT } from "../lib/model-selection.ts";
 import { ProviderIcon } from "./provider-icons.tsx";
 
 const PREFERRED_MODEL_IDS: Readonly<Partial<Record<LlmProvider, readonly string[]>>> = {
@@ -32,25 +33,9 @@ const PREFERRED_MODEL_IDS: Readonly<Partial<Record<LlmProvider, readonly string[
   "github-copilot": ["claude-sonnet-4.6", "claude-sonnet-4.5", "claude-haiku-4.5"],
 };
 
-const EFFORT_ORDER: readonly ModelEffort[] = [
-  "off",
-  "minimal",
-  "low",
-  "medium",
-  "high",
-  "xhigh",
-  "max",
-];
-
-const PI_DEFAULT_EFFORT: ModelEffort = "medium";
-
 const FAVORITES_TAB = "favorites";
 
 const SHORTCUT_MODIFIER = /Mac|iPhone|iPad/.test(navigator.userAgent) ? "⌘" : "Ctrl+";
-
-function modelRefsEqual(a: ModelRef, b: ModelRef): boolean {
-  return a.provider === b.provider && a.auth === b.auth && a.id === b.id;
-}
 
 function modelKey(model: ModelRef): string {
   return `${model.provider}:${model.auth}:${model.id}`;
@@ -58,20 +43,6 @@ function modelKey(model: ModelRef): string {
 
 function groupKey(model: Pick<ModelRef, "provider" | "auth">): string {
   return `${model.provider}:${model.auth}`;
-}
-
-function nearestEffort(
-  levels: readonly ModelEffort[],
-  wanted: ModelEffort,
-): ModelEffort | undefined {
-  if (levels.includes(wanted)) {
-    return wanted;
-  }
-
-  const wantedIndex = EFFORT_ORDER.indexOf(wanted);
-  const above = EFFORT_ORDER.slice(wantedIndex + 1).find((level) => levels.includes(level));
-
-  return above ?? EFFORT_ORDER.slice(0, wantedIndex).findLast((level) => levels.includes(level));
 }
 
 function effortLevelsOf(option: LlmModelOption): ModelEffort[] {
@@ -245,14 +216,6 @@ export function ModelPicker({
     : activeTab === FAVORITES_TAB
       ? favorites
       : (groups.find((group) => group.key === activeTab)?.items ?? []);
-  const effortOptions = selectedOption?.effortOptions ?? [];
-  const effortLevels = selectedOption !== undefined ? effortLevelsOf(selectedOption) : [];
-  const activeLevel =
-    effortOptions.length > 1
-      ? nearestEffort(effortLevels, value?.effort ?? PI_DEFAULT_EFFORT)
-      : undefined;
-  const activeEffort = effortOptions.find((entry) => entry.level === activeLevel);
-  const defaultEffortLevel = nearestEffort(effortLevels, PI_DEFAULT_EFFORT);
   const emptyMessage = searching
     ? "No matching models."
     : activeTab === FAVORITES_TAB
@@ -270,17 +233,7 @@ export function ModelPicker({
 
   const selectModel = (option: LlmModelOption) => {
     onChange(selectionFor(option, value?.effort));
-
-    if (option.effortOptions.length <= 1) {
-      handleOpenChange(false);
-    }
-  };
-
-  const selectEffort = (effort: ModelEffort) => {
-    if (value !== null) {
-      onChange({ ...value, effort });
-      handleOpenChange(false);
-    }
+    handleOpenChange(false);
   };
 
   const handleShortcut = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -319,16 +272,13 @@ export function ModelPicker({
           <span className="flex min-w-0 items-center gap-1.5">
             {value !== null && <ProviderIcon provider={value.provider} className="size-3.5" />}
             <span className="truncate">{selectedOption?.name ?? value?.id ?? placeholder}</span>
-            {activeEffort !== undefined && (
-              <span className="shrink-0 text-muted-foreground">· {activeEffort.label}</span>
-            )}
           </span>
           <ChevronDownIcon className="size-3.5 shrink-0 opacity-50" />
         </PopoverTrigger>
         <PopoverContent
           side={side}
           align="start"
-          className="h-80 w-[min(38rem,calc(100vw-2rem))] flex-row gap-0 p-0"
+          className="h-80 w-[min(28rem,calc(100vw-2rem))] flex-row gap-0 p-0"
           onKeyDown={handleShortcut}
         >
           <Tabs
@@ -433,28 +383,6 @@ export function ModelPicker({
               )}
             </div>
           </div>
-
-          {activeEffort !== undefined && (
-            <div className="flex w-40 shrink-0 flex-col border-l border-border p-1.5">
-              <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">Reasoning</div>
-              {effortOptions.map((entry) => (
-                <Button
-                  key={entry.level}
-                  type="button"
-                  variant="ghost"
-                  aria-pressed={entry === activeEffort}
-                  onClick={() => selectEffort(entry.level)}
-                  className="justify-start gap-2 font-normal"
-                >
-                  <span className="flex-1 text-left">{entry.label}</span>
-                  {entry.level === defaultEffortLevel && (
-                    <span className="text-xs text-muted-foreground">Default</span>
-                  )}
-                  {entry === activeEffort && <CheckIcon />}
-                </Button>
-              ))}
-            </div>
-          )}
         </PopoverContent>
       </Popover>
     </div>

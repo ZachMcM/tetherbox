@@ -17,6 +17,7 @@ import {
   isProviderConnected,
   LlmProviderAuthPanel,
 } from "../auth-setup-panels.tsx";
+import { EffortPicker } from "../effort-picker.tsx";
 import { ModelPicker } from "../model-picker.tsx";
 import { ProviderIcon } from "../provider-icons.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
@@ -36,6 +37,7 @@ export function ProvidersSection() {
       queryClient.setQueryData(queryKeys.settings, data);
     },
   });
+  const saveDefaultModel = (model: ModelSelection) => defaultModelMutation.mutate(model);
 
   const providers = llmQuery.data?.providers ?? [];
   const secrets = secretsQuery.data?.secrets ?? [];
@@ -147,13 +149,23 @@ export function ProvidersSection() {
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : (
-          <ModelPicker
-            models={models}
-            value={defaultModel}
-            disabled={defaultModelMutation.isPending}
-            onChange={(model) => defaultModelMutation.mutate(model)}
-            placeholder="Choose default model…"
-          />
+          <div className="flex items-start gap-2">
+            <div className="min-w-0 flex-1">
+              <ModelPicker
+                models={models}
+                value={defaultModel}
+                disabled={defaultModelMutation.isPending}
+                onChange={saveDefaultModel}
+                placeholder="Choose default model…"
+              />
+            </div>
+            <EffortPicker
+              models={models}
+              value={defaultModel}
+              disabled={defaultModelMutation.isPending}
+              onChange={saveDefaultModel}
+            />
+          </div>
         )}
         {defaultModelMutation.error !== null && (
           <FieldError>{defaultModelMutation.error.message}</FieldError>
