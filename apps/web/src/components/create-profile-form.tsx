@@ -8,17 +8,17 @@ import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
 import { CliInstallCard } from "./cli-setup/cli-install-card.tsx";
+import { StarterSelectionFields } from "./starter-setup/starter-selection-fields.tsx";
+import { StarterSetupCard } from "./starter-setup/starter-setup-card.tsx";
+import { useStarterSetupState } from "./starter-setup/use-starter-setup-state.ts";
 import {
   countIncompleteVmItems,
   describeStarterAdditions,
   selectInstallEntries,
   starterFieldKey,
-  StarterSelectionFields,
   starterNeedsSetupStep,
-  StarterSetupCard,
-  useStarterSetupState,
   validateSelectedStarterConfig,
-} from "./profile-form-fields.tsx";
+} from "../lib/starter-readiness.ts";
 
 export function CreateProfileForm({
   idPrefix,

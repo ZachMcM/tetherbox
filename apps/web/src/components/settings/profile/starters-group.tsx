@@ -8,11 +8,8 @@ import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, unwrapJson } from "../../../lib/api.ts";
 import { CliInstallCard } from "../../cli-setup/cli-install-card.tsx";
-import {
-  selectInstallEntries,
-  STARTER_CATEGORY_ORDER,
-  type useStarterSetupState,
-} from "../../profile-form-fields.tsx";
+import { type useStarterSetupState } from "../../starter-setup/use-starter-setup-state.ts";
+import { selectInstallEntries, STARTER_CATEGORY_ORDER } from "../../../lib/starter-readiness.ts";
 import { SettingGroup } from "../shared.tsx";
 import { StarterCatalogRow } from "./starter-catalog-row.tsx";
 

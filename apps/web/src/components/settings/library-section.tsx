@@ -18,7 +18,7 @@ import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys } from "../../lib/api.ts";
 import { startersQueryOptions } from "../../lib/queries.ts";
-import { starterKindLabel } from "../profile-form-fields.tsx";
+import { starterKindLabel } from "../../lib/starter-readiness.ts";
 import { StarterIcon } from "../starter-icons.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 

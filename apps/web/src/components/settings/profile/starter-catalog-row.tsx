@@ -10,14 +10,14 @@ import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { Switch } from "@tetherbox/ui/components/switch";
 import type { CliInstallRunner } from "../../cli-setup/use-cli-install-runner.ts";
+import { StarterBadges } from "../../starter-setup/starter-badges.tsx";
+import { StarterConfigFields } from "../../starter-setup/starter-config-fields.tsx";
+import { StarterVmSetupPanels } from "../../starter-setup/starter-vm-setup-panels.tsx";
 import {
-  StarterBadges,
-  StarterConfigFields,
   starterFieldKey,
-  StarterVmSetupPanels,
   validateStarterFields,
   type StarterReadiness,
-} from "../../profile-form-fields.tsx";
+} from "../../../lib/starter-readiness.ts";
 import { StarterIcon } from "../../starter-icons.tsx";
 import { starterStatusBadge } from "./starter-status-badge.tsx";
 

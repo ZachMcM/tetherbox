@@ -1,7 +1,7 @@
 import type { StarterConfig, StarterSummary } from "@tetherbox/core/app";
 import { CheckCircle2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
-import { isStarterConfigValid, type StarterReadiness } from "../../profile-form-fields.tsx";
+import { isStarterConfigValid, type StarterReadiness } from "../../../lib/starter-readiness.ts";
 
 export function starterStatusBadge(
   starter: StarterSummary,

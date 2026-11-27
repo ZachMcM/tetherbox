@@ -4,7 +4,7 @@ import { AlertCircleIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../../../lib/api.ts";
-import { useStarterSetupState } from "../../profile-form-fields.tsx";
+import { useStarterSetupState } from "../../starter-setup/use-starter-setup-state.ts";
 import { SectionHeader } from "../shared.tsx";
 import { AutomationGroup } from "./automation-group.tsx";
 import { DangerZone } from "./danger-zone.tsx";
