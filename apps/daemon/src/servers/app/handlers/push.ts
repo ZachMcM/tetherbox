@@ -1,19 +1,19 @@
 import type { PushHandlers } from "@tetherbox/core";
-import type { DaemonDb } from "../../../db.ts";
+import type { PushSubscriptionTable } from "../../../db/push-subscriptions.ts";
 import type { VapidKeys } from "../../../credentials/vapid.ts";
 
 export function createPushHandlers({
-  db,
+  pushSubscriptions,
   vapidKeys,
 }: {
-  db: DaemonDb;
+  pushSubscriptions: PushSubscriptionTable;
   vapidKeys: VapidKeys;
 }): PushHandlers {
   return {
     getVapidPublicKey: () => ({ publicKey: vapidKeys.publicKey }),
     upsertSubscription(input) {
-      db.upsertPushSubscription({ ...input, createdAt: new Date().toISOString() });
+      pushSubscriptions.upsert({ ...input, createdAt: new Date().toISOString() });
     },
-    deleteSubscription: (endpoint) => ({ deleted: db.deletePushSubscription(endpoint) }),
+    deleteSubscription: (endpoint) => ({ deleted: pushSubscriptions.delete(endpoint) }),
   };
 }

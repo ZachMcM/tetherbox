@@ -17,7 +17,8 @@ import {
 } from "@tetherbox/core";
 import { runAgent } from "./agent-spawner.ts";
 import type { DaemonConfig } from "../config.ts";
-import type { DaemonDb } from "../db.ts";
+import type { SessionTable } from "../db/sessions.ts";
+import type { AppSettingsTable } from "../db/settings.ts";
 import type { DaemonEventBus } from "../events.ts";
 import type { LlmOAuth } from "../credentials/llm-oauth.ts";
 import type { LoadedProfile, ProfileRegistry } from "../profiles/registry.ts";
@@ -48,7 +49,8 @@ export interface TurnRunnerDeps {
   config: DaemonConfig;
   registry: ProfileRegistry;
   llmOAuth: LlmOAuth;
-  db: DaemonDb;
+  sessions: SessionTable;
+  settings: AppSettingsTable;
   events: DaemonEventBus;
   onProfileReloaded(profile: LoadedProfile): Promise<ProfileIssue[]>;
 }
@@ -108,7 +110,7 @@ export class TurnRunner {
     }
 
     const sessionId = existingSessionId ?? sessionIdSchema.parse(randomUUID());
-    const existing = this.#deps.db.getSession(sessionId);
+    const existing = this.#deps.sessions.get(sessionId);
 
     if (existing !== undefined && existing.profileId !== profileId) {
       throw new RpcError(
@@ -118,7 +120,7 @@ export class TurnRunner {
     }
 
     if (existing === undefined) {
-      const created = this.#deps.db.createSession({
+      const created = this.#deps.sessions.create({
         id: sessionId,
         profileId,
         title: deriveSessionTitle(trigger),
@@ -128,7 +130,7 @@ export class TurnRunner {
 
       this.#deps.events.emit({ kind: "session_updated", session: created });
     } else if (model !== undefined) {
-      const updated = this.#deps.db.updateSessionModel(sessionId, model);
+      const updated = this.#deps.sessions.updateModel(sessionId, model);
 
       if (updated !== undefined) {
         this.#deps.events.emit({ kind: "session_updated", session: updated });
@@ -233,7 +235,7 @@ export class TurnRunner {
       return;
     }
 
-    const updated = this.#deps.db.markSessionUnreadAlert(run.context.sessionId);
+    const updated = this.#deps.sessions.markUnreadAlert(run.context.sessionId);
 
     if (updated !== undefined) {
       this.#deps.events.emit({ kind: "session_updated", session: updated });
@@ -292,7 +294,7 @@ export class TurnRunner {
       return;
     }
 
-    const updated = this.#deps.db.updateSessionStatus(sessionId, { status, errorMessage });
+    const updated = this.#deps.sessions.updateStatus(sessionId, { status, errorMessage });
 
     if (updated !== undefined) {
       this.#deps.events.emit({ kind: "session_updated", session: updated });
@@ -304,9 +306,9 @@ export class TurnRunner {
     profileModel: ModelSelection | undefined,
   ): ModelSelection | undefined {
     return (
-      this.#deps.db.getSession(sessionId)?.model ??
+      this.#deps.sessions.get(sessionId)?.model ??
       profileModel ??
-      this.#deps.db.getAppSettings().defaultModel ??
+      this.#deps.settings.get().defaultModel ??
       undefined
     );
   }

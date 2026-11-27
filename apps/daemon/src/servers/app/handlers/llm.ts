@@ -4,7 +4,7 @@ import {
   supportedLlmAuthKinds,
   type LlmHandlers,
 } from "@tetherbox/core";
-import type { DaemonDb } from "../../../db.ts";
+import type { FavoriteModelTable } from "../../../db/favorite-models.ts";
 import { listAvailableLlmModels, llmApiKeyProviders } from "../../../credentials/llm-models.ts";
 import type { LlmOAuth } from "../../../credentials/llm-oauth.ts";
 import type { LlmWebAuthManager } from "../../../credentials/llm-web-auth.ts";
@@ -12,14 +12,14 @@ import { formatExpiry } from "../../../credentials/oauth-store.ts";
 import type { SecretStore } from "../../../credentials/secret-store.ts";
 
 export interface LlmHandlerDeps {
-  db: DaemonDb;
+  favoriteModels: FavoriteModelTable;
   secrets: SecretStore;
   llmOAuth: LlmOAuth;
   llmWebAuth: LlmWebAuthManager;
 }
 
 export function createLlmHandlers({
-  db,
+  favoriteModels,
   secrets,
   llmOAuth,
   llmWebAuth,
@@ -53,7 +53,7 @@ export function createLlmHandlers({
         models: await listAvailableLlmModels({
           secrets,
           llmOAuth,
-          favorites: db.listFavoriteModels(),
+          favorites: favoriteModels.list(),
         }),
       };
     },
@@ -62,7 +62,7 @@ export function createLlmHandlers({
     respondOAuthFlow: (flowId, value) => llmWebAuth.respond(flowId, value),
     cancelOAuthFlow: (flowId) => llmWebAuth.cancel(flowId),
     logoutOAuth: (provider) => llmOAuth.logout(provider),
-    addFavoriteModel: (model) => db.addFavoriteModel(model),
-    removeFavoriteModel: (model) => db.removeFavoriteModel(model),
+    addFavoriteModel: (model) => favoriteModels.add(model),
+    removeFavoriteModel: (model) => favoriteModels.remove(model),
   };
 }

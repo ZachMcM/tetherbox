@@ -1,9 +1,13 @@
 import type { SettingsHandlers } from "@tetherbox/core";
-import type { DaemonDb } from "../../../db.ts";
+import type { AppSettingsTable } from "../../../db/settings.ts";
 
-export function createSettingsHandlers({ db }: { db: DaemonDb }): SettingsHandlers {
+export function createSettingsHandlers({
+  settings,
+}: {
+  settings: AppSettingsTable;
+}): SettingsHandlers {
   return {
-    get: () => db.getAppSettings(),
-    update: (input) => db.updateAppSettings(input),
+    get: () => settings.get(),
+    update: (input) => settings.update(input),
   };
 }

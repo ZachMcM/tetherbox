@@ -7,7 +7,7 @@ import {
   type SessionRecord,
 } from "@tetherbox/core";
 import type { DaemonConfig } from "../../../config.ts";
-import type { DaemonDb } from "../../../db.ts";
+import type { SessionTable } from "../../../db/sessions.ts";
 import type { DaemonEventBus } from "../../../events.ts";
 import type { Poller } from "../../../jobs/poller.ts";
 import type { ProfileRegistry } from "../../../profiles/registry.ts";
@@ -22,7 +22,7 @@ import { requireProfile } from "./require-profile.ts";
 
 export interface SessionHandlerDeps {
   config: DaemonConfig;
-  db: DaemonDb;
+  sessions: SessionTable;
   events: DaemonEventBus;
   registry: ProfileRegistry;
   poller: Poller;
@@ -31,10 +31,10 @@ export interface SessionHandlerDeps {
 }
 
 export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers {
-  const { config, db, events, registry, poller, reminders, turns } = deps;
+  const { config, sessions, events, registry, poller, reminders, turns } = deps;
 
   const requireSession = (sessionId: SessionId): SessionRecord => {
-    const session = db.getSession(sessionId);
+    const session = sessions.get(sessionId);
 
     if (session === undefined) {
       throw new RpcError(404, `session "${sessionId}" not found`);
@@ -45,7 +45,7 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
 
   return {
     list(profileId) {
-      return db.listSessions(profileId);
+      return sessions.list(profileId);
     },
     create(profileId, input) {
       requireProfile(registry, profileId);
@@ -58,8 +58,8 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
         );
         const created =
           input.title !== undefined
-            ? db.renameSession(sessionId, input.title)
-            : db.getSession(sessionId);
+            ? sessions.rename(sessionId, input.title)
+            : sessions.get(sessionId);
 
         if (created === undefined) {
           throw new RpcError(404, `session "${sessionId}" not found`);
@@ -73,7 +73,7 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
       }
 
       const sessionId = sessionIdSchema.parse(randomUUID());
-      const created = db.createSession({
+      const created = sessions.create({
         id: sessionId,
         profileId,
         title: input.title ?? DEFAULT_SESSION_TITLE,
@@ -97,7 +97,7 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
       requireProfile(registry, session.profileId);
 
       if (session.title === DEFAULT_SESSION_TITLE) {
-        const renamed = db.renameSession(sessionId, sessionTitleFromText(text));
+        const renamed = sessions.rename(sessionId, sessionTitleFromText(text));
 
         if (renamed !== undefined) {
           events.emit({ kind: "session_updated", session: renamed });
@@ -117,15 +117,15 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
       let session = requireSession(sessionId);
 
       if (input.title !== undefined) {
-        session = db.renameSession(sessionId, input.title) ?? session;
+        session = sessions.rename(sessionId, input.title) ?? session;
       }
 
       if (input.markRead === true) {
-        session = db.markSessionRead(sessionId) ?? session;
+        session = sessions.markRead(sessionId) ?? session;
       }
 
       if (input.model !== undefined) {
-        session = db.updateSessionModel(sessionId, input.model) ?? session;
+        session = sessions.updateModel(sessionId, input.model) ?? session;
       }
 
       events.emit({ kind: "session_updated", session });
@@ -138,7 +138,7 @@ export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers
       await turns.cancelSession(sessionId);
       poller.cancelBySession(sessionId);
       reminders.cancelBySession(sessionId);
-      db.deleteSession(sessionId);
+      sessions.delete(sessionId);
       await removeSessionTranscript(config.sessionsDir, session.profileId, sessionId);
       events.emit({ kind: "session_deleted", profileId: session.profileId, sessionId });
     },

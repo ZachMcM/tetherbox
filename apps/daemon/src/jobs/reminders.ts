@@ -5,7 +5,7 @@ import type {
   ScheduleReminderInput,
   SessionId,
 } from "@tetherbox/core";
-import type { DaemonDb } from "../db.ts";
+import type { ReminderTable } from "../db/reminders.ts";
 
 const MAX_TIMEOUT_MS = 2_147_483_647;
 
@@ -34,13 +34,13 @@ function computeFireAt(input: ScheduleReminderInput, now: number): string {
  * git-tracked cron files.
  */
 export class ReminderStore {
-  readonly #db: DaemonDb;
+  readonly #table: ReminderTable;
   readonly #reminders = new Map<ProfileId, Map<EntryName, ScheduledReminder>>();
   readonly #timers = new Map<string, ReturnType<typeof setTimeout>>();
   readonly #onFire: ReminderFire;
 
-  constructor(db: DaemonDb, onFire: ReminderFire) {
-    this.#db = db;
+  constructor(table: ReminderTable, onFire: ReminderFire) {
+    this.#table = table;
     this.#onFire = onFire;
   }
 
@@ -48,7 +48,7 @@ export class ReminderStore {
     this.stopAll();
     this.#reminders.clear();
 
-    for (const { profileId, reminder } of this.#db.listAllReminders()) {
+    for (const { profileId, reminder } of this.#table.listAll()) {
       this.#remindersFor(profileId).set(reminder.name, reminder);
       this.#arm(profileId, reminder);
     }
@@ -69,7 +69,7 @@ export class ReminderStore {
       sessionId,
     };
 
-    this.#db.upsertReminder(profileId, reminder);
+    this.#table.upsert(profileId, reminder);
     this.#remindersFor(profileId).set(reminder.name, reminder);
     this.#arm(profileId, reminder);
 
@@ -87,7 +87,7 @@ export class ReminderStore {
 
     const existed = this.#reminders.get(profileId)?.delete(name) ?? false;
 
-    this.#db.deleteReminder(profileId, name);
+    this.#table.delete(profileId, name);
 
     return existed;
   }

@@ -1,7 +1,7 @@
 import type { AppApiHandlers } from "@tetherbox/core";
 import type { CliManager } from "../../cli-manager.ts";
 import type { DaemonConfig } from "../../config.ts";
-import type { DaemonDb } from "../../db.ts";
+import type { DaemonDb } from "../../db/database.ts";
 import type { DaemonEventBus } from "../../events.ts";
 import type { LlmOAuth } from "../../credentials/llm-oauth.ts";
 import type { LlmWebAuthManager } from "../../credentials/llm-web-auth.ts";
@@ -43,15 +43,17 @@ export interface AppHandlerDeps {
 }
 
 export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
+  const { db } = deps;
+
   return {
-    settings: createSettingsHandlers(deps),
-    profiles: createProfileHandlers(deps),
+    settings: createSettingsHandlers({ settings: db.settings }),
+    profiles: createProfileHandlers({ ...deps, sessions: db.sessions }),
     starters: createStarterHandlers(deps),
     clis: createCliHandlers(deps),
-    sessions: createSessionHandlers(deps),
+    sessions: createSessionHandlers({ ...deps, sessions: db.sessions }),
     secrets: createSecretHandlers(deps),
-    llm: createLlmHandlers(deps),
+    llm: createLlmHandlers({ ...deps, favoriteModels: db.favoriteModels }),
     oauth: createOAuthHandlers(deps),
-    push: createPushHandlers(deps),
+    push: createPushHandlers({ ...deps, pushSubscriptions: db.pushSubscriptions }),
   };
 }

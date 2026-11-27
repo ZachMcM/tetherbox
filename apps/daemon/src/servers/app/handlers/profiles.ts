@@ -8,7 +8,7 @@ import {
   type ProfileSummary,
 } from "@tetherbox/core";
 import type { DaemonConfig } from "../../../config.ts";
-import type { DaemonDb } from "../../../db.ts";
+import type { SessionTable } from "../../../db/sessions.ts";
 import type { DaemonEventBus } from "../../../events.ts";
 import type { Poller } from "../../../jobs/poller.ts";
 import {
@@ -31,7 +31,7 @@ import { requireProfile } from "./require-profile.ts";
 
 export interface ProfileHandlerDeps {
   config: DaemonConfig;
-  db: DaemonDb;
+  sessions: SessionTable;
   events: DaemonEventBus;
   registry: ProfileRegistry;
   scheduler: Scheduler;
@@ -42,7 +42,7 @@ export interface ProfileHandlerDeps {
 }
 
 export function createProfileHandlers(deps: ProfileHandlerDeps): ProfileHandlers {
-  const { config, db, events, registry, scheduler, poller, reminders, turns, catalog } = deps;
+  const { config, sessions, events, registry, scheduler, poller, reminders, turns, catalog } = deps;
 
   const toSummary = (profile: LoadedProfile): ProfileSummary => ({
     id: profile.id,
@@ -113,14 +113,14 @@ export function createProfileHandlers(deps: ProfileHandlerDeps): ProfileHandlers
       requireProfile(registry, id);
       scheduler.remove(id);
 
-      const existingIds = db.listSessions(id).map((session) => session.id);
+      const existingIds = sessions.list(id).map((session) => session.id);
 
       try {
         await turns.cancelProfile(id, existingIds);
         poller.cancelByProfile(id);
         reminders.cancelByProfile(id);
 
-        const deletedIds = db.deleteSessionsByProfile(id);
+        const deletedIds = sessions.deleteByProfile(id);
 
         await rm(join(config.sessionsDir, id), { recursive: true, force: true });
         await deleteProfileOnDisk(config.profilesDir, id);

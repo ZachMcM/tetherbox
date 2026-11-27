@@ -3,7 +3,7 @@ import { loadOrCreateAppToken } from "./servers/app/app-token.ts";
 import { createAppServer } from "./servers/app/server.ts";
 import { CliManager } from "./cli-manager.ts";
 import type { DaemonConfig } from "./config.ts";
-import { DaemonDb } from "./db.ts";
+import { openDaemonDb } from "./db/database.ts";
 import { DaemonEventBus } from "./events.ts";
 import { startInternalServer } from "./servers/internal/server.ts";
 import type { LlmOAuth } from "./credentials/llm-oauth.ts";
@@ -32,8 +32,8 @@ export async function serveDaemon(
 ): Promise<void> {
   const appToken = loadOrCreateAppToken(config.dataDir);
   const vapidKeys = loadOrCreateVapidKeys(config.dataDir);
-  const db = new DaemonDb(config.dataDir);
-  const resetCount = db.resetRunningSessions();
+  const db = openDaemonDb(config.dataDir);
+  const resetCount = db.sessions.resetRunning();
 
   if (resetCount > 0) {
     console.warn(`reset ${resetCount} stale running session(s) from a previous daemon run`);
@@ -51,7 +51,7 @@ export async function serveDaemon(
       { sessionId: job.sessionId },
     );
   });
-  const poller = new Poller(db, (profileId, registered, outcome) => {
+  const poller = new Poller(db.pollJobs, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
@@ -62,7 +62,7 @@ export async function serveDaemon(
       );
     }
   });
-  const reminders = new ReminderStore(db, (profileId, reminder) => {
+  const reminders = new ReminderStore(db.reminders, (profileId, reminder) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
@@ -77,7 +77,8 @@ export async function serveDaemon(
     config,
     registry,
     llmOAuth,
-    db,
+    sessions: db.sessions,
+    settings: db.settings,
     events,
     onProfileReloaded: async (profile) => [
       ...scheduler.sync(profile),

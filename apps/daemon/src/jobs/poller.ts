@@ -5,7 +5,7 @@ import type {
   RegisterPollJobInput,
   SessionId,
 } from "@tetherbox/core";
-import type { DaemonDb } from "../db.ts";
+import type { PollJobTable } from "../db/poll-jobs.ts";
 
 export type PollOutcome = { status: "done" | "stalled"; output: string };
 export type PollFire = (profileId: ProfileId, job: RegisteredPollJob, outcome: PollOutcome) => void;
@@ -15,19 +15,19 @@ export type PollFire = (profileId: ProfileId, job: RegisteredPollJob, outcome: P
  * over RPC, and starts a follow-up run in the originating session when one finishes or stalls.
  */
 export class Poller {
-  readonly #db: DaemonDb;
+  readonly #table: PollJobTable;
   readonly #jobs = new Map<ProfileId, Map<EntryName, RegisteredPollJob>>();
   readonly #onFire: PollFire;
 
-  constructor(db: DaemonDb, onFire: PollFire) {
-    this.#db = db;
+  constructor(table: PollJobTable, onFire: PollFire) {
+    this.#table = table;
     this.#onFire = onFire;
   }
 
   loadAll(): void {
     this.#jobs.clear();
 
-    for (const { profileId, job } of this.#db.listAllPollJobs()) {
+    for (const { profileId, job } of this.#table.listAll()) {
       this.#jobsFor(profileId).set(job.name, job);
     }
 
@@ -47,7 +47,7 @@ export class Poller {
       sessionId,
     };
 
-    this.#db.upsertPollJob(profileId, registered);
+    this.#table.upsert(profileId, registered);
     this.#jobsFor(profileId).set(name, registered);
     // TODO: Run the job's check command every intervalSeconds as the agent OS user (never inside
     // the daemon process), define the check's stdout contract (running, done, failed), and call
@@ -63,7 +63,7 @@ export class Poller {
   cancel(profileId: ProfileId, name: EntryName): boolean {
     const existed = this.#jobs.get(profileId)?.delete(name) ?? false;
 
-    this.#db.deletePollJob(profileId, name);
+    this.#table.delete(profileId, name);
 
     return existed;
   }
