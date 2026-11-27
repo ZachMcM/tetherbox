@@ -15,7 +15,7 @@ import {
   type StarterCliStatusEntry,
 } from "@tetherbox/core";
 import type { DaemonEvent, DaemonEventBus } from "./events.ts";
-import type { StarterCatalog } from "./starter-catalog.ts";
+import type { StarterCatalog } from "./profiles/starter-catalog.ts";
 
 const PROBE_TIMEOUT_MS = 10_000;
 const INSTALL_TIMEOUT_MS = 5 * 60_000;
