@@ -1,6 +1,7 @@
 import { serve } from "@hono/node-server";
 import { loadOrCreateAppToken } from "./app-auth.ts";
 import { createAppServer } from "./app-server.ts";
+import { CliManager } from "./cli-manager.ts";
 import type { DaemonConfig } from "./config.ts";
 import { DaemonDb } from "./db.ts";
 import { DaemonEventBus } from "./events.ts";
@@ -39,6 +40,7 @@ export async function serveDaemon(
 
   const events = new DaemonEventBus();
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
+  const clis = new CliManager(config.agent.user);
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
     turns.enqueue(
@@ -124,6 +126,7 @@ export async function serveDaemon(
       llmOAuth,
       llmWebAuth,
       oauth,
+      clis,
       shutdownSignal: shutdownController.signal,
     }).fetch,
     hostname: config.appHost,
@@ -157,6 +160,7 @@ export async function serveDaemon(
       poller.stopAll();
       reminders.stopAll();
       llmWebAuth.stopAll();
+      clis.stopAll();
       shutdownController.abort();
       internal.close();
       publicServer.close();

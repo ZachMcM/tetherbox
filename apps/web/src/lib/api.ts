@@ -17,6 +17,7 @@ export const queryKeys = {
   profiles: ["profiles"] as const,
   profile: (profileId: string) => ["profiles", profileId] as const,
   starters: ["starters"] as const,
+  cliStatus: ["clis", "status"] as const,
   sessions: ["sessions"] as const,
   session: (sessionId: string) => ["sessions", sessionId] as const,
   secrets: ["secrets"] as const,

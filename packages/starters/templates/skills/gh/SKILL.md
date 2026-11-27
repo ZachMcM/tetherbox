@@ -12,9 +12,7 @@ Use `gh` through bash for GitHub repositories, issues, pull requests, and CI che
 `gh` stores its own credentials in the `tetherbox-agent` user's home directory, not in the daemon's secret store.
 
 - Check auth with `gh auth status`.
-- If `gh` is not logged in, a token expired, or scopes are missing, never ask for a GitHub token in chat. Tell the user to run `tetherbox auth gh` on their laptop.
-- For GitHub Enterprise hosts, tell the user to run `tetherbox auth gh -- --hostname <host>`.
-- If `gh` is not installed on the VM, tell the user to install `gh` and then run `tetherbox auth gh`.
+- If `gh` is not installed, not logged in, or scopes are missing, never ask for a GitHub token in chat. Tell the user to install or sign in to GitHub CLI in Tetherbox Settings -> CLI tools.
 
 ## Common commands
 

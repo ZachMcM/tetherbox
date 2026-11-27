@@ -127,7 +127,7 @@ function checkDriveError(status: number, raw: string): never {
     (raw.includes("insufficientPermissions") || raw.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
   ) {
     throw new Error(
-      "Google Drive returned 403 (insufficient OAuth scope). Re-run: tetherbox oauth login gdrive --scope=read-write",
+      "Google Drive returned 403 (insufficient OAuth scope). Reconnect Google Drive with read and write permissions in Tetherbox Settings -> Integrations.",
     );
   }
 
@@ -209,7 +209,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const obj = asObject(params);
@@ -270,7 +273,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const fileId = requireString(asObject(params), "fileId");
@@ -303,7 +309,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const obj = asObject(params);
@@ -373,7 +382,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const obj = asObject(params);
@@ -467,7 +479,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const obj = asObject(params);
@@ -557,7 +572,10 @@ export default {
       },
       async execute(params, ctx) {
         if (!(await ctx.hasSecret(SECRET_KEY))) {
-          return { kind: "text", text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gdrive` };
+          return {
+            kind: "text",
+            text: `Missing ${SECRET_KEY}. Connect Google Drive in Tetherbox Settings -> Integrations.`,
+          };
         }
 
         const obj = asObject(params);

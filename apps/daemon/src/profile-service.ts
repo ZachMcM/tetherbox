@@ -196,7 +196,12 @@ export function listStarterSummaries(): StarterSummary[] {
       ? { oauthPreset: starter.oauthPreset }
       : {}),
     ...("cli" in starter
-      ? { cli: { binary: starter.cli.binary, hasAuth: "auth" in starter.cli } }
+      ? {
+          cli: {
+            binary: starter.cli.binary,
+            hasAuth: "auth" in starter.cli && starter.cli.auth !== undefined,
+          },
+        }
       : {}),
     ...("setupNote" in starter ? { setupNote: starter.setupNote } : {}),
   }));

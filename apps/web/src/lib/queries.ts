@@ -21,6 +21,11 @@ export const startersQueryOptions = queryOptions({
   queryFn: async () => unwrapJson(await appClient.starters.$get()),
 });
 
+export const cliStatusQueryOptions = queryOptions({
+  queryKey: queryKeys.cliStatus,
+  queryFn: async () => unwrapJson(await appClient.clis.status.$get()),
+});
+
 export const sessionsQueryOptions = queryOptions({
   queryKey: queryKeys.sessions,
   queryFn: async () => unwrapJson(await appClient.sessions.$get({ query: {} })),

@@ -16,6 +16,7 @@ import {
   type SessionId,
   type SessionRecord,
 } from "@tetherbox/core";
+import type { CliManager } from "./cli-manager.ts";
 import type { DaemonConfig } from "./config.ts";
 import type { DaemonDb } from "./db.ts";
 import type { DaemonEventBus } from "./events.ts";
@@ -54,6 +55,7 @@ export interface AppHandlerDeps {
   llmOAuth: LlmOAuth;
   llmWebAuth: LlmWebAuthManager;
   oauth: OAuthStore;
+  clis: CliManager;
 }
 
 function toProfileSummary(
@@ -108,6 +110,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
     llmOAuth,
     llmWebAuth,
     oauth,
+    clis,
   } = deps;
 
   const requireProfile = (id: ProfileId): LoadedProfile => {
@@ -204,6 +207,27 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
     },
     listStarters() {
       return listStarterSummaries();
+    },
+    listCliStatuses() {
+      return clis.listStatuses();
+    },
+    startCliInstall(starterId) {
+      return clis.startInstall(starterId);
+    },
+    getCliInstallJob(jobId) {
+      return clis.getInstallJob(jobId);
+    },
+    startCliAuth(starterId) {
+      return clis.startAuth(starterId);
+    },
+    getCliAuthFlow(flowId) {
+      return clis.getAuthFlow(flowId);
+    },
+    respondCliAuthFlow(flowId, value) {
+      return clis.respondAuthFlow(flowId, value);
+    },
+    cancelCliAuthFlow(flowId) {
+      return clis.cancelAuthFlow(flowId);
     },
     cancelPollJob(profileId, name) {
       requireProfile(profileId);

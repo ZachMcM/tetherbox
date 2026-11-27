@@ -5,7 +5,6 @@ import {
   secretKeySchema,
   type OAuthPresetId,
   type SecretInjection,
-  type SecretKey,
   type StarterCategory,
   type StarterConfigField,
   type StarterSecret,
@@ -13,13 +12,7 @@ import {
 
 export type { StarterCategory, StarterConfigField, StarterSecret };
 
-export interface StarterConfigEntry {
-  readonly starterId: string;
-  readonly field: StarterConfigField;
-}
-
 export interface StarterCliInstall {
-  readonly target: "agent" | "system";
   readonly description: string;
   readonly command: readonly [string, ...string[]];
 }
@@ -33,11 +26,6 @@ export interface StarterCli {
   readonly binary: string;
   readonly install?: StarterCliInstall;
   readonly auth?: StarterCliAuth;
-}
-
-export interface StarterCliEntry {
-  readonly starterId: string;
-  readonly cli: StarterCli;
 }
 
 export interface StarterCliAuthEntry {
@@ -86,13 +74,31 @@ function promptDomainProxySecret({
   };
 }
 
-function npmUserInstall(packageName: string): StarterCliInstall {
+function npmUserInstall(packageName: string, postInstall?: string): StarterCliInstall {
+  const base = `npm install -g --prefix "$HOME/.local" ${packageName}`;
+
   return {
-    target: "agent",
     description: `Install ${packageName} into ~/.local`,
-    command: ["sh", "-c", `npm install -g --prefix "$HOME/.local" ${packageName}`],
+    command: ["sh", "-c", postInstall !== undefined ? `${base} && ${postInstall}` : base],
   };
 }
+
+const GH_USER_INSTALL_SCRIPT = [
+  "set -eu",
+  'mkdir -p "$HOME/.local/bin"',
+  'OS=$(uname -s | tr "[:upper:]" "[:lower:]")',
+  "ARCH=$(uname -m)",
+  'case "$ARCH" in x86_64|amd64) ARCH="amd64" ;; aarch64|arm64) ARCH="arm64" ;; *) echo "Unsupported arch: $ARCH" >&2; exit 1 ;; esac',
+  'case "$OS" in linux) EXT="tar.gz" ;; darwin) OS="macOS"; EXT="zip" ;; *) echo "Unsupported OS: $OS" >&2; exit 1 ;; esac',
+  'TAG=$(curl -fsSL https://api.github.com/repos/cli/cli/releases/latest | sed -n \'s/.*"tag_name"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p\' | head -n 1)',
+  'VER="${TAG#v}"',
+  "TMP=$(mktemp -d)",
+  "trap 'rm -rf \"$TMP\"' EXIT",
+  'URL="https://github.com/cli/cli/releases/download/${TAG}/gh_${VER}_${OS}_${ARCH}.${EXT}"',
+  'curl -fsSL "$URL" -o "$TMP/gh.${EXT}"',
+  'if [ "$EXT" = "tar.gz" ]; then tar -xzf "$TMP/gh.tar.gz" -C "$TMP"; else unzip -q "$TMP/gh.zip" -d "$TMP"; fi',
+  'install -m 0755 "$TMP/gh_${VER}_${OS}_${ARCH}/bin/gh" "$HOME/.local/bin/gh"',
+].join("; ");
 
 interface StarterBase {
   readonly id: string;
@@ -127,6 +133,10 @@ export const starters = [
     secrets: [],
     cli: {
       binary: "gh",
+      install: {
+        description: "Download GitHub CLI into ~/.local/bin",
+        command: ["sh", "-c", GH_USER_INSTALL_SCRIPT],
+      },
       auth: {
         checkCommand: ["gh", "auth", "status"],
         loginCommand: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
@@ -142,10 +152,11 @@ export const starters = [
     secrets: [],
     cli: {
       binary: "agent-browser",
-      install: npmUserInstall("agent-browser"),
+      install: {
+        ...npmUserInstall("agent-browser", '"$HOME/.local/bin/agent-browser" install'),
+        description: "Install agent-browser and headless Chromium into ~/.local",
+      },
     },
-    setupNote:
-      "Run `agent-browser install` as the agent user on the VM if headless Chromium is not yet downloaded.",
   },
   {
     kind: "skill",
@@ -176,9 +187,12 @@ export const starters = [
     cli: {
       binary: "rex",
       install: {
-        target: "system",
-        description: "Install Rex via pkgs.superlogical.com/rex/install.sh",
-        command: ["sh", "-c", "curl -fsSL https://pkgs.superlogical.com/rex/install.sh | sh"],
+        description: "Install Rex into ~/.local/bin via pkgs.superlogical.com/rex/install.sh",
+        command: [
+          "sh",
+          "-c",
+          'mkdir -p "$HOME/.local/bin" && curl -fsSL https://pkgs.superlogical.com/rex/install.sh | INSTALL_DIR="$HOME/.local/bin" BIN_DIR="$HOME/.local/bin" PREFIX="$HOME/.local" sh',
+        ],
       },
     },
     configFields: [
@@ -443,8 +457,10 @@ export function resolveStarters(ids: readonly string[]): Starter[] {
   return resolved;
 }
 
-function toCliAuthEntry(starter: Starter): StarterCliAuthEntry | undefined {
-  if (starter.cli?.auth === undefined) {
+export function getCliAuthStarter(id: string): StarterCliAuthEntry | undefined {
+  const starter = startersById.get(id);
+
+  if (starter?.cli?.auth === undefined) {
     return undefined;
   }
 
@@ -452,66 +468,4 @@ function toCliAuthEntry(starter: Starter): StarterCliAuthEntry | undefined {
     starterId: starter.id,
     cli: { ...starter.cli, auth: starter.cli.auth },
   };
-}
-
-export function getCliAuthStarter(id: string): StarterCliAuthEntry | undefined {
-  const starter = startersById.get(id);
-
-  return starter === undefined ? undefined : toCliAuthEntry(starter);
-}
-
-export function listCliAuthStarters(): StarterCliAuthEntry[] {
-  const entries: StarterCliAuthEntry[] = [];
-
-  for (const starter of starters) {
-    const entry = toCliAuthEntry(starter);
-
-    if (entry !== undefined) {
-      entries.push(entry);
-    }
-  }
-
-  return entries;
-}
-
-export function collectStarterSecrets(ids: readonly string[]): StarterSecret[] {
-  const seen = new Set<SecretKey>();
-  const required: StarterSecret[] = [];
-
-  for (const starter of resolveStarters(ids)) {
-    for (const secret of starter.secrets) {
-      if (!seen.has(secret.key)) {
-        seen.add(secret.key);
-        required.push(secret);
-      }
-    }
-  }
-
-  return required;
-}
-
-export function collectStarterClis(ids: readonly string[]): StarterCliEntry[] {
-  return resolveStarters(ids).flatMap((starter) =>
-    starter.cli !== undefined ? [{ starterId: starter.id, cli: starter.cli }] : [],
-  );
-}
-
-export function collectStarterConfigFields(ids: readonly string[]): StarterConfigEntry[] {
-  return resolveStarters(ids).flatMap((starter) =>
-    (starter.configFields ?? []).map((field) => ({ starterId: starter.id, field })),
-  );
-}
-
-export function collectStarterOAuthPresets(ids: readonly string[]): OAuthPresetId[] {
-  const seen = new Set<OAuthPresetId>();
-  const presets: OAuthPresetId[] = [];
-
-  for (const starter of resolveStarters(ids)) {
-    if (starter.oauthPreset !== undefined && !seen.has(starter.oauthPreset)) {
-      seen.add(starter.oauthPreset);
-      presets.push(starter.oauthPreset);
-    }
-  }
-
-  return presets;
 }

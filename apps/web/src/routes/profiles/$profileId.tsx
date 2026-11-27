@@ -22,9 +22,6 @@ function ProfilePage() {
           <ProfileSettingsSection
             key={profileId}
             profileId={profileId}
-            onOpenSettingsTab={(tab) =>
-              void navigate({ to: ".", search: (prev) => ({ ...prev, settings: tab }) })
-            }
             onDeleted={() => void navigate({ to: "/" })}
           />
         </div>

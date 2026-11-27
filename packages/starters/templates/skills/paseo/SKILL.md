@@ -10,7 +10,7 @@ Use the `paseo` CLI to dispatch and monitor coding agents on the user's remote P
 ## Auth and connection
 
 - Use `starterConfig.paseo.host` from `profile.json` as `<host>` with `--host <host>` (or `PASEO_HOST`).
-- If using Paseo Hub, credentials live under `tetherbox-agent`'s home directory. If Hub auth is missing or expired, tell the user to run `tetherbox auth paseo` on their laptop.
+- If using Paseo Hub, credentials live under `tetherbox-agent`'s home directory. If Hub auth is missing or expired, tell the user to sign in to Paseo in Tetherbox Settings -> CLI tools.
 - Never ask for passwords or API keys in chat.
 
 ## Dispatching and monitoring sessions

@@ -12,7 +12,7 @@ Use the `claude` CLI with `--cloud` to dispatch persistent coding sessions to An
 Claude Code Cloud requires a Claude subscription login stored under `tetherbox-agent`'s home directory, not a raw API key.
 
 - Check auth with `claude auth status`.
-- If `loggedIn` is `false` or a command fails with an auth error, never ask for tokens in chat. Tell the user to run `tetherbox auth claude` on their laptop.
+- If `loggedIn` is `false` or a command fails with an auth error, never ask for tokens in chat. Tell the user to sign in to Claude Code in Tetherbox Settings -> CLI tools.
 
 ## Dispatching cloud sessions
 

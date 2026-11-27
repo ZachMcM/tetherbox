@@ -117,7 +117,7 @@ async function jiraRequest(
 
     return {
       kind: "text",
-      text: `Missing ${SECRET_KEY}. Run: tetherbox secrets set ${SECRET_KEY} --domain ${host} --inject header:Authorization`,
+      text: `Missing ${SECRET_KEY}. Add it in Tetherbox Settings -> Secrets pinned to ${host} (header: Authorization).`,
     };
   }
 

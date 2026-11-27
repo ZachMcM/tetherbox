@@ -210,7 +210,7 @@ async function missingSecretResult(ctx: ModuleContext): Promise<ModuleToolResult
 
   return {
     kind: "text",
-    text: `Missing ${SECRET_KEY}. Run: tetherbox secrets set ${SECRET_KEY} --domain api.notion.com`,
+    text: `Missing ${SECRET_KEY}. Add it in Tetherbox Settings -> Secrets pinned to api.notion.com.`,
   };
 }
 

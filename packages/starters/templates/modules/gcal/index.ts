@@ -118,7 +118,7 @@ async function calendarRequest(
   if (!(await ctx.hasSecret(SECRET_KEY))) {
     return {
       kind: "text",
-      text: `Missing ${SECRET_KEY}. Run: tetherbox oauth login gcal`,
+      text: `Missing ${SECRET_KEY}. Connect Google Calendar in Tetherbox Settings -> Integrations.`,
     };
   }
 
@@ -151,7 +151,7 @@ async function calendarRequest(
       (raw.includes("insufficientPermissions") || raw.includes("ACCESS_TOKEN_SCOPE_INSUFFICIENT"))
     ) {
       throw new Error(
-        "Google Calendar returned 403 (insufficient OAuth scope). Re-run: tetherbox oauth login gcal --scope=read-write",
+        "Google Calendar returned 403 (insufficient OAuth scope). Reconnect Google Calendar with read and write permissions in Tetherbox Settings -> Integrations.",
       );
     }
 

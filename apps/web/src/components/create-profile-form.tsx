@@ -1,36 +1,24 @@
 import { useState, type FormEvent, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { StarterConfig } from "@tetherbox/core/app";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import type { StarterConfig, StarterSummary } from "@tetherbox/core/app";
 import { RefreshCwIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
+import { CliInstallCard } from "./cli-setup-panels.tsx";
 import {
-  oauthStatusQueryOptions,
-  secretsQueryOptions,
-  startersQueryOptions,
-} from "../lib/queries.ts";
-import {
-  findPresetLogin,
-  OAuthPresetInlineCard,
-  StarterSecretInlineCard,
-} from "./auth-setup-panels.tsx";
-import {
-  collectMissingStarterAuth,
-  needsSetupNote,
+  countIncompleteVmItems,
+  describeStarterAdditions,
+  selectInstallEntries,
+  starterFieldKey,
   StarterSelectionFields,
-  StarterSetupNotes,
+  starterNeedsSetupStep,
+  StarterSetupCard,
+  useStarterSetupState,
   validateSelectedStarterConfig,
-  type MissingStarterAuth,
 } from "./profile-form-fields.tsx";
-
-interface AuthStepSnapshot {
-  readonly starterConfig: StarterConfig;
-  readonly secrets: MissingStarterAuth["secrets"];
-  readonly oauthPresets: MissingStarterAuth["presets"];
-}
 
 export function CreateProfileForm({
   idPrefix,
@@ -53,26 +41,29 @@ export function CreateProfileForm({
   const [selectedStarters, setSelectedStarters] = useState<string[]>([]);
   const [starterConfig, setStarterConfig] = useState<StarterConfig>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
-  const [authStep, setAuthStep] = useState<AuthStepSnapshot | null>(null);
+  const [step, setStep] = useState<"select" | "prepare">("select");
+  const [prepareStarterIds, setPrepareStarterIds] = useState<string[]>([]);
 
-  const startersQuery = useQuery(startersQueryOptions);
-  const secretsQuery = useQuery(secretsQueryOptions);
-  const oauthStatusQuery = useQuery({ ...oauthStatusQueryOptions, refetchOnWindowFocus: "always" });
-
-  const starters = startersQuery.data?.starters ?? [];
-  const oauthPresets = oauthStatusQuery.data?.presets ?? [];
-  const oauthLogins = oauthStatusQuery.data?.logins ?? [];
+  const {
+    starters,
+    startersQuery,
+    oauthPresets,
+    oauthLogins,
+    readinessById,
+    installRunner,
+    isRefreshing,
+    statusPending,
+    statusError,
+    refreshStatus,
+  } = useStarterSetupState();
 
   const selectedSet = new Set(selectedStarters);
   const selectedSummaries = starters.filter((starter) => selectedSet.has(starter.id));
-  const missingNow = collectMissingStarterAuth({
-    starters: selectedSummaries,
-    secrets: secretsQuery.data?.secrets,
-    oauthLogins: oauthStatusQuery.data?.logins,
+  const startersNeedingSetup = selectedSummaries.filter((starter) => {
+    const readiness = readinessById.get(starter.id);
+
+    return readiness !== undefined && starterNeedsSetupStep(starter, readiness);
   });
-  const missingCount = missingNow.secrets.length + missingNow.presets.length;
-  const hasPendingAuth = missingCount > 0;
-  const missingSecretKeys = new Set(missingNow.secrets.map((entry) => entry.secret.key));
 
   const mutation = useMutation({
     mutationFn: async (validatedConfig: StarterConfig) => {
@@ -94,209 +85,269 @@ export function CreateProfileForm({
     },
   });
 
-  const validateAndGetConfig = (): StarterConfig | null => {
+  const commitProfile = () => {
     const validation = validateSelectedStarterConfig(starters, selectedStarters, starterConfig);
 
     if (!validation.ok) {
       setFieldErrors(validation.errors);
 
-      return null;
+      return;
     }
 
     setFieldErrors({});
-
-    return validation.config;
+    mutation.mutate(validation.config);
   };
 
-  const handleDetailsSubmit = (event: FormEvent) => {
+  const handleSelectSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    const validatedConfig = validateAndGetConfig();
-
-    if (validatedConfig === null) {
-      return;
-    }
-
-    if (hasPendingAuth) {
-      setAuthStep({
-        starterConfig: validatedConfig,
-        secrets: missingNow.secrets,
-        oauthPresets: missingNow.presets,
-      });
+    if (startersNeedingSetup.length > 0) {
+      setPrepareStarterIds(startersNeedingSetup.map((starter) => starter.id));
+      setFieldErrors({});
+      setStep("prepare");
 
       return;
     }
 
-    mutation.mutate(validatedConfig);
+    commitProfile();
   };
 
+  const updateStarterField = (starterId: string, fieldKey: string, value: string) => {
+    setStarterConfig((prev) => ({
+      ...prev,
+      [starterId]: {
+        ...prev[starterId],
+        [fieldKey]: value,
+      },
+    }));
+    setFieldErrors((prev) => {
+      const key = starterFieldKey(starterId, fieldKey);
+
+      if (!(key in prev)) {
+        return prev;
+      }
+
+      const next = { ...prev };
+
+      delete next[key];
+
+      return next;
+    });
+  };
+
+  const prepareSummaries: StarterSummary[] = prepareStarterIds.flatMap((starterId) => {
+    const found = starters.find((entry) => entry.id === starterId);
+
+    return found !== undefined ? [found] : [];
+  });
+
+  const installEntries = selectInstallEntries(prepareSummaries, readinessById, installRunner);
+
+  const configOrAuthStarters = prepareSummaries.filter((starter) => {
+    const readiness = readinessById.get(starter.id);
+
+    return (
+      starter.configFields.length > 0 ||
+      starter.secrets.length > 0 ||
+      starter.oauthPreset !== undefined ||
+      starter.cli?.hasAuth === true ||
+      starter.setupNote !== undefined ||
+      readiness?.cliEntry?.status.kind === "error"
+    );
+  });
+
+  const incompleteVmCount = countIncompleteVmItems(selectedSummaries, readinessById);
+  const additionsSummary = describeStarterAdditions(selectedSummaries);
   const canContinue = !mutation.isPending && id.trim() !== "";
-  const detailsSubmitLabel = hasPendingAuth ? "Next: Authenticate" : "Create profile";
-  const authStepSubmitLabel =
-    missingCount === 0 ? "Create profile" : `Create profile (${missingCount} skipped)`;
+  const selectSubmitLabel =
+    startersNeedingSetup.length > 0
+      ? `Continue to setup (${startersNeedingSetup.length})`
+      : "Create profile";
+  const prepareSubmitLabel =
+    incompleteVmCount === 0 ? "Create profile" : `Create profile (${incompleteVmCount} skipped)`;
+  const displayName = name.trim() || id.trim();
+
+  if (step === "select") {
+    return (
+      <>
+        {renderHeader({
+          title,
+          description:
+            "Creates a git-backed profile directory, copies selected starters, and loads it into the daemon.",
+        })}
+        <form onSubmit={handleSelectSubmit} className="flex min-h-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <Field>
+                <FieldLabel htmlFor={`${idPrefix}-id`}>Profile ID</FieldLabel>
+                <Input
+                  id={`${idPrefix}-id`}
+                  placeholder="work"
+                  value={id}
+                  onChange={(event) => setId(event.target.value)}
+                  pattern="[A-Za-z0-9][A-Za-z0-9-]{0,62}"
+                  title="Letters, numbers, and hyphens"
+                  required
+                />
+              </Field>
+              <Field>
+                <FieldLabel htmlFor={`${idPrefix}-name`}>Display name</FieldLabel>
+                <Input
+                  id={`${idPrefix}-name`}
+                  placeholder="Work"
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                />
+              </Field>
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-sm font-medium">Starters</div>
+                <span className="text-xs text-muted-foreground">
+                  Green check means already ready on this VM
+                </span>
+              </div>
+              {startersQuery.isPending ? (
+                <div className="flex justify-center py-4">
+                  <Spinner className="size-4 text-muted-foreground" />
+                </div>
+              ) : startersQuery.error !== null ? (
+                <FieldError>{startersQuery.error.message}</FieldError>
+              ) : (
+                <StarterSelectionFields
+                  idPrefix={idPrefix}
+                  starters={starters}
+                  selectedStarters={selectedStarters}
+                  starterConfig={starterConfig}
+                  readinessById={readinessById}
+                  onChange={(next) => {
+                    setSelectedStarters(next.starters);
+                    setStarterConfig(next.starterConfig);
+                    setFieldErrors({});
+                  }}
+                />
+              )}
+            </div>
+            {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+          </div>
+          {renderFooter(
+            <>
+              {secondaryAction}
+              <Button type="submit" disabled={!canContinue}>
+                {mutation.isPending ? "Creating…" : selectSubmitLabel}
+              </Button>
+            </>,
+          )}
+        </form>
+      </>
+    );
+  }
 
   return (
     <>
-      {authStep === null ? (
-        <>
-          {renderHeader({
-            title,
-            description:
-              "Creates a git-backed profile directory, copies selected starters, and loads it into the daemon.",
-          })}
-          <form onSubmit={handleDetailsSubmit} className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
-              <div className="grid grid-cols-2 gap-3">
-                <Field>
-                  <FieldLabel htmlFor={`${idPrefix}-id`}>Profile ID</FieldLabel>
-                  <Input
-                    id={`${idPrefix}-id`}
-                    placeholder="work"
-                    value={id}
-                    onChange={(event) => setId(event.target.value)}
-                    pattern="[A-Za-z0-9][A-Za-z0-9-]{0,62}"
-                    title="Letters, numbers, and hyphens"
-                    required
-                  />
-                </Field>
-                <Field>
-                  <FieldLabel htmlFor={`${idPrefix}-name`}>Display name</FieldLabel>
-                  <Input
-                    id={`${idPrefix}-name`}
-                    placeholder="Work"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                  />
-                </Field>
+      {renderHeader({
+        title: `Set up ${displayName}`,
+        description:
+          "Binaries, secrets, and logins persist across the VM once configured. Profile settings apply only to this profile.",
+      })}
+
+      <div className="flex min-h-0 flex-1 flex-col">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
+          {statusError !== null && (
+            <div className="flex items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/5 px-3.5 py-2.5">
+              <FieldError>{statusError.message}</FieldError>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={refreshStatus}
+                disabled={isRefreshing}
+              >
+                Retry
+              </Button>
+            </div>
+          )}
+
+          {statusPending && installEntries.length === 0 && configOrAuthStarters.length === 0 && (
+            <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
+              <Spinner className="size-4" />
+              <span>Checking VM status…</span>
+            </div>
+          )}
+
+          {installEntries.length > 0 && (
+            <CliInstallCard entries={installEntries} runner={installRunner} />
+          )}
+
+          {configOrAuthStarters.length > 0 && (
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs font-medium text-muted-foreground">
+                  Configure & authenticate
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  onClick={refreshStatus}
+                  disabled={isRefreshing}
+                >
+                  <RefreshCwIcon className="size-3.5" />
+                  <span>Refresh status</span>
+                </Button>
               </div>
 
-              <div className="space-y-2">
-                <div className="text-sm font-medium">Starters</div>
-                {startersQuery.isPending ? (
-                  <div className="flex justify-center py-4">
-                    <Spinner className="size-4 text-muted-foreground" />
-                  </div>
-                ) : startersQuery.error !== null ? (
-                  <FieldError>{startersQuery.error.message}</FieldError>
-                ) : (
-                  <StarterSelectionFields
+              {configOrAuthStarters.map((starter) => {
+                const readiness = readinessById.get(starter.id);
+
+                if (readiness === undefined) {
+                  return null;
+                }
+
+                return (
+                  <StarterSetupCard
+                    key={starter.id}
                     idPrefix={idPrefix}
-                    starters={starters}
-                    selectedStarters={selectedStarters}
+                    starter={starter}
+                    readiness={readiness}
                     starterConfig={starterConfig}
                     fieldErrors={fieldErrors}
-                    existingSecrets={secretsQuery.data?.secrets}
-                    oauthLogins={oauthStatusQuery.data?.logins}
-                    onChange={(next) => {
-                      setSelectedStarters(next.starters);
-                      setStarterConfig(next.starterConfig);
-                      setFieldErrors({});
-                    }}
+                    oauthPresets={oauthPresets}
+                    oauthLogins={oauthLogins}
+                    installRunner={installRunner}
+                    onConfigChange={updateStarterField}
                   />
-                )}
-              </div>
-              {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+                );
+              })}
             </div>
-            {renderFooter(
-              <>
-                {secondaryAction}
-                <Button type="submit" disabled={!canContinue}>
-                  {mutation.isPending ? "Creating…" : detailsSubmitLabel}
-                </Button>
-              </>,
-            )}
-          </form>
-        </>
-      ) : (
-        <>
-          {renderHeader({
-            title: `Authenticate for ${name.trim() || id.trim()}`,
-            description:
-              "Configure the missing credentials for your selected starters, or finish now and configure them later in Settings.",
-          })}
+          )}
 
-          <div className="flex min-h-0 flex-1 flex-col">
-            <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
-              {authStep.secrets.length > 0 && (
-                <div className="space-y-2.5">
-                  <div className="text-xs font-medium text-muted-foreground">Starter secrets</div>
-                  {authStep.secrets.map(({ starter, secret }) => (
-                    <StarterSecretInlineCard
-                      key={secret.key}
-                      starter={starter}
-                      secret={secret}
-                      starterConfig={authStep.starterConfig}
-                      isConfigured={!missingSecretKeys.has(secret.key)}
-                    />
-                  ))}
-                </div>
-              )}
+          {Object.keys(fieldErrors).length > 0 && (
+            <FieldError>Fix the highlighted profile settings above before creating.</FieldError>
+          )}
+          {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+        </div>
 
-              {authStep.oauthPresets.length > 0 && (
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-xs font-medium text-muted-foreground">
-                      OAuth integrations
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="xs"
-                      onClick={() => void oauthStatusQuery.refetch()}
-                      disabled={oauthStatusQuery.isFetching}
-                    >
-                      <RefreshCwIcon className="size-3.5" />
-                      <span>Refresh</span>
-                    </Button>
-                  </div>
-                  {authStep.oauthPresets.map((presetId) => {
-                    const preset = oauthPresets.find((entry) => entry.id === presetId);
-
-                    if (preset === undefined) {
-                      return null;
-                    }
-
-                    return (
-                      <OAuthPresetInlineCard
-                        key={presetId}
-                        preset={preset}
-                        activeLogin={findPresetLogin(oauthLogins, presetId)}
-                      />
-                    );
-                  })}
-                </div>
-              )}
-
-              {selectedSummaries.some(needsSetupNote) && (
-                <div className="space-y-1.5 rounded-xl border border-border bg-muted/30 p-3 text-xs text-muted-foreground">
-                  <div className="font-medium text-foreground">Additional VM setup</div>
-                  <StarterSetupNotes starters={selectedSummaries} />
-                </div>
-              )}
-              {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+        {renderFooter(
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <span className="text-xs text-muted-foreground">{additionsSummary}</span>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={mutation.isPending}
+                onClick={() => setStep("select")}
+              >
+                Back
+              </Button>
+              <Button type="button" disabled={mutation.isPending} onClick={commitProfile}>
+                {mutation.isPending ? "Creating…" : prepareSubmitLabel}
+              </Button>
             </div>
-            {renderFooter(
-              <>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={mutation.isPending}
-                  onClick={() => setAuthStep(null)}
-                >
-                  Back
-                </Button>
-                <Button
-                  type="button"
-                  disabled={mutation.isPending}
-                  onClick={() => mutation.mutate(authStep.starterConfig)}
-                >
-                  {mutation.isPending ? "Creating…" : authStepSubmitLabel}
-                </Button>
-              </>,
-            )}
-          </div>
-        </>
-      )}
+          </div>,
+        )}
+      </div>
     </>
   );
 }

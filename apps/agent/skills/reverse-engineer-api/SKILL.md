@@ -13,11 +13,7 @@ Never ask the user to paste an API key, bearer token, session cookie, or passwor
 
 1. Identify the API hostname and auth scheme (Bearer token, custom header, or query parameter) from documentation, OpenAPI specs, or unauthenticated `401`/`403` error responses.
 2. Call `check_secret` for the secret key you plan to use and confirm it is set with binding kind `proxy`.
-3. If it is missing or has the wrong binding kind, give the user the exact command to run on their laptop and wait for them to confirm:
-   - Bearer token (default): `tetherbox secrets set <KEY> --domain <api.host>`
-   - Custom header (such as `X-Api-Key` or `Cookie`): `tetherbox secrets set <KEY> --domain <api.host> --inject header:<Header-Name>`
-   - Query parameter (such as `api_key`): `tetherbox secrets set <KEY> --domain <api.host> --inject query:<param>`
-   - Multiple hosts (repeat `--domain`): `tetherbox secrets set <KEY> --domain api.example.com --domain upload.example.com`
+3. If it is missing or has the wrong binding kind, tell the user to add it in Tetherbox Settings -> Secrets with the exact key name, pinned hostname (`api.host`, or comma-separated hostnames), and injection mode (Bearer token, custom header such as `X-Api-Key` or `Cookie`, or query parameter such as `api_key`), then wait for them to confirm.
 4. Pin only the narrowest hostname required (for example `api.example.com`, not `example.com`).
 
 ## Probe through the secret proxy
@@ -25,7 +21,7 @@ Never ask the user to paste an API key, bearer token, session cookie, or passwor
 Use the built-in `fetch_with_secret` tool to send authenticated HTTPS requests through the daemon's secret proxy without ever seeing the raw credential:
 
 - Start with safe read-only `GET` endpoints (such as `/me`, `/viewer`, or a list endpoint with a small `limit`) before testing mutations.
-- If the proxy returns `403` saying the secret is not pinned to that host or is not bound for proxy use, give the user an updated `tetherbox secrets set` command with the exact required domain and injection mode.
+- If the proxy returns `403` saying the secret is not pinned to that host or is not bound for proxy use, tell the user to update the secret in Tetherbox Settings -> Secrets with the exact required hostname and injection mode.
 - Inspect status codes, pagination cursors, rate-limit headers, and error payload shapes.
 - Remember the proxy does not follow redirects automatically (`redirect: "manual"`), so check `3xx` `location` headers if an endpoint redirects to another host.
 - Never copy response fields that contain tokens or session cookies into memory or files.

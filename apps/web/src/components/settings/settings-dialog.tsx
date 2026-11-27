@@ -4,6 +4,7 @@ import { Dialog, DialogContent, DialogTitle } from "@tetherbox/ui/components/dia
 import { cn } from "@tetherbox/ui/lib/utils";
 import { logout, queryKeys } from "../../lib/api.ts";
 import { AppearanceSection } from "./appearance-section.tsx";
+import { CliToolsSection } from "./cli-tools-section.tsx";
 import { GeneralSection } from "./general-section.tsx";
 import { IntegrationsSection } from "./integrations-section.tsx";
 import { ProfileSettingsSection } from "./profile-section.tsx";
@@ -89,6 +90,7 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
           {activeTab === "providers" && <ProvidersSection />}
           {activeTab === "secrets" && <SecretsSection />}
           {activeTab === "integrations" && <IntegrationsSection />}
+          {activeTab === "tools" && <CliToolsSection />}
           {activeTab === "profiles" && (
             <ProfilesSection onOpenProfile={(id) => setTab(`profile:${id}`)} />
           )}
@@ -97,7 +99,6 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
               key={profileId}
               profileId={profileId}
               onBack={() => setTab("profiles")}
-              onOpenSettingsTab={setTab}
               onDeleted={() => setTab("profiles")}
             />
           )}

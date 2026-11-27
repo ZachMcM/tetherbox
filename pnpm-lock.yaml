@@ -302,9 +302,6 @@ importers:
       '@tetherbox/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@tetherbox/starters':
-        specifier: workspace:*
-        version: link:../../packages/starters
       commander:
         specifier: 'catalog:'
         version: 15.1.0

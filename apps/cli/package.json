@@ -13,7 +13,6 @@
   "dependencies": {
     "@clack/prompts": "catalog:",
     "@tetherbox/core": "workspace:*",
-    "@tetherbox/starters": "workspace:*",
     "commander": "catalog:",
     "ora": "catalog:",
     "picocolors": "catalog:",

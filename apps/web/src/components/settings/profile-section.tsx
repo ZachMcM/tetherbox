@@ -1,7 +1,20 @@
 import { useState, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import type { ProfileDetail, StarterConfig } from "@tetherbox/core/app";
-import { AlertCircleIcon, RefreshCwIcon, Trash2Icon } from "lucide-react";
+import type {
+  OAuthPresetSummary,
+  OAuthStatusEntry,
+  ProfileDetail,
+  StarterConfig,
+  StarterSummary,
+} from "@tetherbox/core/app";
+import {
+  AlertCircleIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  RefreshCwIcon,
+  Trash2Icon,
+} from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
 import {
   AlertDialog,
@@ -19,131 +32,346 @@ import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
+import { Switch } from "@tetherbox/ui/components/switch";
 import { Textarea } from "@tetherbox/ui/components/textarea";
+import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../../lib/api.ts";
+import { CliInstallCard, type CliInstallRunner } from "../cli-setup-panels.tsx";
 import {
-  oauthStatusQueryOptions,
-  secretsQueryOptions,
-  startersQueryOptions,
-} from "../../lib/queries.ts";
-import { OAuthPresetInlineCard, StarterSecretInlineCard } from "../auth-setup-panels.tsx";
-import { StarterIcon } from "../starter-icons.tsx";
-import {
-  collectMissingStarterAuth,
-  StarterSelectionFields,
-  validateSelectedStarterConfig,
+  isStarterConfigValid,
+  selectInstallEntries,
+  STARTER_CATEGORY_ORDER,
+  StarterConfigFields,
+  starterFieldKey,
+  starterKindLabel,
+  StarterVmSetupPanels,
+  useStarterSetupState,
+  validateStarterFields,
+  type StarterReadiness,
 } from "../profile-form-fields.tsx";
+import { StarterIcon } from "../starter-icons.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
-import type { SettingsTab } from "./types.ts";
 
 const MEMORY_LIMIT_BYTES = 8 * 1024;
 const textEncoder = new TextEncoder();
 
-function ProfileConfigEditor({
+function starterStatusBadge(
+  starter: StarterSummary,
+  enabled: boolean,
+  readiness: StarterReadiness | undefined,
+  starterConfig: StarterConfig,
+) {
+  if (readiness === undefined) {
+    return null;
+  }
+
+  if (!enabled) {
+    return readiness.hasVmRequirements && readiness.isVmReady ? (
+      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
+        <CheckCircle2Icon className="size-3" />
+        <span>Ready on VM</span>
+      </span>
+    ) : null;
+  }
+
+  if (!readiness.isStatusLoaded) {
+    return <Badge variant="outline">Checking…</Badge>;
+  }
+
+  if (readiness.cliEntry?.status.kind === "error") {
+    return <Badge variant="destructive">Error</Badge>;
+  }
+
+  if (readiness.needsBinaryInstall) {
+    return <Badge variant="outline">Needs install</Badge>;
+  }
+
+  if (readiness.needsCliAuth) {
+    return <Badge variant="outline">Needs sign-in</Badge>;
+  }
+
+  if (readiness.missingSecrets.length > 0) {
+    return <Badge variant="outline">Needs secret</Badge>;
+  }
+
+  if (readiness.missingOAuthPreset !== undefined) {
+    return <Badge variant="outline">Needs OAuth</Badge>;
+  }
+
+  if (!isStarterConfigValid(starter, starterConfig)) {
+    return <Badge variant="outline">Needs config</Badge>;
+  }
+
+  return (
+    <Badge variant="secondary" className="gap-1">
+      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
+      <span>Ready</span>
+    </Badge>
+  );
+}
+
+function ProfileNameRow({
   profile,
-  onDone,
-  onOpenSettingsTab,
+  onSaved,
 }: {
   profile: ProfileDetail;
-  onDone: () => void;
-  onOpenSettingsTab: (tab: SettingsTab) => void;
+  onSaved: (updated: { profile: ProfileDetail }) => void;
 }) {
-  const queryClient = useQueryClient();
   const [name, setName] = useState(profile.config.name);
-  const [selectedStarters, setSelectedStarters] = useState<string[]>([...profile.config.starters]);
-  const [starterConfig, setStarterConfig] = useState<StarterConfig>(profile.config.starterConfig);
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
+  const trimmed = name.trim();
+  const dirty = trimmed !== "" && trimmed !== profile.config.name;
 
-  const startersQuery = useQuery(startersQueryOptions);
-  const secretsQuery = useQuery(secretsQueryOptions);
-  const oauthStatusQuery = useQuery(oauthStatusQueryOptions);
-
-  const starters = startersQuery.data?.starters ?? [];
-
-  const updateMutation = useMutation({
-    mutationFn: async (validatedConfig: StarterConfig) =>
+  const mutation = useMutation({
+    mutationFn: async () =>
       unwrapJson(
         await appClient.profiles[":profileId"].$patch({
           param: { profileId: profile.id },
-          json: {
-            name: name.trim(),
-            starters: selectedStarters,
-            starterConfig: validatedConfig,
-          },
+          json: { name: trimmed },
         }),
       ),
     onSuccess: (data) => {
-      queryClient.setQueryData(queryKeys.profile(profile.id), data);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
-      onDone();
+      onSaved(data);
+      toast.add({ type: "success", title: "Profile name updated" });
     },
   });
 
   const handleSubmit = (event: FormEvent) => {
     event.preventDefault();
 
-    const validation = validateSelectedStarterConfig(starters, selectedStarters, starterConfig);
+    if (dirty) {
+      mutation.mutate();
+    }
+  };
+
+  return (
+    <div className="space-y-2 px-4 py-3">
+      <form onSubmit={handleSubmit} className="flex items-end gap-2">
+        <Field className="flex-1">
+          <FieldLabel htmlFor={`profile-name-${profile.id}`}>Display name</FieldLabel>
+          <Input
+            id={`profile-name-${profile.id}`}
+            value={name}
+            onChange={(event) => setName(event.target.value)}
+            required
+          />
+        </Field>
+        {dirty && (
+          <Button type="submit" size="sm" disabled={mutation.isPending}>
+            {mutation.isPending ? "Saving…" : "Save"}
+          </Button>
+        )}
+      </form>
+      {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
+    </div>
+  );
+}
+
+function StarterCatalogRow({
+  profile,
+  starter,
+  enabled,
+  readiness,
+  oauthPresets,
+  oauthLogins,
+  installRunner,
+  expanded,
+  pendingEnable,
+  busy,
+  onToggleExpand,
+  onToggleSwitch,
+  onSaveConfig,
+  onCancelPending,
+}: {
+  profile: ProfileDetail;
+  starter: StarterSummary;
+  enabled: boolean;
+  readiness: StarterReadiness | undefined;
+  oauthPresets: readonly OAuthPresetSummary[];
+  oauthLogins: readonly OAuthStatusEntry[];
+  installRunner: CliInstallRunner;
+  expanded: boolean;
+  pendingEnable: boolean;
+  busy: boolean;
+  onToggleExpand: () => void;
+  onToggleSwitch: (checked: boolean) => void;
+  onSaveConfig: (values: Record<string, string>) => Promise<void>;
+  onCancelPending: () => void;
+}) {
+  const savedFields = profile.config.starterConfig[starter.id] ?? {};
+  const savedSignature = JSON.stringify(savedFields);
+  const [draftState, setDraftState] = useState<{
+    signature: string;
+    values: Record<string, string>;
+    errors: Record<string, string>;
+  }>({ signature: savedSignature, values: savedFields, errors: {} });
+  const [savingConfig, setSavingConfig] = useState(false);
+
+  const isCurrentDraft = draftState.signature === savedSignature;
+  const draftFields = isCurrentDraft ? draftState.values : savedFields;
+  const fieldErrors = isCurrentDraft ? draftState.errors : {};
+
+  const resetDraft = () => {
+    setDraftState({ signature: savedSignature, values: savedFields, errors: {} });
+  };
+
+  const effectiveStarterConfig: StarterConfig = {
+    ...profile.config.starterConfig,
+    [starter.id]: draftFields,
+  };
+
+  const hasConfigFields = starter.configFields.length > 0;
+  const configDirty =
+    pendingEnable ||
+    starter.configFields.some(
+      (field) => (draftFields[field.key] ?? "").trim() !== (savedFields[field.key] ?? ""),
+    );
+  const hasDetailContent =
+    hasConfigFields ||
+    starter.secrets.length > 0 ||
+    starter.oauthPreset !== undefined ||
+    starter.cli !== undefined ||
+    starter.setupNote !== undefined;
+
+  const handleConfigSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+
+    const validation = validateStarterFields(starter, effectiveStarterConfig);
 
     if (!validation.ok) {
-      setFieldErrors(validation.errors);
+      setDraftState({
+        signature: savedSignature,
+        values: draftFields,
+        errors: validation.errors,
+      });
 
       return;
     }
 
-    setFieldErrors({});
-    updateMutation.mutate(validation.config);
+    setDraftState({ signature: savedSignature, values: draftFields, errors: {} });
+    setSavingConfig(true);
+
+    try {
+      await onSaveConfig(validation.values ?? {});
+    } catch {
+      // Mutation error is surfaced in the parent section.
+    } finally {
+      setSavingConfig(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Field>
-        <FieldLabel htmlFor={`edit-${profile.id}-name`}>Display name</FieldLabel>
-        <Input
-          id={`edit-${profile.id}-name`}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          required
-        />
-      </Field>
+    <div>
+      <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <button
+          type="button"
+          onClick={() => {
+            if (hasDetailContent) {
+              onToggleExpand();
+            }
+          }}
+          className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-left"
+        >
+          {hasDetailContent ? (
+            expanded ? (
+              <ChevronDownIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            ) : (
+              <ChevronRightIcon className="size-3.5 shrink-0 text-muted-foreground" />
+            )
+          ) : (
+            <span className="size-3.5 shrink-0" />
+          )}
+          <StarterIcon starter={starter} />
+          <span className="truncate text-sm font-medium">{starter.name}</span>
+          <Badge variant="outline" className="shrink-0 px-1.5 text-[10px]">
+            {starterKindLabel(starter)}
+          </Badge>
+        </button>
 
-      <div className="space-y-2">
-        <div className="text-sm font-medium">Starters</div>
-        {startersQuery.isPending ? (
-          <div className="flex justify-center py-4">
-            <Spinner className="size-4 text-muted-foreground" />
-          </div>
-        ) : startersQuery.error !== null ? (
-          <FieldError>{startersQuery.error.message}</FieldError>
-        ) : (
-          <StarterSelectionFields
-            idPrefix={`edit-${profile.id}`}
-            starters={starters}
-            selectedStarters={selectedStarters}
-            starterConfig={starterConfig}
-            fieldErrors={fieldErrors}
-            existingSecrets={secretsQuery.data?.secrets}
-            oauthLogins={oauthStatusQuery.data?.logins}
-            onChange={(next) => {
-              setSelectedStarters(next.starters);
-              setStarterConfig(next.starterConfig);
-              setFieldErrors({});
+        <div className="flex shrink-0 items-center gap-2.5">
+          {starterStatusBadge(starter, enabled, readiness, profile.config.starterConfig)}
+          {enabled && hasDetailContent && (
+            <Button type="button" variant="ghost" size="xs" onClick={onToggleExpand}>
+              {expanded ? "Done" : "Configure"}
+            </Button>
+          )}
+          <Switch
+            size="sm"
+            checked={enabled || pendingEnable}
+            disabled={busy}
+            aria-label={`Enable ${starter.name}`}
+            onCheckedChange={(checked) => {
+              if (!checked) {
+                resetDraft();
+              }
+
+              onToggleSwitch(checked);
             }}
-            onOpenSettingsTab={onOpenSettingsTab}
           />
-        )}
+        </div>
       </div>
 
-      {updateMutation.error !== null && <FieldError>{updateMutation.error.message}</FieldError>}
+      {expanded && hasDetailContent && (
+        <div className="space-y-4 border-t border-border/60 bg-muted/20 px-4 py-3.5">
+          {hasConfigFields && (
+            <form onSubmit={(event) => void handleConfigSubmit(event)} className="space-y-2.5">
+              <StarterConfigFields
+                idPrefix={`profile-${profile.id}`}
+                starter={starter}
+                values={draftFields}
+                fieldErrors={fieldErrors}
+                onChange={(fieldKey, value) => {
+                  const key = starterFieldKey(starter.id, fieldKey);
+                  const nextErrors = { ...fieldErrors };
 
-      <div className="flex justify-end gap-2">
-        <Button type="button" variant="outline" size="sm" onClick={onDone}>
-          Cancel
-        </Button>
-        <Button type="submit" size="sm" disabled={updateMutation.isPending || name.trim() === ""}>
-          {updateMutation.isPending ? "Saving…" : "Save changes"}
-        </Button>
-      </div>
-    </form>
+                  delete nextErrors[key];
+                  setDraftState({
+                    signature: savedSignature,
+                    values: { ...draftFields, [fieldKey]: value },
+                    errors: nextErrors,
+                  });
+                }}
+              />
+
+              {configDirty && (
+                <div className="flex justify-end gap-2 pt-1">
+                  {pendingEnable && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="xs"
+                      disabled={savingConfig}
+                      onClick={() => {
+                        resetDraft();
+                        onCancelPending();
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button type="submit" size="xs" disabled={savingConfig || busy}>
+                    {savingConfig
+                      ? "Saving…"
+                      : pendingEnable
+                        ? `Enable ${starter.name}`
+                        : "Save settings"}
+                  </Button>
+                </div>
+              )}
+            </form>
+          )}
+
+          <StarterVmSetupPanels
+            starter={starter}
+            readiness={readiness}
+            starterConfig={effectiveStarterConfig}
+            oauthPresets={oauthPresets}
+            oauthLogins={oauthLogins}
+            installRunner={installRunner}
+            showAllClis
+          />
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -206,102 +434,52 @@ function ProfileMemoryEditor({
   );
 }
 
-function ProfileMissingAuthSection({ profile }: { profile: ProfileDetail }) {
-  const startersQuery = useQuery(startersQueryOptions);
-  const secretsQuery = useQuery(secretsQueryOptions);
-  const oauthStatusQuery = useQuery({
-    ...oauthStatusQueryOptions,
-    refetchOnWindowFocus: "always",
-  });
-
-  if (
-    startersQuery.data === undefined ||
-    secretsQuery.data === undefined ||
-    oauthStatusQuery.data === undefined
-  ) {
-    return null;
-  }
-
-  const enabledSet = new Set(profile.config.starters);
-  const oauthPresets = oauthStatusQuery.data.presets;
-  const { secrets: missingSecrets, presets: missingPresets } = collectMissingStarterAuth({
-    starters: startersQuery.data.starters.filter((starter) => enabledSet.has(starter.id)),
-    secrets: secretsQuery.data.secrets,
-    oauthLogins: oauthStatusQuery.data.logins,
-  });
-
-  if (missingSecrets.length === 0 && missingPresets.length === 0) {
-    return null;
-  }
-
-  return (
-    <section className="space-y-3">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <h3 className="text-sm font-medium">Credentials needed</h3>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Finish authenticating the starters enabled on this profile.
-          </p>
-        </div>
-        {missingPresets.length > 0 && (
-          <Button
-            type="button"
-            variant="ghost"
-            size="xs"
-            onClick={() => void oauthStatusQuery.refetch()}
-            disabled={oauthStatusQuery.isFetching}
-          >
-            <RefreshCwIcon className="size-3.5" />
-            <span>Refresh</span>
-          </Button>
-        )}
-      </div>
-
-      <div className="space-y-3">
-        {missingSecrets.map(({ starter, secret }) => (
-          <StarterSecretInlineCard
-            key={secret.key}
-            starter={starter}
-            secret={secret}
-            starterConfig={profile.config.starterConfig}
-            isConfigured={false}
-          />
-        ))}
-
-        {missingPresets.map((presetId) => {
-          const preset = oauthPresets.find((entry) => entry.id === presetId);
-
-          if (preset === undefined) {
-            return null;
-          }
-
-          return <OAuthPresetInlineCard key={presetId} preset={preset} />;
-        })}
-      </div>
-    </section>
-  );
-}
-
 export function ProfileSettingsSection({
   profileId,
   onBack,
-  onOpenSettingsTab,
   onDeleted,
 }: {
   profileId: string;
-  onOpenSettingsTab: (tab: SettingsTab) => void;
   onDeleted: () => void;
   onBack?: (() => void) | undefined;
 }) {
   const queryClient = useQueryClient();
-  const [editingConfig, setEditingConfig] = useState(false);
   const [editingMemory, setEditingMemory] = useState(false);
+  const [expandedStarters, setExpandedStarters] = useState<Record<string, boolean>>({});
+  const [pendingEnableIds, setPendingEnableIds] = useState<Record<string, boolean>>({});
 
-  const startersQuery = useQuery(startersQueryOptions);
+  const {
+    starters,
+    startersQuery,
+    oauthPresets,
+    oauthLogins,
+    readinessById,
+    installRunner,
+    isRefreshing,
+    statusError,
+    refreshStatus,
+  } = useStarterSetupState();
+
   const profileQuery = useQuery({
     queryKey: queryKeys.profile(profileId),
     queryFn: async () =>
       unwrapJson(await appClient.profiles[":profileId"].$get({ param: { profileId } })),
+  });
+
+  const applyProfileUpdate = (data: { profile: ProfileDetail }) => {
+    queryClient.setQueryData(queryKeys.profile(profileId), data);
+    void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
+  };
+
+  const updateStartersMutation = useMutation({
+    mutationFn: async (input: { starters: string[]; starterConfig: StarterConfig }) =>
+      unwrapJson(
+        await appClient.profiles[":profileId"].$patch({
+          param: { profileId },
+          json: input,
+        }),
+      ),
+    onSuccess: applyProfileUpdate,
   });
 
   const clearModelOverrideMutation = useMutation({
@@ -312,10 +490,7 @@ export function ProfileSettingsSection({
           json: { model: null },
         }),
       ),
-    onSuccess: (data) => {
-      queryClient.setQueryData(queryKeys.profile(profileId), data);
-      void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
-    },
+    onSuccess: applyProfileUpdate,
   });
 
   const cancelPollMutation = useMutation({
@@ -374,14 +549,110 @@ export function ProfileSettingsSection({
     );
   }
 
-  const startersById = new Map(
-    (startersQuery.data?.starters ?? []).map((starter) => [starter.id, starter]),
+  const enabledSet = new Set(profile.config.starters);
+  const enabledSummaries = starters.filter((starter) => enabledSet.has(starter.id));
+  const missingInstallEntries = selectInstallEntries(
+    enabledSummaries,
+    readinessById,
+    installRunner,
   );
-  const starterName = (id: string) => startersById.get(id)?.name ?? id;
-  const starterConfigEntries = Object.entries(profile.config.starterConfig).flatMap(
-    ([starterId, fields]) =>
-      Object.entries(fields).map(([key, value]) => ({ starterId, key, value })),
-  );
+
+  const nextOrderedStarters = (nextSet: Set<string>): string[] =>
+    starters.filter((starter) => nextSet.has(starter.id)).map((starter) => starter.id);
+
+  const handleToggleStarter = (starter: StarterSummary, checked: boolean) => {
+    if (!checked) {
+      if (pendingEnableIds[starter.id]) {
+        setPendingEnableIds((prev) => ({ ...prev, [starter.id]: false }));
+        setExpandedStarters((prev) => ({ ...prev, [starter.id]: false }));
+
+        return;
+      }
+
+      const nextSet = new Set(profile.config.starters);
+
+      nextSet.delete(starter.id);
+
+      const nextConfig: Record<string, Record<string, string>> = {};
+
+      for (const [id, fields] of Object.entries(profile.config.starterConfig)) {
+        if (nextSet.has(id)) {
+          nextConfig[id] = fields;
+        }
+      }
+
+      setExpandedStarters((prev) => ({ ...prev, [starter.id]: false }));
+      updateStartersMutation.mutate({
+        starters: nextOrderedStarters(nextSet),
+        starterConfig: nextConfig,
+      });
+
+      return;
+    }
+
+    if (starter.configFields.length > 0) {
+      setPendingEnableIds((prev) => ({ ...prev, [starter.id]: true }));
+      setExpandedStarters((prev) => ({ ...prev, [starter.id]: true }));
+
+      return;
+    }
+
+    const nextSet = new Set(profile.config.starters);
+
+    nextSet.add(starter.id);
+
+    const readiness = readinessById.get(starter.id);
+    const shouldExpand =
+      readiness !== undefined &&
+      (!readiness.isVmReady || readiness.hasUnverifiedCliAuth || starter.setupNote !== undefined);
+
+    if (shouldExpand) {
+      setExpandedStarters((prev) => ({ ...prev, [starter.id]: true }));
+    }
+
+    updateStartersMutation.mutate({
+      starters: nextOrderedStarters(nextSet),
+      starterConfig: profile.config.starterConfig,
+    });
+  };
+
+  const handleSaveStarterConfig = async (
+    starter: StarterSummary,
+    values: Record<string, string>,
+  ) => {
+    const nextSet = new Set(profile.config.starters);
+
+    nextSet.add(starter.id);
+
+    const nextConfig: StarterConfig = {
+      ...profile.config.starterConfig,
+      [starter.id]: values,
+    };
+
+    await updateStartersMutation.mutateAsync({
+      starters: nextOrderedStarters(nextSet),
+      starterConfig: nextConfig,
+    });
+
+    setPendingEnableIds((prev) => ({ ...prev, [starter.id]: false }));
+
+    const readiness = readinessById.get(starter.id);
+
+    if (
+      readiness?.isVmReady &&
+      !readiness.hasUnverifiedCliAuth &&
+      starter.setupNote === undefined
+    ) {
+      setExpandedStarters((prev) => ({ ...prev, [starter.id]: false }));
+    }
+
+    toast.add({
+      type: "success",
+      title: enabledSet.has(starter.id)
+        ? `Updated ${starter.name} settings`
+        : `Enabled ${starter.name}`,
+    });
+  };
 
   return (
     <div className="space-y-6">
@@ -407,84 +678,106 @@ export function ProfileSettingsSection({
         </Alert>
       )}
 
-      {editingConfig ? (
-        <section className="space-y-2">
-          <h3 className="text-sm font-medium">Profile & starters</h3>
-          <ProfileConfigEditor
-            key={profile.id}
-            profile={profile}
-            onDone={() => setEditingConfig(false)}
-            onOpenSettingsTab={onOpenSettingsTab}
-          />
-        </section>
-      ) : (
-        <SettingGroup
-          title="Profile & starters"
-          action={
-            <Button variant="outline" size="xs" onClick={() => setEditingConfig(true)}>
-              Edit
-            </Button>
-          }
-        >
+      <SettingGroup title="Profile">
+        <ProfileNameRow key={profile.config.name} profile={profile} onSaved={applyProfileUpdate} />
+        {profile.config.model !== undefined && (
           <SettingRow
-            title="Starters"
+            title="Pinned model override"
+            description={`${profile.config.model.provider}/${profile.config.model.id} (${profile.config.model.auth})`}
             control={
-              profile.config.starters.length === 0 ? (
-                <span className="text-xs text-muted-foreground">None enabled</span>
-              ) : (
-                <div className="flex flex-wrap justify-end gap-1">
-                  {profile.config.starters.map((id) => {
-                    const starter = startersById.get(id);
-
-                    return (
-                      <Badge key={id} variant="secondary" className="gap-1">
-                        {starter !== undefined && (
-                          <StarterIcon starter={starter} className="size-3" />
-                        )}
-                        <span>{starterName(id)}</span>
-                      </Badge>
-                    );
-                  })}
-                </div>
-              )
+              <Button
+                variant="outline"
+                size="xs"
+                disabled={clearModelOverrideMutation.isPending}
+                onClick={() => clearModelOverrideMutation.mutate()}
+              >
+                Use default
+              </Button>
             }
           />
-          {profile.config.model !== undefined && (
-            <SettingRow
-              title="Pinned model override"
-              description={`${profile.config.model.provider}/${profile.config.model.id} (${profile.config.model.auth})`}
-              control={
-                <Button
-                  variant="outline"
-                  size="xs"
-                  disabled={clearModelOverrideMutation.isPending}
-                  onClick={() => clearModelOverrideMutation.mutate()}
-                >
-                  Use default
-                </Button>
-              }
-            />
-          )}
-          {starterConfigEntries.length > 0 && (
-            <div className="space-y-1 px-4 py-3 text-xs">
-              <div className="font-medium text-muted-foreground">Starter settings</div>
-              {starterConfigEntries.map((entry) => (
-                <div
-                  key={`${entry.starterId}.${entry.key}`}
-                  className="flex items-center justify-between gap-4"
-                >
-                  <span className="text-muted-foreground">
-                    {starterName(entry.starterId)} · <code>{entry.key}</code>
-                  </span>
-                  <span className="truncate font-mono">{entry.value}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </SettingGroup>
+        )}
+      </SettingGroup>
+
+      {missingInstallEntries.length > 0 && (
+        <CliInstallCard entries={missingInstallEntries} runner={installRunner} />
       )}
 
-      {!editingConfig && <ProfileMissingAuthSection profile={profile} />}
+      <section className="space-y-3">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <h3 className="text-sm font-medium">Starters</h3>
+            <p className="mt-0.5 text-xs text-muted-foreground">
+              Toggle integrations, coding harnesses, and CLIs for this profile. Binaries and
+              credentials persist across the VM.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="xs"
+            onClick={refreshStatus}
+            disabled={isRefreshing}
+          >
+            <RefreshCwIcon className="size-3.5" />
+            <span>Refresh</span>
+          </Button>
+        </div>
+
+        {startersQuery.isPending ? (
+          <div className="flex justify-center py-6">
+            <Spinner className="size-4 text-muted-foreground" />
+          </div>
+        ) : startersQuery.error !== null ? (
+          <FieldError>{startersQuery.error.message}</FieldError>
+        ) : (
+          <div className="space-y-4">
+            {STARTER_CATEGORY_ORDER.map(({ category, label }) => {
+              const group = starters.filter((starter) => starter.category === category);
+
+              if (group.length === 0) {
+                return null;
+              }
+
+              return (
+                <SettingGroup key={category} title={label}>
+                  {group.map((starter) => (
+                    <StarterCatalogRow
+                      key={`${profile.id}-${starter.id}`}
+                      profile={profile}
+                      starter={starter}
+                      enabled={enabledSet.has(starter.id)}
+                      readiness={readinessById.get(starter.id)}
+                      oauthPresets={oauthPresets}
+                      oauthLogins={oauthLogins}
+                      installRunner={installRunner}
+                      expanded={expandedStarters[starter.id] === true}
+                      pendingEnable={pendingEnableIds[starter.id] === true}
+                      busy={updateStartersMutation.isPending}
+                      onToggleExpand={() =>
+                        setExpandedStarters((prev) => ({
+                          ...prev,
+                          [starter.id]: !prev[starter.id],
+                        }))
+                      }
+                      onToggleSwitch={(checked) => handleToggleStarter(starter, checked)}
+                      onSaveConfig={(values) => handleSaveStarterConfig(starter, values)}
+                      onCancelPending={() => {
+                        setPendingEnableIds((prev) => ({ ...prev, [starter.id]: false }));
+                        setExpandedStarters((prev) => ({ ...prev, [starter.id]: false }));
+                      }}
+                    />
+                  ))}
+                </SettingGroup>
+              );
+            })}
+          </div>
+        )}
+
+        {statusError !== null && <FieldError>{statusError.message}</FieldError>}
+        {updateStartersMutation.error !== null && (
+          <FieldError>{updateStartersMutation.error.message}</FieldError>
+        )}
+      </section>
 
       <section className="space-y-2.5">
         <div className="flex items-center justify-between gap-4">

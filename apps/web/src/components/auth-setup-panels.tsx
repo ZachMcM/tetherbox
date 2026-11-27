@@ -18,7 +18,6 @@ import {
   type SecretListEntry,
   type StarterConfig,
   type StarterSecret,
-  type StarterSummary,
 } from "@tetherbox/core/app";
 import { CheckCircle2Icon, CheckIcon, CopyIcon, ExternalLinkIcon, Trash2Icon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
@@ -31,7 +30,6 @@ import { Separator } from "@tetherbox/ui/components/separator";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, expectOk, queryKeys, unwrapJson } from "../lib/api.ts";
-import { StarterIcon } from "./starter-icons.tsx";
 import { invalidateSecretQueries } from "../lib/queries.ts";
 
 function defaultLlmKey(provider: LlmProvider): SecretKey {
@@ -784,22 +782,21 @@ function describeStarterSecretBinding(secret: StarterSecret, derivedDomain: stri
 }
 
 export function StarterSecretInlineCard({
-  starter,
   secret,
   starterConfig,
   isConfigured,
 }: {
-  starter: StarterSummary;
   secret: StarterSecret;
   starterConfig: StarterConfig;
   isConfigured: boolean;
 }) {
   const queryClient = useQueryClient();
-  const initialDomain =
+  const derivedDomain =
     secret.kind === "prompt-domain"
       ? domainFromStarterConfig(starterConfig, secret.fromConfigUrl)
       : "";
-  const [domain, setDomain] = useState(initialDomain);
+  const [customDomain, setCustomDomain] = useState<string | null>(null);
+  const domain = customDomain ?? derivedDomain;
   const [value, setValue] = useState("");
   const [validationError, setValidationError] = useState<string | null>(null);
 
@@ -847,14 +844,13 @@ export function StarterSecretInlineCard({
   };
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-card p-3.5">
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm font-semibold">{secret.key}</span>
-            <Badge variant="outline" className="gap-1 text-[10px]">
-              <StarterIcon starter={starter} className="size-3" />
-              <span>{starter.name}</span>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs font-semibold">{secret.key}</span>
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              VM-wide
             </Badge>
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
@@ -864,7 +860,7 @@ export function StarterSecretInlineCard({
         {isConfigured ? (
           <Badge variant="secondary" className="gap-1">
             <CheckCircle2Icon className="size-3" />
-            <span>Configured</span>
+            <span>Saved</span>
           </Badge>
         ) : (
           <Badge variant="outline">Missing</Badge>
@@ -885,7 +881,7 @@ export function StarterSecretInlineCard({
                 id={`wizard-domain-${secret.key}`}
                 placeholder={secret.domainPlaceholder}
                 value={domain}
-                onChange={(event) => setDomain(event.target.value)}
+                onChange={(event) => setCustomDomain(event.target.value)}
                 required
               />
             </Field>
@@ -906,7 +902,7 @@ export function StarterSecretInlineCard({
                 onChange={(event) => setValue(event.target.value)}
                 required
               />
-              <Button type="submit" disabled={mutation.isPending || value.trim() === ""}>
+              <Button type="submit" size="sm" disabled={mutation.isPending || value.trim() === ""}>
                 {mutation.isPending ? "Saving…" : "Save"}
               </Button>
             </div>
@@ -929,10 +925,15 @@ export function OAuthPresetInlineCard({
   const connected = activeLogin !== undefined;
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-card p-3.5">
+    <div className="space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-semibold">{preset.label}</div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-xs font-semibold">{preset.label} OAuth</span>
+            <Badge variant="secondary" className="text-[10px] font-normal">
+              VM-wide
+            </Badge>
+          </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {describePresetLogin(preset, activeLogin)}
           </div>

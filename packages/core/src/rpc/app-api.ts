@@ -29,6 +29,7 @@ import {
 } from "../session.ts";
 import { RpcError } from "./api.ts";
 import {
+  cliAuthRespondInputSchema,
   createProfileInputSchema,
   createSessionInputSchema,
   deletePushSubscriptionInputSchema,
@@ -41,6 +42,8 @@ import {
   updateProfileInputSchema,
   updateSessionInputSchema,
   type AppSettings,
+  type CliAuthFlowState,
+  type CliInstallJobState,
   type CreateProfileInput,
   type CreateSessionInput,
   type LlmModelOption,
@@ -50,6 +53,7 @@ import {
   type ProfileDetail,
   type ProfileSummary,
   type SetSecretInput,
+  type StarterCliStatusEntry,
   type StarterSummary,
   type StartPresetOAuthInput,
   type UpdateAppSettingsInput,
@@ -66,6 +70,7 @@ const profileEntryParam = z.object({ profileId: profileIdSchema, name: entryName
 const secretKeyParam = z.object({ key: secretKeySchema });
 const llmProviderParam = z.object({ provider: llmProviderSchema });
 const oauthPresetParam = z.object({ preset: oauthPresetSchema });
+const starterIdParam = z.object({ starterId: z.string().min(1) });
 
 export interface AppApiHandlers {
   getSettings(): AppSettings;
@@ -78,6 +83,13 @@ export interface AppApiHandlers {
   updateProfileMemory(id: ProfileId, content: string): Promise<{ content: string }>;
   deleteProfile(id: ProfileId): Promise<void>;
   listStarters(): StarterSummary[];
+  listCliStatuses(): Promise<StarterCliStatusEntry[]>;
+  startCliInstall(starterId: string): CliInstallJobState;
+  getCliInstallJob(jobId: string): CliInstallJobState;
+  startCliAuth(starterId: string): Promise<CliAuthFlowState>;
+  getCliAuthFlow(flowId: string): CliAuthFlowState;
+  respondCliAuthFlow(flowId: string, value: string): CliAuthFlowState;
+  cancelCliAuthFlow(flowId: string): { cancelled: boolean };
   cancelPollJob(profileId: ProfileId, name: EntryName): { cancelled: boolean };
   cancelReminder(profileId: ProfileId, name: EntryName): { cancelled: boolean };
 
@@ -257,6 +269,28 @@ export function createAppApi(handlers: AppApiHandlers) {
       return c.json(handlers.cancelReminder(profileId, name), 200);
     })
     .get("/starters", (c) => c.json({ starters: handlers.listStarters() }, 200))
+    .get("/clis/status", async (c) => c.json({ clis: await handlers.listCliStatuses() }, 200))
+    .post("/clis/:starterId/install", zValidator("param", starterIdParam), (c) =>
+      c.json({ job: handlers.startCliInstall(c.req.valid("param").starterId) }, 200),
+    )
+    .get("/clis/installs/:jobId", (c) =>
+      c.json({ job: handlers.getCliInstallJob(c.req.param("jobId")) }, 200),
+    )
+    .post("/clis/:starterId/auth/start", zValidator("param", starterIdParam), async (c) =>
+      c.json({ flow: await handlers.startCliAuth(c.req.valid("param").starterId) }, 200),
+    )
+    .get("/clis/auth/flows/:flowId", (c) =>
+      c.json({ flow: handlers.getCliAuthFlow(c.req.param("flowId")) }, 200),
+    )
+    .post("/clis/auth/flows/:flowId/respond", zValidator("json", cliAuthRespondInputSchema), (c) =>
+      c.json(
+        { flow: handlers.respondCliAuthFlow(c.req.param("flowId"), c.req.valid("json").value) },
+        200,
+      ),
+    )
+    .post("/clis/auth/flows/:flowId/cancel", (c) =>
+      c.json(handlers.cancelCliAuthFlow(c.req.param("flowId")), 200),
+    )
     .get(
       "/sessions",
       zValidator("query", z.object({ profileId: profileIdSchema.optional() })),

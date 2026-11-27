@@ -96,6 +96,11 @@ export const llmOAuthRespondInputSchema = z.object({
 });
 export type LlmOAuthRespondInput = z.infer<typeof llmOAuthRespondInputSchema>;
 
+export const cliAuthRespondInputSchema = z.object({
+  value: z.string(),
+});
+export type CliAuthRespondInput = z.infer<typeof cliAuthRespondInputSchema>;
+
 export interface ProfileCronSummary {
   name: EntryName;
   job: CronJob;
@@ -140,6 +145,52 @@ export interface StarterSummary {
   };
   setupNote?: string;
 }
+
+export type StarterCliStatus =
+  | { kind: "missing" }
+  | {
+      kind: "installed";
+      auth: "none" | "authenticated" | "unauthenticated" | "unknown";
+    }
+  | { kind: "error"; message: string };
+
+export interface StarterCliStatusEntry {
+  starterId: string;
+  name: string;
+  binary: string;
+  hasInstall: boolean;
+  installDescription?: string;
+  hasAuth: boolean;
+  status: StarterCliStatus;
+}
+
+interface CliInstallJobBase {
+  id: string;
+  starterId: string;
+  binary: string;
+  output: string;
+}
+
+export type CliInstallJobState =
+  | (CliInstallJobBase & { status: "running" | "completed"; error: null })
+  | (CliInstallJobBase & { status: "failed"; error: string });
+
+export type CliAuthFlowEvent =
+  | { kind: "auth_url"; url: string }
+  | { kind: "device_code"; verificationUri: string; userCode: string };
+
+interface CliAuthFlowBase {
+  id: string;
+  starterId: string;
+  binary: string;
+  events: CliAuthFlowEvent[];
+  output: string;
+}
+
+export type CliAuthFlowState =
+  | (CliAuthFlowBase & { status: "running"; prompt: string | null; error: null })
+  | (CliAuthFlowBase & { status: "completed"; prompt: null; error: null })
+  | (CliAuthFlowBase & { status: "failed" | "cancelled"; prompt: null; error: string });
 
 export interface LlmProviderStatus {
   provider: LlmProvider;

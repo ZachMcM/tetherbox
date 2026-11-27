@@ -107,7 +107,7 @@ async function devinRequest(
   if (!(await ctx.hasSecret(SECRET_KEY))) {
     return {
       kind: "text",
-      text: `Missing ${SECRET_KEY}. Run: tetherbox secrets set ${SECRET_KEY} --domain api.devin.ai`,
+      text: `Missing ${SECRET_KEY}. Add it in Tetherbox Settings -> Secrets pinned to api.devin.ai.`,
     };
   }
 

@@ -92,7 +92,7 @@ async function cursorRequest(
   if (!(await ctx.hasSecret(SECRET_KEY))) {
     return {
       kind: "text",
-      text: `Missing ${SECRET_KEY}. Run: tetherbox secrets set ${SECRET_KEY} --domain api.cursor.com`,
+      text: `Missing ${SECRET_KEY}. Add it in Tetherbox Settings -> Secrets pinned to api.cursor.com.`,
     };
   }
 
