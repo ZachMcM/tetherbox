@@ -1,0 +1,29 @@
+name: tetherbox-dev
+
+services:
+  daemon:
+    build:
+      context: ../..
+      dockerfile: docker/dev/Dockerfile
+    init: true
+    environment:
+      TETHERBOX_APP_HOST: 0.0.0.0
+      TETHERBOX_PUBLIC_HOST: 0.0.0.0
+      TETHERBOX_AGENT_USER: tetherbox-agent
+      TETHERBOX_AGENT_ENTRY: /workspace/apps/agent/src/main.ts
+    ports:
+      - "127.0.0.1:${TETHERBOX_DEV_APP_PORT:-8788}:8788"
+      - "127.0.0.1:${TETHERBOX_DEV_PUBLIC_PORT:-8787}:8787"
+    volumes:
+      - ../../apps/daemon/src:/workspace/apps/daemon/src:ro
+      - ../../apps/agent/src:/workspace/apps/agent/src:ro
+      - ../../apps/agent/skills:/workspace/apps/agent/skills:ro
+      - ../../packages/starters/templates:/workspace/packages/starters/templates:ro
+      - data:/var/lib/tetherbox
+      - profiles:/srv/tetherbox
+      - agent-home:/home/tetherbox-agent
+
+volumes:
+  data:
+  profiles:
+  agent-home:

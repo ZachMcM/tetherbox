@@ -6,7 +6,7 @@ import { Spinner } from "@tetherbox/ui/components/spinner";
 import { cliStatusQueryOptions } from "../../lib/queries.ts";
 import { CliAuthFlowPanel } from "../cli-setup/cli-auth-flow-panel.tsx";
 import { CliInstallCard } from "../cli-setup/cli-install-card.tsx";
-import { useCliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
+import { isCliInstalled, useCliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import { SectionHeader } from "./shared.tsx";
 
 export function CliToolsSection() {
@@ -20,7 +20,9 @@ export function CliToolsSection() {
   const missingOrInstalling = clis.filter(
     (entry) => entry.status.kind === "missing" || installRunner.jobs[entry.starterId] !== undefined,
   );
-  const installedCount = clis.filter((entry) => entry.status.kind === "installed").length;
+  const installedCount = clis.filter((entry) =>
+    isCliInstalled(entry, installRunner.jobs[entry.starterId]),
+  ).length;
 
   return (
     <div className="space-y-6">

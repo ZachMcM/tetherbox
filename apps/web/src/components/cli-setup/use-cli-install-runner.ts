@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import type { CliInstallJobState } from "@tetherbox/core/app";
+import type { CliInstallJobState, StarterCliStatusEntry } from "@tetherbox/core/app";
 import { toast } from "@tetherbox/ui/components/toast";
 import { appClient, unwrapJson } from "../../lib/api.ts";
 import { upsertCliInstallJob, useCliInstallJobs } from "../../lib/live/cli-store.ts";
@@ -11,6 +11,13 @@ export interface CliInstallRunner {
   readonly isAnyRunning: boolean;
   readonly installOne: (starterId: string) => Promise<void>;
   readonly installAll: (starterIds: readonly string[]) => Promise<void>;
+}
+
+export function isCliInstalled(
+  entry: StarterCliStatusEntry,
+  job: CliInstallJobState | undefined,
+): boolean {
+  return job === undefined ? entry.status.kind === "installed" : job.status === "completed";
 }
 
 export function useCliInstallRunner(): CliInstallRunner {

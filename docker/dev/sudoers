@@ -1,0 +1,2 @@
+Defaults:tetherbox umask=0002
+tetherbox ALL=(tetherbox-agent) NOPASSWD: ALL

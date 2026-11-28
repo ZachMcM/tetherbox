@@ -6,6 +6,9 @@
     "build": "turbo run build",
     "typecheck": "turbo run typecheck",
     "dev": "turbo run dev",
+    "dev:daemon": "docker compose -f docker/dev/compose.yaml up --build",
+    "dev:web": "pnpm --filter @tetherbox/web dev",
+    "dev:token": "docker compose -f docker/dev/compose.yaml exec daemon cat /var/lib/tetherbox/app-token",
     "lint": "oxlint",
     "format": "oxfmt",
     "format:check": "oxfmt --check"

@@ -60,6 +60,8 @@ pnpm typecheck     # tsc across the monorepo
 pnpm build         # tsdown across the monorepo
 pnpm lint          # oxlint
 pnpm format        # oxfmt
+pnpm dev:daemon    # daemon and agent runs in a Linux container (docker/dev)
+pnpm dev:web       # Vite dev server, proxied to the container
 ```
 
 CI runs `pnpm lint`, `pnpm format:check`, `pnpm typecheck`, and `pnpm build`. There is no test suite yet.

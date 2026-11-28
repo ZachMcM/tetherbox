@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   starterSchema,
@@ -51,6 +52,19 @@ const GH_USER_INSTALL_SCRIPT = [
   'install -m 0755 "$TMP/gh_${VER}_${OS}_${ARCH}/bin/gh" "$HOME/.local/bin/gh"',
 ].join("; ");
 
+const SYSTEM_CHROMIUM = "/usr/bin/chromium";
+
+const USE_SYSTEM_CHROMIUM_SCRIPT = [
+  'const fs = require("node:fs"), path = require("node:path");',
+  'const file = path.join(process.env.HOME, ".agent-browser", "config.json");',
+  "let config = {};",
+  'try { config = JSON.parse(fs.readFileSync(file, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }',
+  'if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("Expected an object in " + file);',
+  `config.executablePath = "${SYSTEM_CHROMIUM}";`,
+  "fs.mkdirSync(path.dirname(file), { recursive: true });",
+  'fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\\n");',
+].join(" ");
+
 export const templatesDir = fileURLToPath(new URL("../templates", import.meta.url));
 
 const builtinStarters = [
@@ -79,8 +93,12 @@ const builtinStarters = [
     cli: {
       binary: "agent-browser",
       install: {
-        ...npmUserInstall("agent-browser", '"$HOME/.local/bin/agent-browser" install'),
-        description: "Install agent-browser and headless Chromium into ~/.local",
+        ...npmUserInstall(
+          "agent-browser",
+          `if [ -x ${SYSTEM_CHROMIUM} ]; then node -e '${USE_SYSTEM_CHROMIUM_SCRIPT}'; else "$HOME/.local/bin/agent-browser" install; fi`,
+        ),
+        description:
+          "Install agent-browser into ~/.local and use the system Chromium, or download one when none is installed",
       },
     },
   },
@@ -109,11 +127,12 @@ const builtinStarters = [
     cli: {
       binary: "rex",
       install: {
-        description: "Install Rex into ~/.local/bin via pkgs.superlogical.com/rex/install.sh",
+        description: "Install the Rex remote client into ~/.local/bin",
         command: [
-          "sh",
-          "-c",
-          'mkdir -p "$HOME/.local/bin" && curl -fsSL https://pkgs.superlogical.com/rex/install.sh | INSTALL_DIR="$HOME/.local/bin" BIN_DIR="$HOME/.local/bin" PREFIX="$HOME/.local" sh',
+          "node",
+          "--input-type=module",
+          "-e",
+          readFileSync(new URL("../scripts/install-rex.mjs", import.meta.url), "utf8"),
         ],
       },
     },

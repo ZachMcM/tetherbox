@@ -6,7 +6,7 @@ import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { CliOutputLog } from "./cli-output-log.tsx";
-import type { CliInstallRunner } from "./use-cli-install-runner.ts";
+import { isCliInstalled, type CliInstallRunner } from "./use-cli-install-runner.ts";
 
 export function CliInstallCard({
   entries,
@@ -29,7 +29,7 @@ export function CliInstallCard({
     const job = runner.jobs[entry.starterId];
 
     return (
-      entry.status.kind === "missing" && job?.status !== "running" && job?.status !== "completed"
+      entry.status.kind !== "error" && job?.status !== "running" && !isCliInstalled(entry, job)
     );
   });
 
@@ -72,8 +72,8 @@ export function CliInstallCard({
           const job = runner.jobs[entry.starterId];
           const isStarting = runner.starting[entry.starterId] === true;
           const isRunning = isStarting || job?.status === "running";
-          const isInstalled = entry.status.kind === "installed" || job?.status === "completed";
-          const hasFailed = !isInstalled && job?.status === "failed";
+          const isInstalled = !isRunning && isCliInstalled(entry, job);
+          const hasFailed = job?.status === "failed";
           const showLog = expandedLogs[entry.starterId] === true || hasFailed;
 
           return (

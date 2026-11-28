@@ -14,7 +14,7 @@ import { CliOutputLog } from "./cli-output-log.tsx";
 import { CliResponseForm } from "./cli-response-form.tsx";
 import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
 import { useCliAuthFlow } from "./use-cli-auth-flow.ts";
-import type { CliInstallRunner } from "./use-cli-install-runner.ts";
+import { isCliInstalled, type CliInstallRunner } from "./use-cli-install-runner.ts";
 
 type AuthState = "none" | "unknown" | "authenticated" | "unauthenticated";
 
@@ -82,7 +82,7 @@ export function CliAuthFlowPanel({
   const installJob = installRunner.jobs[entry.starterId];
   const isInstalling =
     installRunner.starting[entry.starterId] === true || installJob?.status === "running";
-  const isInstalled = entry.status.kind === "installed" || installJob?.status === "completed";
+  const isInstalled = !isInstalling && isCliInstalled(entry, installJob);
   const authState: AuthState =
     entry.status.kind === "installed"
       ? entry.status.auth
