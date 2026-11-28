@@ -107,8 +107,7 @@ export class CliAuthFlows {
       return { cancelled: false };
     }
 
-    clearTimeout(flow.timeout);
-    flow.settledAt = Date.now();
+    this.#flows.markSettled(flow);
 
     if (flow.state.status === "running") {
       this.#settle(flow, { status: "cancelled", error: "Login cancelled" });
@@ -241,8 +240,7 @@ export class CliAuthFlows {
 
   #handleExit(flow: AuthFlow, code: number | null, signal: NodeJS.Signals | null): void {
     if (flow.state.status !== "running") {
-      clearTimeout(flow.timeout);
-      flow.settledAt = Date.now();
+      this.#flows.markSettled(flow);
       this.#notifyActivity(flow);
 
       return;
@@ -263,10 +261,7 @@ export class CliAuthFlows {
   }
 
   #settle(flow: AuthFlow, outcome: AuthOutcome): void {
-    clearTimeout(flow.timeout);
-    flow.settledAt = Date.now();
-    flow.state = { ...flow.state, ...outcome, prompt: null };
-    this.#flows.emitNow(flow);
+    this.#flows.settle(flow, { ...flow.state, ...outcome, prompt: null });
   }
 
   #notifyActivity(flow: AuthFlow): void {

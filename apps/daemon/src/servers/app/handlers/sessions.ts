@@ -20,7 +20,15 @@ import {
 } from "../../../sessions/turns.ts";
 import { requireProfile } from "./require-profile.ts";
 
-export interface SessionHandlerDeps {
+export function createSessionHandlers({
+  config,
+  sessions,
+  events,
+  registry,
+  poller,
+  reminders,
+  turns,
+}: {
   config: DaemonConfig;
   sessions: SessionTable;
   events: DaemonEventBus;
@@ -28,11 +36,7 @@ export interface SessionHandlerDeps {
   poller: Poller;
   reminders: ReminderStore;
   turns: TurnRunner;
-}
-
-export function createSessionHandlers(deps: SessionHandlerDeps): SessionHandlers {
-  const { config, sessions, events, registry, poller, reminders, turns } = deps;
-
+}): SessionHandlers {
   const requireSession = (sessionId: SessionId): SessionRecord => {
     const session = sessions.get(sessionId);
 

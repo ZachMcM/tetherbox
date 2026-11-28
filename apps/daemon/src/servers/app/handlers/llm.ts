@@ -11,19 +11,17 @@ import type { LlmWebAuthManager } from "../../../credentials/llm-web-auth.ts";
 import { formatExpiry } from "../../../credentials/oauth-store.ts";
 import type { SecretStore } from "../../../credentials/secret-store.ts";
 
-export interface LlmHandlerDeps {
-  favoriteModels: FavoriteModelTable;
-  secrets: SecretStore;
-  llmOAuth: LlmOAuth;
-  llmWebAuth: LlmWebAuthManager;
-}
-
 export function createLlmHandlers({
   favoriteModels,
   secrets,
   llmOAuth,
   llmWebAuth,
-}: LlmHandlerDeps): LlmHandlers {
+}: {
+  favoriteModels: FavoriteModelTable;
+  secrets: SecretStore;
+  llmOAuth: LlmOAuth;
+  llmWebAuth: LlmWebAuthManager;
+}): LlmHandlers {
   return {
     async getStatus() {
       const [storedSecrets, oauthLoginsRaw] = await Promise.all([secrets.list(), llmOAuth.list()]);

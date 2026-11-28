@@ -12,10 +12,7 @@ export interface TrackedRun<S extends { status: string }> {
   emitTimer?: ReturnType<typeof setTimeout> | undefined;
 }
 
-/**
- * Holds CLI child processes the web app watches. Output updates are throttled into daemon events,
- * and settled runs are pruned after a TTL so late polls can still read the final state.
- */
+/** Settled runs are kept for a TTL so late polls can still read the final state. */
 export class TrackedRuns<R extends TrackedRun<{ status: string }>> {
   readonly #runs = new Map<string, R>();
   readonly #events: DaemonEventBus;
@@ -56,6 +53,17 @@ export class TrackedRuns<R extends TrackedRun<{ status: string }>> {
     run.emitTimer = setTimeout(() => {
       this.emitNow(run);
     }, OUTPUT_EMIT_INTERVAL_MS);
+  }
+
+  markSettled(run: R): void {
+    clearTimeout(run.timeout);
+    run.settledAt = Date.now();
+  }
+
+  settle(run: R, state: R["state"]): void {
+    this.markSettled(run);
+    run.state = state;
+    this.emitNow(run);
   }
 
   prune(): void {

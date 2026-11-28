@@ -29,7 +29,17 @@ import type { StarterCatalog } from "../../../profiles/starter-catalog.ts";
 import type { TurnRunner } from "../../../sessions/turns.ts";
 import { requireProfile } from "./require-profile.ts";
 
-export interface ProfileHandlerDeps {
+export function createProfileHandlers({
+  config,
+  sessions,
+  events,
+  registry,
+  scheduler,
+  poller,
+  reminders,
+  turns,
+  catalog,
+}: {
   config: DaemonConfig;
   sessions: SessionTable;
   events: DaemonEventBus;
@@ -39,11 +49,7 @@ export interface ProfileHandlerDeps {
   reminders: ReminderStore;
   turns: TurnRunner;
   catalog: StarterCatalog;
-}
-
-export function createProfileHandlers(deps: ProfileHandlerDeps): ProfileHandlers {
-  const { config, sessions, events, registry, scheduler, poller, reminders, turns, catalog } = deps;
-
+}): ProfileHandlers {
   const toSummary = (profile: LoadedProfile): ProfileSummary => ({
     id: profile.id,
     config: { ...profile.config, starters: catalog.enabledIds(profile) },

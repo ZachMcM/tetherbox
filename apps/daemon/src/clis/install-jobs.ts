@@ -10,7 +10,7 @@ const INSTALL_TIMEOUT_MS = 5 * 60_000;
 
 type InstallJob = TrackedRun<CliInstallJobState>;
 
-/** Installs into the agent user's home (`~/.local`), so no root or SSH session is needed. */
+/** Installs into the agent user's home (`~/.local`). */
 export class CliInstallJobs {
   readonly #runner: AgentProcessRunner;
   readonly #catalog: StarterCatalog;
@@ -88,8 +88,7 @@ export class CliInstallJobs {
 
     child.once("close", (code, signal) => {
       if (job.state.status !== "running") {
-        clearTimeout(job.timeout);
-        job.settledAt = Date.now();
+        this.#jobs.markSettled(job);
 
         return;
       }
@@ -131,9 +130,6 @@ export class CliInstallJobs {
     job: InstallJob,
     outcome: { status: "completed"; error: null } | { status: "failed"; error: string },
   ): void {
-    clearTimeout(job.timeout);
-    job.settledAt = Date.now();
-    job.state = { ...job.state, ...outcome };
-    this.#jobs.emitNow(job);
+    this.#jobs.settle(job, { ...job.state, ...outcome });
   }
 }

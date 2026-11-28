@@ -1,4 +1,4 @@
-export interface ListenerSet {
+interface ListenerSet {
   subscribe(listener: () => void): () => void;
   emit(): void;
 }

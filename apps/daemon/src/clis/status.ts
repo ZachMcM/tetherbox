@@ -2,7 +2,7 @@ import type { Starter, StarterCli, StarterCliStatus, StarterCliStatusEntry } fro
 import type { StarterCatalog } from "../profiles/starter-catalog.ts";
 import type { AgentProcessRunner } from "./agent-process.ts";
 
-export type BinaryProbeResult =
+type BinaryProbeResult =
   | { readonly kind: "present" }
   | { readonly kind: "missing" }
   | { readonly kind: "error"; readonly message: string };

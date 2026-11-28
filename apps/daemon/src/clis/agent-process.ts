@@ -63,13 +63,13 @@ export function writeChildStdin(child: ChildProcess, data: string): boolean {
   }
 }
 
-export interface CaptureResult {
+interface CaptureResult {
   code: number;
   stdout: string;
   stderr: string;
 }
 
-export interface SpawnOptions {
+interface SpawnOptions {
   stdio: ["ignore" | "pipe", "pipe", "pipe"];
   extraEnv?: Readonly<Record<string, string>>;
   pty?: boolean;
