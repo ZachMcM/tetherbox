@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { profileIdSchema, runIdSchema, sessionIdSchema } from "./ids.ts";
 import { turnModelAuthSchema } from "./llm-auth.ts";
+import { pollOutcomeStatusSchema } from "./poll.ts";
 import { modelSelectionSchema } from "./profile.ts";
 
 export const turnTriggerSchema = z.discriminatedUnion("kind", [
@@ -23,7 +24,7 @@ export const turnTriggerSchema = z.discriminatedUnion("kind", [
     kind: z.literal("poll"),
     job: z.string(),
     prompt: z.string(),
-    status: z.enum(["done", "stalled"]),
+    status: pollOutcomeStatusSchema,
     output: z.string(),
   }),
   z.object({

@@ -95,7 +95,7 @@ export function formatTrigger(trigger: TurnTrigger): string {
     case "webhook":
       return `Webhook "${trigger.hook}" received a payload.\n\n${trigger.prompt}\n\n\`\`\`json\n${JSON.stringify(trigger.payload, null, 2)}\n\`\`\``;
     case "poll":
-      return `Poll job "${trigger.job}" is ${trigger.status}.\n\n${trigger.prompt}\n\n${trigger.output}`;
+      return `Poll job "${trigger.job}" status: ${trigger.status}.\n\n${trigger.prompt}\n\n${trigger.output}`;
     case "reminder":
       return `Reminder "${trigger.name}" fired.\n\n${trigger.prompt}`;
     default: {

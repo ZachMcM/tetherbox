@@ -57,16 +57,19 @@ export async function serveDaemon(
       { sessionId: job.sessionId },
     );
   });
-  const poller = new Poller(db.pollJobs, (profileId, registered, outcome) => {
-    const profile = registry.get(profileId);
-
-    if (profile !== undefined) {
-      turns.enqueue(
-        profileId,
-        { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
-        { sessionId: registered.sessionId },
-      );
-    }
+  const poller = new Poller({
+    table: db.pollJobs,
+    runner: agentRunner,
+    profileDir: (profileId) => registry.get(profileId)?.dir,
+    onFire(profileId, registered, outcome) {
+      if (registry.get(profileId) !== undefined) {
+        turns.enqueue(
+          profileId,
+          { kind: "poll", job: registered.name, prompt: registered.job.prompt, ...outcome },
+          { sessionId: registered.sessionId },
+        );
+      }
+    },
   });
   const reminders = new ReminderStore(db.reminders, (profileId, reminder) => {
     const profile = registry.get(profileId);

@@ -63,7 +63,7 @@ export function writeChildStdin(child: ChildProcess, data: string): boolean {
   }
 }
 
-interface CaptureResult {
+export interface CaptureResult {
   code: number;
   stdout: string;
   stderr: string;
@@ -73,6 +73,7 @@ interface SpawnOptions {
   stdio: ["ignore" | "pipe", "pipe", "pipe"];
   extraEnv?: Readonly<Record<string, string>>;
   pty?: boolean;
+  cwd?: string;
 }
 
 export class AgentProcessRunner {
@@ -105,13 +106,18 @@ export class AgentProcessRunner {
         ...(this.#agentUser === undefined ? options.extraEnv : {}),
       },
       stdio: options.stdio,
+      ...(options.cwd !== undefined ? { cwd: options.cwd } : {}),
     });
   }
 
-  capture(command: readonly string[], timeoutMs = CAPTURE_TIMEOUT_MS): Promise<CaptureResult> {
+  capture(
+    command: readonly string[],
+    { timeoutMs = CAPTURE_TIMEOUT_MS, cwd }: { timeoutMs?: number; cwd?: string } = {},
+  ): Promise<CaptureResult> {
     const child = this.spawn(command, {
       stdio: ["ignore", "pipe", "pipe"],
       extraEnv: { NO_COLOR: "1", FORCE_COLOR: "0" },
+      ...(cwd !== undefined ? { cwd } : {}),
     });
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];

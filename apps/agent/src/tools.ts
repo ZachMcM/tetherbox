@@ -219,7 +219,7 @@ function createPollTools(client: InternalClient): ToolDefinition[] {
     name: "register_poll_job",
     label: "Register poll job",
     description:
-      "Use when you started work outside this turn that finishes later (a coding agent session, CI run, deploy, or review) and need to act on the result. The daemon runs `command` every intervalSeconds; when it reports done, or makes no progress for stallAfterSeconds, a new turn starts in this session with `prompt` and the command's output. Registering an existing name replaces it. For recurring schedules, write a cron file instead.",
+      "Use when you started work outside this turn that finishes later (a coding agent session, CI run, deploy, or review) and need to act on the result. The daemon runs `command` in this profile directory every intervalSeconds (30s timeout). Its first stdout line must be `running`, `done`, or `failed`, followed by any details; wrap tools that print something else with `sh -c`. On `done` or `failed`, or when a `running` check's output stays the same for stallAfterSeconds, a new turn starts in this session with `prompt`, the status, and the output. Include a detail that changes as the work progresses, such as the latest step or log line, and never a timestamp. Output without a valid status line counts as no progress, so a broken check ends as stalled. Registering an existing name replaces it. For recurring schedules, write a cron file instead.",
     parameters: Type.Object({
       name: Type.String({ pattern: SLUG_PATTERN }),
       command: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),

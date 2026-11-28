@@ -11,6 +11,9 @@ export const pollJobSchema = z.object({
 });
 export type PollJob = z.infer<typeof pollJobSchema>;
 
+export const pollOutcomeStatusSchema = z.enum(["done", "failed", "stalled"]);
+export type PollOutcomeStatus = z.infer<typeof pollOutcomeStatusSchema>;
+
 export const registerPollJobInputSchema = pollJobSchema.extend({ name: entryNameSchema });
 export type RegisterPollJobInput = z.infer<typeof registerPollJobInputSchema>;
 
