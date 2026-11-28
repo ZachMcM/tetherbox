@@ -6,10 +6,12 @@ export function DeviceCodePrompt({
   userCode,
   verificationUri,
   message,
+  variant = "hero",
 }: {
   userCode: string;
   verificationUri: string;
   message: string;
+  variant?: "hero" | "compact";
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -22,6 +24,34 @@ export function DeviceCodePrompt({
       })
       .catch(() => {});
   };
+
+  if (variant === "compact") {
+    return (
+      <div className="space-y-2 py-1">
+        <p className="text-xs text-muted-foreground">{message}</p>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <code className="select-all rounded-md bg-muted/70 px-3 py-1 font-mono text-base font-semibold tracking-[0.15em] text-foreground">
+              {userCode}
+            </code>
+            <Button type="button" variant="outline" size="xs" onClick={copyCode}>
+              {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+              <span>{copied ? "Copied" : "Copy"}</span>
+            </Button>
+          </div>
+          <a
+            href={verificationUri}
+            target="_blank"
+            rel="noreferrer"
+            className={buttonVariants({ size: "xs" })}
+          >
+            <span>Open verification page</span>
+            <ExternalLinkIcon className="size-3" />
+          </a>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center gap-3 py-4 text-center">

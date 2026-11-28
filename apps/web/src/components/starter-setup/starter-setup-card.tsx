@@ -6,7 +6,7 @@ import {
   type StarterConfig,
   type StarterSummary,
 } from "@tetherbox/core/app";
-import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { AlertCircleIcon, CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { type CliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
@@ -28,11 +28,21 @@ function StarterSetupStatusBadge({
   connectionState: StarterConnectionState;
 }) {
   if (readiness.cliEntry?.status.kind === "error") {
-    return <Badge variant="destructive">Error</Badge>;
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <AlertCircleIcon className="size-3 text-destructive" />
+        <span>Error</span>
+      </Badge>
+    );
   }
 
   if (connectionState === "failed") {
-    return <Badge variant="destructive">Connection failed</Badge>;
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <AlertCircleIcon className="size-3 text-destructive" />
+        <span>Connection failed</span>
+      </Badge>
+    );
   }
 
   if (connectionState === "checking") {

@@ -1,5 +1,11 @@
 import type { StarterCliStatusEntry } from "@tetherbox/core/app";
-import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
+import {
+  AlertCircleIcon,
+  CheckCircle2Icon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  DownloadIcon,
+} from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
@@ -26,7 +32,12 @@ function CliStatusBadge({
   authState: AuthState;
 }) {
   if (entry.status.kind === "error") {
-    return <Badge variant="destructive">Error</Badge>;
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <AlertCircleIcon className="size-3 text-destructive" />
+        <span>Error</span>
+      </Badge>
+    );
   }
 
   if (!isInstalled) {
@@ -92,7 +103,13 @@ export function CliAuthFlowPanel({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold">
-              {entry.hasAuth ? `${entry.name} CLI login` : `${entry.name} CLI`}
+              {entry.name.endsWith("CLI")
+                ? entry.hasAuth
+                  ? `${entry.name} login`
+                  : entry.name
+                : entry.hasAuth
+                  ? `${entry.name} CLI login`
+                  : `${entry.name} CLI`}
             </span>
             <code className="font-mono text-xs text-muted-foreground">{entry.binary}</code>
             <Badge variant="secondary" className="text-[10px] font-normal">
@@ -167,6 +184,12 @@ export function CliAuthFlowPanel({
         </div>
       )}
 
+      {auth.isStarting && activeFlow === null && (
+        <div className="pt-1">
+          <AuthorizationPendingAlert message={`Starting ${entry.binary} sign-in…`} />
+        </div>
+      )}
+
       {activeFlow !== null && (
         <div className="space-y-2.5 pt-1">
           {auth.deviceCode !== undefined ? (
@@ -175,6 +198,7 @@ export function CliAuthFlowPanel({
               userCode={auth.deviceCode.userCode}
               verificationUri={auth.deviceCode.verificationUri}
               message="Open the verification page and enter this one-time code:"
+              variant="compact"
             />
           ) : activeFlow.prompt !== null ? (
             <CodePastePrompt
@@ -194,6 +218,7 @@ export function CliAuthFlowPanel({
               pending={auth.isResponding}
               authUrl={auth.authUrl}
               requireValue={false}
+              variant="compact"
               onChange={auth.setResponseInput}
               onSubmit={auth.respond}
             />
@@ -201,17 +226,6 @@ export function CliAuthFlowPanel({
             <AuthorizationPendingAlert url={auth.authUrl} message="Waiting for browser sign-in…" />
           ) : (
             <AuthorizationPendingAlert message={`Waiting for ${entry.binary} sign-in prompt…`} />
-          )}
-
-          {activeFlow.prompt === null && auth.showOutput && (
-            <CliResponseForm
-              inputId={`cli-auth-input-${entry.starterId}`}
-              prompt={activeFlow.prompt}
-              value={auth.responseInput}
-              pending={auth.isResponding}
-              onChange={auth.setResponseInput}
-              onSubmit={auth.respond}
-            />
           )}
 
           <button
@@ -224,10 +238,24 @@ export function CliAuthFlowPanel({
             ) : (
               <ChevronRightIcon className="size-3" />
             )}
-            <span>{auth.showOutput ? "Hide CLI output" : "Show CLI output / reply"}</span>
+            <span>{auth.showOutput ? "Hide CLI output" : "Show CLI output"}</span>
           </button>
 
-          {auth.showOutput && <CliOutputLog output={activeFlow.output} variant="live" />}
+          {auth.showOutput && (
+            <div className="space-y-2.5">
+              <CliOutputLog output={activeFlow.output} variant="live" />
+              {auth.deviceCode === undefined && activeFlow.prompt === null && (
+                <CliResponseForm
+                  inputId={`cli-auth-input-${entry.starterId}`}
+                  prompt={activeFlow.prompt}
+                  value={auth.responseInput}
+                  pending={auth.isResponding}
+                  onChange={auth.setResponseInput}
+                  onSubmit={auth.respond}
+                />
+              )}
+            </div>
+          )}
 
           {auth.respondError !== null && <FieldError>{auth.respondError.message}</FieldError>}
         </div>

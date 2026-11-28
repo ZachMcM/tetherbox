@@ -100,11 +100,11 @@ export function useCliAuthFlow(entry: StarterCliStatusEntry) {
   }, []);
 
   useEffect(() => {
-    if (authUrl !== undefined && openedUrlRef.current !== authUrl) {
+    if (deviceCode === undefined && authUrl !== undefined && openedUrlRef.current !== authUrl) {
       openedUrlRef.current = authUrl;
       openAuthWindow(authUrl);
     }
-  }, [authUrl]);
+  }, [authUrl, deviceCode]);
 
   useEffect(() => {
     if (flow === null || flow.status === "running" || handledFlowIdRef.current === flow.id) {

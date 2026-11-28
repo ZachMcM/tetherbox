@@ -79,7 +79,16 @@ const builtinStarters = [
       },
       auth: {
         checkCommand: ["gh", "auth", "status"],
-        loginCommand: ["gh", "auth", "login", "--web", "--git-protocol", "https"],
+        loginCommand: [
+          "gh",
+          "auth",
+          "login",
+          "--hostname",
+          "github.com",
+          "--web",
+          "--git-protocol",
+          "https",
+        ],
       },
     },
   },

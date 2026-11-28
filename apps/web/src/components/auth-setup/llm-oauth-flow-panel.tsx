@@ -65,6 +65,10 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
         </div>
       </div>
 
+      {oauth.isStarting && activeFlow === null && (
+        <AuthorizationPendingAlert message="Starting sign-in…" />
+      )}
+
       {activeFlow !== null && (
         <div className="space-y-3">
           {deviceCode !== undefined ? (

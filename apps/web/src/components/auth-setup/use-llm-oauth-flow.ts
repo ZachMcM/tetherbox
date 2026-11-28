@@ -151,11 +151,11 @@ export function useLlmOAuthFlow(provider: LlmProviderStatus) {
   }, [activeFlowId]);
 
   useEffect(() => {
-    if (authUrl !== undefined && openedUrlRef.current !== authUrl) {
+    if (deviceCode === undefined && authUrl !== undefined && openedUrlRef.current !== authUrl) {
       openedUrlRef.current = authUrl;
       openAuthWindow(authUrl);
     }
-  }, [authUrl]);
+  }, [authUrl, deviceCode]);
 
   useEffect(() => {
     if (flow === null || isActiveFlow(flow) || handledFlowIdRef.current === flow.id) {

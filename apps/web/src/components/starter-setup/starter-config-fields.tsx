@@ -109,15 +109,15 @@ export function StarterConfigFields({
         </div>
         {starter.hasConnectionCheck && (
           <div className="flex items-center gap-2">
-            {connectionState === "connected" && (
+            {onConnectionStateChange === undefined && connectionState === "connected" && (
               <Badge variant="secondary" className="gap-1">
                 <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
                 <span>Connected</span>
               </Badge>
             )}
-            {connectionState === "failed" && (
-              <Badge variant="destructive" className="gap-1">
-                <AlertCircleIcon className="size-3" />
+            {onConnectionStateChange === undefined && connectionState === "failed" && (
+              <Badge variant="secondary" className="gap-1">
+                <AlertCircleIcon className="size-3 text-destructive" />
                 <span>Connection failed</span>
               </Badge>
             )}

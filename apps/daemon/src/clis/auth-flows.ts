@@ -14,7 +14,6 @@ const CURSOR_POSITION_REPLY = `${String.fromCharCode(0x1b)}[24;80R`;
 
 interface AuthFlow extends TrackedRun<CliAuthFlowState> {
   timedOut: boolean;
-  autoConfirmedGitAuth: boolean;
   autoPressedEnter: boolean;
   onActivity?: (() => void) | undefined;
 }
@@ -170,6 +169,7 @@ export class CliAuthFlows {
         TERM: "dumb",
         BROWSER: "true",
         GH_BROWSER: "true",
+        GH_PROMPT_DISABLED: "1",
       },
       pty: true,
     });
@@ -195,7 +195,6 @@ export class CliAuthFlows {
         child.kill("SIGTERM");
       }, AUTH_TIMEOUT_MS),
       timedOut: false,
-      autoConfirmedGitAuth: false,
       autoPressedEnter: false,
     };
 
@@ -234,16 +233,7 @@ export class CliAuthFlows {
     const prevPrompt = flow.state.prompt;
     const output = appendOutput(flow.state.output, rawChunk);
     const events = extractAuthEvents(output);
-    let prompt = detectPromptLine(output);
-
-    if (
-      !flow.autoConfirmedGitAuth &&
-      /authenticate git with your github credentials\?\s*\(y\/n\)/i.test(output)
-    ) {
-      flow.autoConfirmedGitAuth = true;
-      prompt = null;
-      writeChildStdin(flow.child, "y\r");
-    }
+    const prompt = detectPromptLine(output);
 
     if (!flow.autoPressedEnter && /press enter to open/i.test(output)) {
       flow.autoPressedEnter = true;

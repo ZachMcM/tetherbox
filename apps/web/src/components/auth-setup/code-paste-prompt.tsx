@@ -12,6 +12,7 @@ export function CodePastePrompt({
   pending,
   authUrl,
   requireValue = true,
+  variant = "hero",
   onChange,
   onSubmit,
 }: {
@@ -23,6 +24,7 @@ export function CodePastePrompt({
   pending: boolean;
   authUrl?: string | undefined;
   requireValue?: boolean;
+  variant?: "hero" | "compact";
   onChange: (value: string) => void;
   onSubmit: () => void;
 }) {
@@ -34,6 +36,47 @@ export function CodePastePrompt({
     }
   };
 
+  const form = (
+    <form
+      onSubmit={handleSubmit}
+      className={
+        variant === "hero"
+          ? "flex w-full max-w-md items-center gap-2"
+          : "flex w-full items-center gap-2"
+      }
+    >
+      <Input
+        id={inputId}
+        value={value}
+        placeholder={placeholder ?? "Paste code here"}
+        onChange={(event) => onChange(event.target.value)}
+        className="font-mono text-xs"
+        autoComplete="off"
+        autoFocus
+        required={requireValue}
+      />
+      <Button type="submit" size="sm" disabled={pending || (requireValue && value.trim() === "")}>
+        {pending ? "Submitting…" : "Continue"}
+      </Button>
+    </form>
+  );
+
+  if (variant === "compact") {
+    return (
+      <div className="space-y-2 py-1">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="text-xs font-medium text-foreground">{title}</div>
+          {authUrl !== undefined && (
+            <div className="text-xs">
+              <ExternalLink href={authUrl}>Open sign-in page</ExternalLink>
+            </div>
+          )}
+        </div>
+        {form}
+      </div>
+    );
+  }
+
   return (
     <div className="flex flex-col items-center gap-3 py-4 text-center">
       <div className="space-y-1">
@@ -43,21 +86,7 @@ export function CodePastePrompt({
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="flex w-full max-w-md items-center gap-2">
-        <Input
-          id={inputId}
-          value={value}
-          placeholder={placeholder ?? "Paste code here"}
-          onChange={(event) => onChange(event.target.value)}
-          className="font-mono text-xs"
-          autoComplete="off"
-          autoFocus
-          required={requireValue}
-        />
-        <Button type="submit" size="sm" disabled={pending || (requireValue && value.trim() === "")}>
-          {pending ? "Submitting…" : "Continue"}
-        </Button>
-      </form>
+      {form}
 
       {authUrl !== undefined && (
         <div className="text-xs">
