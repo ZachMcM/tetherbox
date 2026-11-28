@@ -2,9 +2,6 @@ import { z } from "zod";
 import { secretKeySchema, type SecretKey } from "./ids.ts";
 import { hostnameSchema } from "./secrets.ts";
 
-export const DEFAULT_OAUTH_CALLBACK_PORT = 47823;
-export const DEFAULT_OAUTH_CALLBACK_PATH = "/oauth/callback";
-
 const httpsUrlSchema = z
   .string()
   .url()
@@ -27,8 +24,6 @@ export interface OAuthProviderConfig {
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
   readonly extraAuthParams?: Readonly<Record<string, string>>;
-  readonly callbackPort: number;
-  readonly callbackPath: string;
   readonly clientIdSecretKey: SecretKey;
   readonly clientSecretSecretKey: SecretKey;
 }
@@ -53,8 +48,6 @@ export const oauthProviders = [
       access_type: "offline",
       prompt: "consent",
     },
-    callbackPort: DEFAULT_OAUTH_CALLBACK_PORT,
-    callbackPath: DEFAULT_OAUTH_CALLBACK_PATH,
     clientIdSecretKey: secretKeySchema.parse("GOOGLE_OAUTH_CLIENT_ID"),
     clientSecretSecretKey: secretKeySchema.parse("GOOGLE_OAUTH_CLIENT_SECRET"),
   },
@@ -134,8 +127,6 @@ export const customOAuthLoginSchema = z.object({
   scopes: nonEmptyStringsSchema,
   clientIdSecretKey: secretKeySchema,
   clientSecretSecretKey: secretKeySchema.optional(),
-  callbackPort: z.number().int().min(1).max(65535).default(DEFAULT_OAUTH_CALLBACK_PORT),
-  callbackPath: z.string().startsWith("/").default(DEFAULT_OAUTH_CALLBACK_PATH),
   extraAuthParams: z.record(z.string().min(1), z.string()).optional(),
 });
 export type CustomOAuthLoginInput = z.input<typeof customOAuthLoginSchema>;

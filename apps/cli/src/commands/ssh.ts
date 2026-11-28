@@ -10,6 +10,6 @@ export function registerSsh(program: Command): void {
     .action(async (command: string[]) => {
       const { sshAlias } = await readConfig();
 
-      process.exitCode = await runRemote(sshAlias, command, { interactive: true });
+      process.exitCode = await runRemote(sshAlias, command);
     });
 }

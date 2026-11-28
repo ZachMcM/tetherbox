@@ -43,29 +43,6 @@ export type SecretListEntry = z.infer<typeof secretListEntrySchema>;
 export type SecretCheckKind = SecretKind | "oauth";
 export type SecretCheckResult = { exists: false } | { exists: true; kind: SecretCheckKind };
 
-export function parseSecretInjection(spec: string): SecretInjection {
-  if (spec === "bearer") {
-    return { kind: "bearer" };
-  }
-
-  const separator = spec.indexOf(":");
-
-  if (separator !== -1 && spec.indexOf(":", separator + 1) === -1) {
-    const kind = spec.slice(0, separator);
-    const name = spec.slice(separator + 1);
-
-    if (kind === "header" || kind === "query") {
-      const parsed = secretInjectionSchema.safeParse({ kind, name });
-
-      if (parsed.success) {
-        return parsed.data;
-      }
-    }
-  }
-
-  throw new Error(`invalid --inject "${spec}", expected bearer, header:<name>, or query:<name>`);
-}
-
 export function formatSecretInjection(inject: SecretInjection): string {
   switch (inject.kind) {
     case "bearer":
@@ -79,38 +56,4 @@ export function formatSecretInjection(inject: SecretInjection): string {
       return exhaustive;
     }
   }
-}
-
-export interface SecretBindingOptions {
-  domains?: readonly string[] | undefined;
-  inject?: string | undefined;
-  provider?: string | undefined;
-}
-
-export function resolveSecretBinding(options: SecretBindingOptions): SecretBinding {
-  const domains = options.domains ?? [];
-  const hasDomains = domains.length > 0;
-  const hasProvider = options.provider !== undefined;
-
-  if (hasDomains && hasProvider) {
-    throw new Error("cannot combine --domain and --provider");
-  }
-
-  if (!hasDomains && options.inject !== undefined) {
-    throw new Error("--inject can only be used with --domain");
-  }
-
-  if (hasProvider) {
-    return secretBindingSchema.parse({ kind: "llm", provider: options.provider });
-  }
-
-  if (hasDomains) {
-    return secretBindingSchema.parse({
-      kind: "proxy",
-      domains,
-      inject: parseSecretInjection(options.inject ?? "bearer"),
-    });
-  }
-
-  return { kind: "daemon" };
 }

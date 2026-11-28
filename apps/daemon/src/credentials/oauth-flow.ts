@@ -1,8 +1,7 @@
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
-import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { z } from "zod";
 
-export const OAUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
+const OAUTH_LOGIN_TIMEOUT_MS = 5 * 60_000;
 const TOKEN_TIMEOUT_MS = 30_000;
 
 const tokenResponseSchema = z.object({
@@ -24,8 +23,6 @@ export interface OAuthFlowConfig {
   readonly authorizationUrl: string;
   readonly tokenUrl: string;
   readonly scopes: readonly string[];
-  readonly callbackPort: number;
-  readonly callbackPath: string;
   readonly clientId: string;
   readonly clientSecret?: string | undefined;
   readonly extraAuthParams?: Readonly<Record<string, string>> | undefined;
@@ -78,11 +75,6 @@ export function renderOAuthCallbackHtml(
   const link = options?.returnLink ? '<p><a href="/">Return to Tetherbox</a></p>' : "";
 
   return `<!doctype html><html><body style="font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem"><h1>${escapeHtml(title)}</h1><p>${escapeHtml(message)}</p>${link}</body></html>`;
-}
-
-function sendHtml(res: ServerResponse, status: number, title: string, message: string): void {
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
-  res.end(renderOAuthCallbackHtml(title, message));
 }
 
 function buildAuthorizationUrl(options: {
@@ -163,136 +155,6 @@ async function exchangeAuthorizationCode(options: {
     refreshToken: token.refresh_token,
     expiresAt: Date.now() + (token.expires_in ?? 3600) * 1000,
   };
-}
-
-function waitForAuthorizationCode(options: {
-  port: number;
-  path: string;
-  expectedState: string;
-  authUrl: string;
-}): Promise<string> {
-  const { port, path, expectedState, authUrl } = options;
-
-  return new Promise<string>((resolve, reject) => {
-    let settled = false;
-
-    const finish = (outcome: { kind: "ok"; code: string } | { kind: "err"; error: Error }) => {
-      if (settled) {
-        return;
-      }
-
-      settled = true;
-      clearTimeout(timer);
-      process.off("SIGINT", onSigint);
-      server.close();
-
-      if (outcome.kind === "ok") {
-        resolve(outcome.code);
-      } else {
-        reject(outcome.error);
-      }
-    };
-
-    const onSigint = () => finish({ kind: "err", error: new Error("OAuth login cancelled") });
-    const timer = setTimeout(
-      () => finish({ kind: "err", error: new Error("OAuth login timed out waiting for callback") }),
-      OAUTH_LOGIN_TIMEOUT_MS,
-    );
-
-    const server = createServer((req: IncomingMessage, res: ServerResponse) => {
-      const requestUrl = URL.parse(req.url ?? "/", `http://127.0.0.1:${port}`);
-
-      if (requestUrl === null || requestUrl.pathname !== path) {
-        res.writeHead(404);
-        res.end("Not found");
-
-        return;
-      }
-
-      const state = requestUrl.searchParams.get("state");
-
-      if (state === null || !sameState(expectedState, state)) {
-        sendHtml(res, 400, "Invalid state", "State mismatch. Restart the login from your CLI.");
-
-        return;
-      }
-
-      const errorParam = requestUrl.searchParams.get("error");
-
-      if (errorParam !== null) {
-        const description = requestUrl.searchParams.get("error_description");
-        const detail = description ? `${errorParam}: ${description}` : errorParam;
-
-        sendHtml(res, 400, "Authorization failed", detail);
-        finish({ kind: "err", error: new Error(`OAuth authorization failed: ${detail}`) });
-
-        return;
-      }
-
-      const code = requestUrl.searchParams.get("code");
-
-      if (code === null || code.trim() === "") {
-        sendHtml(res, 400, "Missing code", "Authorization code was missing from the callback.");
-        finish({ kind: "err", error: new Error("OAuth callback did not include a code") });
-
-        return;
-      }
-
-      sendHtml(
-        res,
-        200,
-        "Tetherbox connected",
-        "Authorization complete. You can close this browser tab and return to your terminal.",
-      );
-      finish({ kind: "ok", code });
-    });
-
-    server.once("error", (error) => {
-      finish({
-        kind: "err",
-        error: new Error(`Failed to listen on 127.0.0.1:${port}: ${error.message}`, {
-          cause: error,
-        }),
-      });
-    });
-
-    process.once("SIGINT", onSigint);
-    server.listen(port, "127.0.0.1", () => {
-      console.log(`\nOpen this URL in your browser:\n\n  ${authUrl}\n`);
-      console.log("Waiting for authorization callback...");
-    });
-  });
-}
-
-export async function runLoopbackAuthCodeFlow(config: OAuthFlowConfig): Promise<OAuthTokenBundle> {
-  const redirectUri = `http://127.0.0.1:${config.callbackPort}${config.callbackPath}`;
-  const state = randomBytes(24).toString("base64url");
-  const pkce = createPkce();
-  const authUrl = buildAuthorizationUrl({
-    authorizationUrl: config.authorizationUrl,
-    clientId: config.clientId,
-    redirectUri,
-    scopes: config.scopes,
-    state,
-    challenge: pkce.challenge,
-    extraAuthParams: config.extraAuthParams,
-  });
-  const code = await waitForAuthorizationCode({
-    port: config.callbackPort,
-    path: config.callbackPath,
-    expectedState: state,
-    authUrl,
-  });
-
-  return exchangeAuthorizationCode({
-    label: config.label,
-    tokenUrl: config.tokenUrl,
-    code,
-    redirectUri,
-    clientId: config.clientId,
-    clientSecret: config.clientSecret,
-    verifier: pkce.verifier,
-  });
 }
 
 export function createWebOAuthFlowStore<T>() {

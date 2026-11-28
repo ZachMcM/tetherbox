@@ -108,14 +108,6 @@ export class StarterCatalog {
     this.#syncStatePath = join(dataDir, "library-sync.json");
   }
 
-  static async open(dataDir: string): Promise<StarterCatalog> {
-    const catalog = new StarterCatalog(dataDir);
-
-    await catalog.load();
-
-    return catalog;
-  }
-
   #serialize<T>(task: () => Promise<T>): Promise<T> {
     const next = this.#queue.then(task, task);
 

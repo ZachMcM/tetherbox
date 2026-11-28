@@ -42,31 +42,6 @@ export const starterConfigSchema = z.record(
 );
 export type StarterConfig = z.infer<typeof starterConfigSchema>;
 
-const STARTER_CONFIG_FLAG_PATTERN = /^([a-z0-9-]+)\.([A-Za-z0-9_-]+)=(.+)$/;
-
-export const starterConfigFlagSchema = z
-  .string()
-  .regex(STARTER_CONFIG_FLAG_PATTERN, "invalid --starter-config, expected <starter>.<key>=<value>")
-  .transform((entry) => {
-    const [, starterId = "", key = "", value = ""] = STARTER_CONFIG_FLAG_PATTERN.exec(entry) ?? [];
-
-    return { starterId, key, value };
-  });
-
-export const starterConfigFlagsSchema = z
-  .array(starterConfigFlagSchema)
-  .transform((entries) => {
-    const config: Record<string, Record<string, string>> = {};
-
-    for (const { starterId, key, value } of entries) {
-      config[starterId] ??= {};
-      config[starterId][key] = value;
-    }
-
-    return config;
-  })
-  .pipe(starterConfigSchema);
-
 export const profileConfigSchema = z.object({
   starters: z.array(z.string().min(1)).default([]),
   starterConfig: starterConfigSchema.default({}),

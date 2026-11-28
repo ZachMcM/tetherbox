@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { Command } from "commander";
-import { registerProfiles } from "./commands/profiles.ts";
 import { registerSetup } from "./commands/setup.ts";
 import { registerSsh } from "./commands/ssh.ts";
 
@@ -10,7 +9,6 @@ const program = new Command("tetherbox")
 
 registerSetup(program);
 registerSsh(program);
-registerProfiles(program);
 
 try {
   await program.parseAsync();

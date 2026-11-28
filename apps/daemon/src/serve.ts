@@ -12,7 +12,6 @@ import { startInternalServer } from "./servers/internal/server.ts";
 import type { LlmOAuth } from "./credentials/llm-oauth.ts";
 import { LlmWebAuthManager } from "./credentials/llm-web-auth.ts";
 import type { OAuthStore } from "./credentials/oauth-store.ts";
-import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./jobs/poller.ts";
 import { importProfileRecord, reconcileProfileRecords } from "./profiles/records.ts";
 import { ProfileRegistry } from "./profiles/registry.ts";
@@ -165,29 +164,13 @@ export async function serveDaemon(
     port: config.appPort,
   });
 
-  await writePidFile(config.dataDir);
   console.log(
     `tetherbox daemon serving ${registry.all().length} profile(s) (app http://${config.appHost}:${config.appPort}, public http://${config.publicHost}:${config.publicPort})`,
   );
 
-  let reloadChain = Promise.resolve();
-  const onReload = () => {
-    reloadChain = reloadChain
-      .then(() => reloadAll())
-      .then(() => {
-        console.log(`reloaded ${registry.all().length} profile(s)`);
-      })
-      .catch((error) => {
-        console.error("failed to reload profiles", error);
-      });
-  };
-
-  process.on("SIGHUP", onReload);
-
   let shutdownPromise: Promise<void> | undefined;
   const shutdown = () => {
     shutdownPromise ??= (async () => {
-      process.off("SIGHUP", onReload);
       scheduler.stopAll();
       poller.stopAll();
       reminders.stopAll();
@@ -200,7 +183,6 @@ export async function serveDaemon(
       appServer.close();
       await turns.shutdown();
       db.close();
-      await removePidFile(config.dataDir);
     })();
 
     return shutdownPromise;

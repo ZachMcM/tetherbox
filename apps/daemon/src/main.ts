@@ -1,8 +1,4 @@
 #!/usr/bin/env node
-import { runLlmCommand } from "./admin/llm.ts";
-import { runOAuthCommand } from "./admin/oauth.ts";
-import { runProfilesCommand } from "./admin/profiles.ts";
-import { runSecretsCommand } from "./admin/secrets.ts";
 import { loadOrCreateAppToken } from "./servers/app/app-token.ts";
 import { loadConfig } from "./config.ts";
 import { createLlmOAuth } from "./credentials/llm-oauth.ts";
@@ -10,7 +6,7 @@ import { createOAuthStore } from "./credentials/oauth-store.ts";
 import { createFileSecretStore } from "./credentials/secret-store.ts";
 import { serveDaemon } from "./serve.ts";
 
-const [command = "serve", ...args] = process.argv.slice(2);
+const [command = "serve"] = process.argv.slice(2);
 const config = loadConfig();
 const secrets = createFileSecretStore(config.dataDir);
 const llmOAuth = createLlmOAuth(config.dataDir);
@@ -24,22 +20,8 @@ try {
     case "app-token":
       console.log(loadOrCreateAppToken(config.dataDir));
       break;
-    case "secrets":
-      await runSecretsCommand(secrets, args);
-      break;
-    case "llm":
-      await runLlmCommand(llmOAuth, args);
-      break;
-    case "oauth":
-      await runOAuthCommand(oauth, args);
-      break;
-    case "profiles":
-      await runProfilesCommand(config, args);
-      break;
     default:
-      throw new Error(
-        `unknown command "${command}", expected serve, app-token, secrets, llm, oauth, or profiles`,
-      );
+      throw new Error(`unknown command "${command}", expected serve or app-token`);
   }
 } catch (error) {
   console.error(error instanceof Error ? error.message : error);

@@ -299,9 +299,6 @@ importers:
       '@clack/prompts':
         specifier: 'catalog:'
         version: 1.9.0
-      '@tetherbox/core':
-        specifier: workspace:*
-        version: link:../../packages/core
       commander:
         specifier: 'catalog:'
         version: 15.1.0

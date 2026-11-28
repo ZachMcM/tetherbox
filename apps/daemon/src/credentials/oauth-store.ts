@@ -21,7 +21,6 @@ import { createKeyedJsonStore, createKeyedLock } from "../file-store.ts";
 import {
   createWebOAuthFlowStore,
   postTokenForm,
-  runLoopbackAuthCodeFlow,
   type OAuthFlowConfig,
   type OAuthTokenBundle,
   type WebOAuthCallbackInput,
@@ -96,8 +95,6 @@ export interface WebOAuthPresetOptions {
 export type { WebOAuthCallbackInput };
 
 export interface OAuthStore {
-  loginPreset(presetId: OAuthPresetId, scopeMode?: OAuthScopeMode): Promise<OAuthLoginSummary>;
-  loginCustom(input: CustomOAuthLoginInput): Promise<OAuthLoginSummary>;
   startWebPresetLogin(
     presetId: OAuthPresetId,
     options: WebOAuthPresetOptions,
@@ -277,8 +274,6 @@ async function preparePresetFlow(
       authorizationUrl: provider.authorizationUrl,
       tokenUrl: provider.tokenUrl,
       scopes,
-      callbackPort: provider.callbackPort,
-      callbackPath: provider.callbackPath,
       clientId,
       clientSecret,
       extraAuthParams: provider.extraAuthParams,
@@ -313,8 +308,6 @@ async function prepareCustomFlow(
       authorizationUrl: input.authorizationUrl,
       tokenUrl: input.tokenUrl,
       scopes: input.scopes,
-      callbackPort: input.callbackPort,
-      callbackPath: input.callbackPath,
       clientId,
       clientSecret,
       extraAuthParams: input.extraAuthParams,
@@ -388,18 +381,6 @@ export function createOAuthStore(dataDir: string, secrets: SecretStore): OAuthSt
     });
 
   return {
-    async loginPreset(presetId, requestedScopeMode) {
-      const prepared = await preparePresetFlow(secrets, presetId, requestedScopeMode);
-      const tokens = await runLoopbackAuthCodeFlow(prepared.config);
-
-      return saveCredential(prepared.buildCredential(tokens));
-    },
-    async loginCustom(rawInput) {
-      const prepared = await prepareCustomFlow(secrets, rawInput);
-      const tokens = await runLoopbackAuthCodeFlow(prepared.config);
-
-      return saveCredential(prepared.buildCredential(tokens));
-    },
     async startWebPresetLogin(presetId, options) {
       const prepared = await preparePresetFlow(secrets, presetId, options.scopeMode);
 

@@ -20,25 +20,19 @@ export type LlmAuthKind = z.infer<typeof llmAuthKindSchema>;
 
 type LlmProviderAuthConfig =
   | { readonly kind: "api-key" }
-  | { readonly kind: "oauth"; readonly label: string; readonly callbackPort?: number }
-  | { readonly kind: "both"; readonly label: string; readonly callbackPort?: number };
+  | { readonly kind: "oauth"; readonly label: string }
+  | { readonly kind: "both"; readonly label: string };
 
-/**
- * Auth capabilities for every LLM provider the daemon can proxy. `callbackPort` is the fixed
- * loopback port the provider's browser redirect lands on, which the CLI forwards over SSH during
- * OAuth login. Device-code logins and logins with a paste fallback need no port.
- */
+/** Auth capabilities for every LLM provider the daemon can proxy. */
 const llmProviderCatalog = {
   anthropic: {
     kind: "both",
     label: "Claude Pro/Max",
-    callbackPort: 53692,
   },
   openai: { kind: "api-key" },
   "openai-codex": {
     kind: "oauth",
     label: "ChatGPT Plus/Pro (Codex)",
-    callbackPort: 1455,
   },
   google: { kind: "api-key" },
   openrouter: {
@@ -67,7 +61,6 @@ export type LlmOAuthProviderId = {
 export interface LlmOAuthProvider {
   readonly provider: LlmOAuthProviderId;
   readonly label: string;
-  readonly callbackPort?: number;
 }
 
 function isLlmOAuthProvider(provider: LlmProvider): provider is LlmOAuthProviderId {
@@ -85,7 +78,6 @@ export const llmOAuthProviders: readonly LlmOAuthProvider[] = llmProviderIds.fla
     {
       provider,
       label: config.label,
-      ...("callbackPort" in config ? { callbackPort: config.callbackPort } : {}),
     },
   ];
 });
