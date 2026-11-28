@@ -8,6 +8,7 @@ services:
     init: true
     environment:
       TETHERBOX_APP_HOST: 0.0.0.0
+      TETHERBOX_LLM_OAUTH_LOOPBACK: "false"
       TETHERBOX_PUBLIC_HOST: 0.0.0.0
       TETHERBOX_AGENT_USER: tetherbox-agent
       TETHERBOX_AGENT_ENTRY: /workspace/apps/agent/src/main.ts

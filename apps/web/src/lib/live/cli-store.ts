@@ -116,6 +116,22 @@ export function useCliAuthFlow(flowId: string | null): CliAuthFlowState | null {
   );
 }
 
+export function clearSettledCliInstallJobs(): void {
+  let changed = false;
+
+  for (const [starterId, job] of cliInstallJobs) {
+    if (job.status !== "running") {
+      cliInstallJobs.delete(starterId);
+      changed = true;
+    }
+  }
+
+  if (changed) {
+    rebuildInstallSnapshot();
+    emit();
+  }
+}
+
 export function clearCliState(): void {
   let changed = false;
 

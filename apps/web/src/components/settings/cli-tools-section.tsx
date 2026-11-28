@@ -3,6 +3,7 @@ import { RefreshCwIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
+import { clearSettledCliInstallJobs } from "../../lib/live/cli-store.ts";
 import { cliStatusQueryOptions } from "../../lib/queries.ts";
 import { CliAuthFlowPanel } from "../cli-setup/cli-auth-flow-panel.tsx";
 import { CliInstallCard } from "../cli-setup/cli-install-card.tsx";
@@ -36,7 +37,10 @@ export function CliToolsSection() {
           type="button"
           variant="ghost"
           size="xs"
-          onClick={() => void cliStatusQuery.refetch()}
+          onClick={() => {
+            clearSettledCliInstallJobs();
+            void cliStatusQuery.refetch();
+          }}
           disabled={cliStatusQuery.isFetching}
         >
           <RefreshCwIcon className="size-3.5" />

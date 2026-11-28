@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { clearSettledCliInstallJobs } from "../../lib/live/cli-store.ts";
 import {
   cliStatusQueryOptions,
   oauthStatusQueryOptions,
@@ -39,6 +40,7 @@ export function useStarterSetupState() {
   }, [starters, secretsQuery.data?.secrets, oauthStatusQuery.data?.logins, cliStatuses]);
 
   const refreshStatus = () => {
+    clearSettledCliInstallJobs();
     void cliStatusQuery.refetch();
     void oauthStatusQuery.refetch();
     void secretsQuery.refetch();

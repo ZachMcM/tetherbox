@@ -15,6 +15,7 @@ COPY docker/dev/sudoers /etc/sudoers.d/tetherbox
 RUN chmod 0440 /etc/sudoers.d/tetherbox
 
 COPY docker/dev/entrypoint.sh /usr/local/bin/tetherbox-dev-entrypoint
+RUN chmod 0755 /usr/local/bin/tetherbox-dev-entrypoint
 
 WORKDIR /workspace
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./

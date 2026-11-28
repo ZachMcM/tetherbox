@@ -9,6 +9,7 @@ const envSchema = z.object({
   TETHERBOX_PUBLIC_PORT: z.coerce.number().int().positive().default(8787),
   TETHERBOX_APP_HOST: z.string().default("127.0.0.1"),
   TETHERBOX_APP_PORT: z.coerce.number().int().positive().default(8788),
+  TETHERBOX_LLM_OAUTH_LOOPBACK: z.stringbool().default(true),
   TETHERBOX_WEB_DIR: z.string().min(1).optional(),
   TETHERBOX_AGENT_USER: z.string().min(1).optional(),
   TETHERBOX_AGENT_ENTRY: z.string().default("/opt/tetherbox/apps/agent/dist/main.mjs"),
@@ -24,6 +25,7 @@ export interface DaemonConfig {
   publicPort: number;
   appHost: string;
   appPort: number;
+  llmOAuthLoopback: boolean;
   webDir: string | undefined;
   agent: { user: string | undefined; entry: string; timeoutMs: number };
 }
@@ -40,6 +42,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): DaemonConfig {
     publicPort: parsed.TETHERBOX_PUBLIC_PORT,
     appHost: parsed.TETHERBOX_APP_HOST,
     appPort: parsed.TETHERBOX_APP_PORT,
+    llmOAuthLoopback: parsed.TETHERBOX_LLM_OAUTH_LOOPBACK,
     webDir: parsed.TETHERBOX_WEB_DIR,
     agent: {
       user: parsed.TETHERBOX_AGENT_USER,

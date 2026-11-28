@@ -43,7 +43,7 @@ export async function serveDaemon(
   }
 
   const events = new DaemonEventBus();
-  const llmWebAuth = new LlmWebAuthManager(llmOAuth);
+  const llmWebAuth = new LlmWebAuthManager({ llmOAuth, allowLoopback: config.llmOAuthLoopback });
   const catalog = new StarterCatalog(config.dataDir);
   const agentRunner = new AgentProcessRunner(config.agent.user);
   const cliStatus = new CliStatusProbe({ runner: agentRunner, catalog });

@@ -143,10 +143,12 @@ function cloneState(state: LlmOAuthFlowState): LlmOAuthFlowState {
  */
 export class LlmWebAuthManager {
   readonly #llmOAuth: LlmOAuth;
+  readonly #allowLoopback: boolean;
   readonly #flows = new Map<string, ActiveFlow>();
 
-  constructor(llmOAuth: LlmOAuth) {
+  constructor({ llmOAuth, allowLoopback }: { llmOAuth: LlmOAuth; allowLoopback: boolean }) {
     this.#llmOAuth = llmOAuth;
+    this.#allowLoopback = allowLoopback;
   }
 
   async start(provider: LlmProvider, origin: string): Promise<LlmOAuthFlowState> {
@@ -156,7 +158,7 @@ export class LlmWebAuthManager {
       throw new RpcError(400, `provider "${provider}" does not support OAuth login`);
     }
 
-    const isLocal = isLoopbackOrigin(origin);
+    const isLocal = this.#allowLoopback && isLoopbackOrigin(origin);
     const id = randomUUID();
     const controller = new AbortController();
     const timeout = setTimeout(() => {

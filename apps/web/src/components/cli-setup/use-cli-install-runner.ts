@@ -17,6 +17,10 @@ export function isCliInstalled(
   entry: StarterCliStatusEntry,
   job: CliInstallJobState | undefined,
 ): boolean {
+  if (entry.status.kind === "error") {
+    return false;
+  }
+
   return job === undefined ? entry.status.kind === "installed" : job.status === "completed";
 }
 

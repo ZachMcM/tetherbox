@@ -1,3 +1,4 @@
+export const REX_INSTALL_SCRIPT = `
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { chmod, mkdir, mkdtemp, rename, rm } from "node:fs/promises";
@@ -8,32 +9,31 @@ async function download(url) {
   const response = await fetch(url);
 
   if (!response.ok) {
-    throw new Error(`Download failed with HTTP ${response.status} for ${url}`);
+    throw new Error(\`Download failed with HTTP \${response.status} for \${url}\`);
   }
 
   return response;
 }
 
-const arch = process.arch === "x64" ? "amd64" : process.arch;
-const filename = `rex-linux-${arch}.tar.gz`;
-
 if (process.platform !== "linux") {
   throw new Error("This Rex installer requires Linux");
 }
 
+const arch = process.arch === "x64" ? "amd64" : process.arch;
+const filename = \`rex-linux-\${arch}.tar.gz\`;
 const release = await download("https://blob.superlogical.com/api/releases/rex/preview");
 const { artifacts } = await release.json();
 const artifact = artifacts.find((entry) => entry.filename === filename);
 
 if (!artifact) {
-  throw new Error(`Rex release is missing ${filename}`);
+  throw new Error(\`Rex release is missing \${filename}\`);
 }
 
 const response = await download(artifact.downloadUrl);
 const archive = Buffer.from(await response.arrayBuffer());
 
 if (createHash("sha256").update(archive).digest("hex") !== artifact.sha256) {
-  throw new Error(`Checksum mismatch for ${filename}`);
+  throw new Error(\`Checksum mismatch for \${filename}\`);
 }
 
 const bin = join(homedir(), ".local", "bin");
@@ -51,3 +51,4 @@ try {
 } finally {
   await rm(tmp, { recursive: true, force: true });
 }
+`.trim();

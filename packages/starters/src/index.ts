@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import {
   starterSchema,
@@ -7,6 +6,7 @@ import {
   type StarterCliInstall,
   type StarterInput,
 } from "@tetherbox/core";
+import { REX_INSTALL_SCRIPT } from "./install-rex.ts";
 
 type StarterSecretInput = NonNullable<StarterInput["secrets"]>[number];
 
@@ -31,7 +31,7 @@ function npmUserInstall(packageName: string, postInstall?: string): StarterCliIn
 
   return {
     description: `Install ${packageName} into ~/.local`,
-    command: ["sh", "-c", postInstall !== undefined ? `${base} && ${postInstall}` : base],
+    command: ["sh", "-c", postInstall !== undefined ? `${base} && { ${postInstall}; }` : base],
   };
 }
 
@@ -52,15 +52,13 @@ const GH_USER_INSTALL_SCRIPT = [
   'install -m 0755 "$TMP/gh_${VER}_${OS}_${ARCH}/bin/gh" "$HOME/.local/bin/gh"',
 ].join("; ");
 
-const SYSTEM_CHROMIUM = "/usr/bin/chromium";
-
 const USE_SYSTEM_CHROMIUM_SCRIPT = [
   'const fs = require("node:fs"), path = require("node:path");',
   'const file = path.join(process.env.HOME, ".agent-browser", "config.json");',
   "let config = {};",
   'try { config = JSON.parse(fs.readFileSync(file, "utf8")); } catch (error) { if (error.code !== "ENOENT") throw error; }',
   'if (!config || typeof config !== "object" || Array.isArray(config)) throw new Error("Expected an object in " + file);',
-  `config.executablePath = "${SYSTEM_CHROMIUM}";`,
+  "config.executablePath = process.argv[1];",
   "fs.mkdirSync(path.dirname(file), { recursive: true });",
   'fs.writeFileSync(file, JSON.stringify(config, null, 2) + "\\n");',
 ].join(" ");
@@ -95,7 +93,7 @@ const builtinStarters = [
       install: {
         ...npmUserInstall(
           "agent-browser",
-          `if [ -x ${SYSTEM_CHROMIUM} ]; then node -e '${USE_SYSTEM_CHROMIUM_SCRIPT}'; else "$HOME/.local/bin/agent-browser" install; fi`,
+          `CHROMIUM=$(command -v chromium || command -v chromium-browser || true); if [ -n "$CHROMIUM" ]; then node -e '${USE_SYSTEM_CHROMIUM_SCRIPT}' "$CHROMIUM"; else "$HOME/.local/bin/agent-browser" install; fi`,
         ),
         description:
           "Install agent-browser into ~/.local and use the system Chromium, or download one when none is installed",
@@ -128,12 +126,7 @@ const builtinStarters = [
       binary: "rex",
       install: {
         description: "Install the Rex remote client into ~/.local/bin",
-        command: [
-          "node",
-          "--input-type=module",
-          "-e",
-          readFileSync(new URL("../scripts/install-rex.mjs", import.meta.url), "utf8"),
-        ],
+        command: ["node", "--input-type=module", "-e", REX_INSTALL_SCRIPT],
       },
     },
     configFields: [

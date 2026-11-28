@@ -15,4 +15,3 @@
 !packages/starters/tsconfig.json
 !packages/starters/tsdown.config.ts
 !packages/starters/src/**
-!packages/starters/scripts/**
