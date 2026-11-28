@@ -107,16 +107,6 @@ function extractAssistantBlocks(
   return blocks;
 }
 
-function findLastUserIndex(items: readonly DisplayItem[]): number {
-  for (let index = items.length - 1; index >= 0; index--) {
-    if (items[index]?.kind === "user") {
-      return index;
-    }
-  }
-
-  return -1;
-}
-
 export function buildDisplayItems(
   entries: readonly TranscriptEntry[],
   liveTurn: LiveTurnState | undefined,
@@ -153,7 +143,7 @@ export function buildDisplayItems(
 
   const items: DisplayItem[] = [];
   let persistedUserInLiveTurn = false;
-  let persistedAssistantInLiveTurn = 0;
+  let persistedStepCount = 0;
 
   entries.forEach((entry, index) => {
     if (entry.type !== "message" || !isRecord(entry.message)) {
@@ -162,8 +152,7 @@ export function buildDisplayItems(
 
     const message = entry.message;
     const id = entry.id ?? `entry-${index}`;
-    const afterBaseline =
-      liveTurn?.baselineEntryCount !== undefined && index >= liveTurn.baselineEntryCount;
+    const afterBaseline = liveTurn !== undefined && index >= liveTurn.baselineEntryCount;
 
     if (message.role === "user") {
       const text = extractTextContent(message.content);
@@ -186,29 +175,14 @@ export function buildDisplayItems(
         items.push({ kind: "assistant", id, blocks });
 
         if (afterBaseline) {
-          persistedAssistantInLiveTurn += 1;
+          persistedStepCount += 1;
         }
       }
     }
   });
 
   if (liveTurn !== undefined) {
-    let hasPersistedUser = persistedUserInLiveTurn;
-    let persistedStepCount = persistedAssistantInLiveTurn;
-
-    if (liveTurn.baselineEntryCount === undefined && liveTurn.triggerText !== undefined) {
-      const lastUserIndex = findLastUserIndex(items);
-      const lastUser = lastUserIndex === -1 ? undefined : items[lastUserIndex];
-
-      if (lastUser?.kind === "user" && lastUser.text === liveTurn.triggerText) {
-        hasPersistedUser = true;
-        persistedStepCount = items
-          .slice(lastUserIndex + 1)
-          .filter((item) => item.kind === "assistant").length;
-      }
-    }
-
-    if (liveTurn.triggerText !== undefined && !hasPersistedUser) {
+    if (liveTurn.triggerText !== undefined && !persistedUserInLiveTurn) {
       items.push({
         kind: "user",
         id: `live-user-${liveTurn.runId}`,

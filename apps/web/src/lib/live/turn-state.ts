@@ -22,7 +22,7 @@ export interface LiveAssistantStep {
 export interface LiveTurnState {
   runId: RunId;
   triggerText?: string;
-  baselineEntryCount?: number;
+  baselineEntryCount: number;
   steps: LiveAssistantStep[];
 }
 
@@ -97,9 +97,12 @@ export function applyTurnEventToState(
   previous: LiveTurnState | undefined,
   runId: RunId,
   event: TurnStreamEvent,
-): LiveTurnState {
-  const current: LiveTurnState =
-    previous !== undefined && previous.runId === runId ? previous : { runId, steps: [] };
+): LiveTurnState | undefined {
+  if (previous?.runId !== runId) {
+    return previous;
+  }
+
+  const current = previous;
 
   switch (event.kind) {
     case "thinking_delta":

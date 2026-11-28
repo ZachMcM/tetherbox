@@ -39,7 +39,8 @@ export function sessionTitleFromText(text: string): string {
   return `${compact.slice(0, MAX_SESSION_TITLE_CHARS - 1).trimEnd()}…`;
 }
 
-export type LiveRunEvent = Extract<DaemonEvent, { kind: "turn_started" | "turn_event" }>;
+type LiveRunEvent = Extract<DaemonEvent, { kind: "turn_started" | "turn_event" }>;
+type TurnEventMessage = Extract<DaemonEvent, { kind: "turn_event" }>;
 
 function mergeDeltas(
   previous: TurnStreamEvent,
@@ -114,7 +115,9 @@ export class TurnRunner {
   }
 
   liveRunEvents(): LiveRunEvent[] {
-    return [...this.#liveEvents.values()].flat();
+    return [...this.#liveEvents.values()]
+      .flat()
+      .filter((event) => !this.#deletedSessions.has(event.sessionId));
   }
 
   enqueue(
@@ -439,14 +442,17 @@ export class TurnRunner {
       this.#runsById.set(runId, run);
       started = true;
       this.#setSessionStatus(sessionId, "running", null);
-      this.#emitLive({
+      const turnStarted: LiveRunEvent = {
         kind: "turn_started",
         profileId,
         sessionId,
         runId,
         trigger,
         baselineEntryCount,
-      });
+      };
+
+      this.#liveEvents.set(runId, [turnStarted]);
+      events.emit(turnStarted);
 
       await runAgent(
         config.agent,
@@ -466,7 +472,7 @@ export class TurnRunner {
           signal: controller.signal,
           onEvent: (event) => {
             if (!this.#deletedSessions.has(sessionId)) {
-              this.#emitLive({ kind: "turn_event", profileId, sessionId, runId, event });
+              this.#emitTurnEvent({ kind: "turn_event", profileId, sessionId, runId, event });
             }
           },
         },
@@ -509,21 +515,37 @@ export class TurnRunner {
     }
   }
 
-  #emitLive(event: LiveRunEvent): void {
-    const buffered = this.#liveEvents.get(event.runId) ?? [];
+  #emitTurnEvent(event: TurnEventMessage): void {
+    const buffered = this.#liveEvents.get(event.runId);
+
+    if (buffered === undefined) {
+      return;
+    }
+
     const last = buffered.at(-1);
-    const merged =
-      event.kind === "turn_event" && last?.kind === "turn_event"
-        ? mergeDeltas(last.event, event.event)
-        : undefined;
+    const merged = last?.kind === "turn_event" ? mergeDeltas(last.event, event.event) : undefined;
 
     if (last?.kind === "turn_event" && merged !== undefined) {
       buffered[buffered.length - 1] = { ...last, event: merged };
     } else {
+      const update = event.event;
+
+      if (update.kind === "tool_update") {
+        const superseded = buffered.findIndex(
+          (entry) =>
+            entry.kind === "turn_event" &&
+            entry.event.kind === "tool_update" &&
+            entry.event.toolCallId === update.toolCallId,
+        );
+
+        if (superseded !== -1) {
+          buffered.splice(superseded, 1);
+        }
+      }
+
       buffered.push(event);
     }
 
-    this.#liveEvents.set(event.runId, buffered);
     this.#deps.events.emit(event);
   }
 

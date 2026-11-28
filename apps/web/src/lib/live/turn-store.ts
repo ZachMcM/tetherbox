@@ -9,15 +9,13 @@ const { subscribe, emit } = createListenerSet();
 export function startTurn(
   sessionId: string,
   runId: RunId,
-  options: { triggerText?: string; baselineEntryCount?: number },
+  options: { triggerText?: string; baselineEntryCount: number },
 ): void {
   turns.set(sessionId, {
     runId,
     steps: [],
+    baselineEntryCount: options.baselineEntryCount,
     ...(options.triggerText !== undefined ? { triggerText: options.triggerText } : {}),
-    ...(options.baselineEntryCount !== undefined
-      ? { baselineEntryCount: options.baselineEntryCount }
-      : {}),
   });
   emit();
 }
@@ -26,7 +24,7 @@ export function applyTurnEvent(sessionId: string, runId: RunId, event: TurnStrea
   const previous = turns.get(sessionId);
   const next = applyTurnEventToState(previous, runId, event);
 
-  if (next !== previous) {
+  if (next !== undefined && next !== previous) {
     turns.set(sessionId, next);
     emit();
   }
