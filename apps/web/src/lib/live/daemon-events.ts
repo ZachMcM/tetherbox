@@ -113,8 +113,9 @@ export function useDaemonEvents(enabled: boolean): void {
     let checkingAuth = false;
 
     const onConnected = () => {
+      clearAllTurns();
+
       if (hasConnectedOnce) {
-        clearAllTurns();
         void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
         void queryClient.invalidateQueries({ queryKey: queryKeys.profiles });
         void queryClient.invalidateQueries({ queryKey: queryKeys.cliStatus });
