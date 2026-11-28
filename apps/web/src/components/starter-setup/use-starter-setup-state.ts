@@ -1,9 +1,13 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { secretsQueryOptions, startersQueryOptions } from "../../lib/queries.ts";
+import {
+  cliStatusQueryOptions,
+  oauthStatusQueryOptions,
+  secretsQueryOptions,
+  startersQueryOptions,
+} from "../../lib/queries.ts";
 import { useCliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import { getStarterReadiness, type StarterReadiness } from "../../lib/starter-readiness.ts";
-import { cliStatusQueryOptions, oauthStatusQueryOptions } from "../../lib/queries.ts";
 
 export function useStarterSetupState() {
   const startersQuery = useQuery(startersQueryOptions);

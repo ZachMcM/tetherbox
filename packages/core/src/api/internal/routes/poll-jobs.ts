@@ -1,12 +1,12 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { z } from "zod";
-import { entryNameSchema, type EntryName } from "../../../ids.ts";
+import type { EntryName } from "../../../ids.ts";
 import {
   registerPollJobInputSchema,
   type RegisteredPollJob,
   type RegisterPollJobInput,
 } from "../../../poll.ts";
+import { entryNameParam } from "../../params.ts";
 import type { InternalEnv, RunContext } from "../run-context.ts";
 
 export interface PollJobHandlers {
@@ -21,9 +21,7 @@ export function createPollJobRoutes(handlers: PollJobHandlers) {
       c.json(await handlers.register(c.get("run"), c.req.valid("json"))),
     )
     .get("/rpc/poll-jobs", (c) => c.json({ jobs: handlers.list(c.get("run")) }))
-    .delete(
-      "/rpc/poll-jobs/:name",
-      zValidator("param", z.object({ name: entryNameSchema })),
-      async (c) => c.json(await handlers.cancel(c.get("run"), c.req.valid("param").name)),
+    .delete("/rpc/poll-jobs/:name", zValidator("param", entryNameParam), async (c) =>
+      c.json(await handlers.cancel(c.get("run"), c.req.valid("param").name)),
     );
 }

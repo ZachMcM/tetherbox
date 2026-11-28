@@ -16,7 +16,7 @@ export interface TrackedRun<S extends { status: string }> {
  * Holds CLI child processes the web app watches. Output updates are throttled into daemon events,
  * and settled runs are pruned after a TTL so late polls can still read the final state.
  */
-export class TrackedRuns<S extends { status: string }, R extends TrackedRun<S>> {
+export class TrackedRuns<R extends TrackedRun<{ status: string }>> {
   readonly #runs = new Map<string, R>();
   readonly #events: DaemonEventBus;
   readonly #toEvent: (run: R) => DaemonEvent;

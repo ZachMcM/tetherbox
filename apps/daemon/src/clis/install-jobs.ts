@@ -10,11 +10,11 @@ const INSTALL_TIMEOUT_MS = 5 * 60_000;
 
 type InstallJob = TrackedRun<CliInstallJobState>;
 
-/** Installs starter CLIs in user space (under `~/.local`) as the agent user. */
+/** Installs into the agent user's home (`~/.local`), so no root or SSH session is needed. */
 export class CliInstallJobs {
   readonly #runner: AgentProcessRunner;
   readonly #catalog: StarterCatalog;
-  readonly #jobs: TrackedRuns<CliInstallJobState, InstallJob>;
+  readonly #jobs: TrackedRuns<InstallJob>;
 
   constructor({
     runner,

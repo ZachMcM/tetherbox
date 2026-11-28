@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { z } from "zod";
-import { llmProviderSchema, type LlmProvider } from "../../../llm-auth.ts";
+import type { LlmProvider } from "../../../llm-auth.ts";
+import { llmProviderParam } from "../../params.ts";
 import type { InternalEnv, RunContext } from "../run-context.ts";
 
 export interface ProxyHandlers {
@@ -12,7 +12,7 @@ export interface ProxyHandlers {
 export function createProxyRoutes(handlers: ProxyHandlers) {
   return new Hono<InternalEnv>()
     .all("/proxy/*", (c) => handlers.withSecret(c.get("run"), c.req.raw))
-    .all("/llm/:provider/*", zValidator("param", z.object({ provider: llmProviderSchema })), (c) =>
+    .all("/llm/:provider/*", zValidator("param", llmProviderParam), (c) =>
       handlers.llm(c.get("run"), c.req.valid("param").provider, c.req.raw),
     );
 }

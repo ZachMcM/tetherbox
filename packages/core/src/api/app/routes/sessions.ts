@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { profileIdSchema, type ProfileId, type SessionId } from "../../../ids.ts";
 import type { SessionRecord, TranscriptEntry } from "../../../session.ts";
-import { profileIdParam, sessionIdParam } from "../params.ts";
+import { profileIdParam, sessionIdParam } from "../../params.ts";
 import {
   createSessionInputSchema,
   sendSessionMessageInputSchema,

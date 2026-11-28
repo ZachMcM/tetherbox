@@ -72,7 +72,6 @@ async function inspectCli(runner: AgentProcessRunner, cli: StarterCli): Promise<
   };
 }
 
-/** Reports whether each starter CLI is installed and logged in for the agent user. */
 export class CliStatusProbe {
   readonly #runner: AgentProcessRunner;
   readonly #catalog: StarterCatalog;

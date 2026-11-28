@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { CliAuthFlowState, CliInstallJobState } from "../../../cli.ts";
-import { starterIdParam } from "../params.ts";
+import { starterIdParam } from "../../params.ts";
 import { cliAuthRespondInputSchema, type StarterCliStatusEntry } from "../schemas.ts";
 
 export interface CliHandlers {

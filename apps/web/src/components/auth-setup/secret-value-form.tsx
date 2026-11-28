@@ -1,56 +1,13 @@
 import { useId, useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import {
-  formatSecretInjection,
-  hostnameSchema,
-  type SecretBinding,
-  type SecretKey,
-  type StarterConfig,
-  type StarterSecret,
-} from "@tetherbox/core/app";
+import { type SecretBinding, type SecretKey } from "@tetherbox/core/app";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { appClient, unwrapJson } from "../../lib/api.ts";
-import { describeSecretBinding } from "../../lib/auth-status.ts";
 import { invalidateSecretQueries } from "../../lib/queries.ts";
 
-export function domainFromStarterConfig(
-  starterConfig: StarterConfig,
-  ref: { readonly starterId: string; readonly key: string } | undefined,
-): string {
-  if (ref === undefined) {
-    return "";
-  }
-
-  const rawUrl = starterConfig[ref.starterId]?.[ref.key];
-
-  if (rawUrl === undefined) {
-    return "";
-  }
-
-  const parsed = URL.parse(rawUrl);
-
-  if (parsed === null) {
-    return "";
-  }
-
-  const host = parsed.hostname.toLowerCase();
-
-  return hostnameSchema.safeParse(host).success ? host : "";
-}
-
-export function describeStarterSecretBinding(secret: StarterSecret, derivedDomain: string): string {
-  if (secret.kind === "fixed") {
-    return describeSecretBinding(secret.binding);
-  }
-
-  const hostLabel = derivedDomain !== "" ? derivedDomain : secret.domainPlaceholder;
-
-  return `${hostLabel} (${formatSecretInjection(secret.inject)})`;
-}
-
-type SecretValueBinding = SecretBinding | { kind: "invalid"; message: string };
+export type SecretValueBinding = SecretBinding | { kind: "invalid"; message: string };
 
 export function SecretValueForm({
   secretKey,
@@ -125,16 +82,4 @@ export function SecretValueForm({
       {mutation.error !== null && <FieldError>{mutation.error.message}</FieldError>}
     </form>
   );
-}
-
-export function starterSecretBinding(secret: StarterSecret, domain: string): SecretValueBinding {
-  if (secret.kind === "fixed") {
-    return secret.binding;
-  }
-
-  const normalized = domain.trim().toLowerCase();
-
-  return hostnameSchema.safeParse(normalized).success
-    ? { kind: "proxy", domains: [normalized], inject: secret.inject }
-    : { kind: "invalid", message: "Enter a valid hostname without scheme or path." };
 }

@@ -8,8 +8,8 @@ import {
   type StarterConfig,
   type StarterSecret,
   type StarterSummary,
+  type CliInstallJobState,
 } from "@tetherbox/core/app";
-import type { CliInstallJobState } from "@tetherbox/core/app";
 
 export const STARTER_CATEGORY_ORDER: readonly { category: StarterCategory; label: string }[] = [
   { category: "integration", label: "Integrations" },

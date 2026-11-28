@@ -1,6 +1,6 @@
 export * from "./agent-command.ts";
 export * from "./api/app/client.ts";
-export * from "./api/app/origin.ts";
+export { parseForwardedProto } from "./api/app/origin.ts";
 export * from "./api/app/routes/index.ts";
 export * from "./api/app/schemas.ts";
 export * from "./api/errors.ts";

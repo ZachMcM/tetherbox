@@ -2,7 +2,7 @@ import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { SecretKey } from "../../../ids.ts";
 import type { SecretListEntry } from "../../../secrets.ts";
-import { secretKeyParam } from "../params.ts";
+import { secretKeyParam } from "../../params.ts";
 import { setSecretInputSchema, type SetSecretInput } from "../schemas.ts";
 
 export interface SecretHandlers {

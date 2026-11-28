@@ -32,11 +32,10 @@ function hasActivity(flow: AuthFlow): boolean {
   );
 }
 
-/** Runs starter CLI login commands in a PTY as the agent user and relays prompts to the web app. */
 export class CliAuthFlows {
   readonly #runner: AgentProcessRunner;
   readonly #catalog: StarterCatalog;
-  readonly #flows: TrackedRuns<CliAuthFlowState, AuthFlow>;
+  readonly #flows: TrackedRuns<AuthFlow>;
 
   constructor({
     runner,
@@ -81,6 +80,8 @@ export class CliAuthFlows {
   }
 
   respond(flowId: string, value: string): CliAuthFlowState {
+    this.#flows.prune();
+
     const flow = this.#require(flowId);
 
     if (flow.state.status !== "running") {
@@ -98,6 +99,8 @@ export class CliAuthFlows {
   }
 
   cancel(flowId: string): { cancelled: boolean } {
+    this.#flows.prune();
+
     const flow = this.#flows.get(flowId);
 
     if (flow === undefined) {
@@ -225,7 +228,7 @@ export class CliAuthFlows {
       writeChildStdin(flow.child, "\n");
     }
 
-    flow.state = { ...flow.state, status: "running", events, output, prompt, error: null };
+    flow.state = { ...flow.state, events, output, prompt };
 
     if (events.length !== prevEventCount || prompt !== prevPrompt) {
       this.#flows.emitNow(flow);

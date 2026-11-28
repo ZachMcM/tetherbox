@@ -17,10 +17,6 @@ function cancelFlowRequest(flowId: string) {
   return appClient.llm.oauth.flows[":flowId"].cancel.$post({ param: { flowId } });
 }
 
-/**
- * Drives one LLM provider OAuth sign-in: starts, polls, and cancels the daemon flow, opens the
- * auth URL once, and cancels a pending flow when the panel unmounts.
- */
 export function useLlmOAuthFlow(provider: LlmProviderStatus) {
   const queryClient = useQueryClient();
   const [flow, setFlow] = useState<LlmOAuthFlowState | null>(null);

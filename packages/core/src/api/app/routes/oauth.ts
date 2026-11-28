@@ -7,7 +7,7 @@ import {
   type OAuthStatusEntry,
 } from "../../../oauth.ts";
 import { requestOrigin } from "../origin.ts";
-import { oauthPresetParam } from "../params.ts";
+import { oauthPresetParam } from "../../params.ts";
 import {
   startPresetOAuthInputSchema,
   type OAuthPresetSummary,

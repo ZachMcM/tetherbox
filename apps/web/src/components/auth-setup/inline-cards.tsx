@@ -1,17 +1,69 @@
 import { useState } from "react";
-import type { OAuthPresetSummary, StarterConfig, StarterSecret } from "@tetherbox/core/app";
+import {
+  formatSecretInjection,
+  hostnameSchema,
+  type OAuthPresetSummary,
+  type StarterConfig,
+  type StarterSecret,
+} from "@tetherbox/core/app";
 import { CheckCircle2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Field, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
-import { describePresetLogin, type PresetLogin } from "../../lib/auth-status.ts";
-import { OAuthPresetConnectForm, OAuthPresetCredentialsForm } from "./oauth-preset-forms.tsx";
 import {
-  describeStarterSecretBinding,
-  domainFromStarterConfig,
-  SecretValueForm,
-  starterSecretBinding,
-} from "./secret-value-form.tsx";
+  describePresetLogin,
+  describeSecretBinding,
+  type PresetLogin,
+} from "../../lib/auth-status.ts";
+import { OAuthPresetConnectForm, OAuthPresetCredentialsForm } from "./oauth-preset-forms.tsx";
+import { SecretValueForm, type SecretValueBinding } from "./secret-value-form.tsx";
+
+function domainFromStarterConfig(
+  starterConfig: StarterConfig,
+  ref: { readonly starterId: string; readonly key: string } | undefined,
+): string {
+  if (ref === undefined) {
+    return "";
+  }
+
+  const rawUrl = starterConfig[ref.starterId]?.[ref.key];
+
+  if (rawUrl === undefined) {
+    return "";
+  }
+
+  const parsed = URL.parse(rawUrl);
+
+  if (parsed === null) {
+    return "";
+  }
+
+  const host = parsed.hostname.toLowerCase();
+
+  return hostnameSchema.safeParse(host).success ? host : "";
+}
+
+function describeStarterSecretBinding(secret: StarterSecret, derivedDomain: string): string {
+  if (secret.kind === "fixed") {
+    return describeSecretBinding(secret.binding);
+  }
+
+  const hostLabel = derivedDomain !== "" ? derivedDomain : secret.domainPlaceholder;
+
+  return `${hostLabel} (${formatSecretInjection(secret.inject)})`;
+}
+
+function starterSecretBinding(secret: StarterSecret, domain: string): SecretValueBinding {
+  if (secret.kind === "fixed") {
+    return secret.binding;
+  }
+
+  const normalized = domain.trim().toLowerCase();
+
+  return hostnameSchema.safeParse(normalized).success
+    ? { kind: "proxy", domains: [normalized], inject: secret.inject }
+    : { kind: "invalid", message: "Enter a valid hostname without scheme or path." };
+}
 
 export function StarterSecretInlineCard({
   secret,

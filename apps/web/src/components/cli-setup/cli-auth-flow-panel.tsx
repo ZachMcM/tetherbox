@@ -12,7 +12,7 @@ import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { CliOutputLog } from "./cli-output-log.tsx";
 import { CliResponseForm } from "./cli-response-form.tsx";
-import { DeviceCodePrompt } from "./device-code-prompt.tsx";
+import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
 import { useCliAuthFlow } from "./use-cli-auth-flow.ts";
 import type { CliInstallRunner } from "./use-cli-install-runner.ts";
 
@@ -178,6 +178,8 @@ export function CliAuthFlowPanel({
               key={activeFlow.id}
               userCode={auth.deviceCode.userCode}
               verificationUri={auth.deviceCode.verificationUri}
+              message="Open the verification page and enter this one-time code:"
+              codeBackground="bg-background"
             />
           ) : auth.authUrl !== undefined ? (
             <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">

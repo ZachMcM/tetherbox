@@ -3,7 +3,7 @@ import { Hono } from "hono";
 import type { LlmOAuthStatusEntry, LlmProvider } from "../../../llm-auth.ts";
 import { modelRefSchema, type ModelRef } from "../../../profile.ts";
 import { requestOrigin } from "../origin.ts";
-import { llmProviderParam } from "../params.ts";
+import { llmProviderParam } from "../../params.ts";
 import {
   llmOAuthRespondInputSchema,
   type LlmModelOption,

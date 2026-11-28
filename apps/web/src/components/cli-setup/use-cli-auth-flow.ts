@@ -14,10 +14,6 @@ function cancelFlowRequest(flowId: string) {
   return appClient.clis.auth.flows[":flowId"].cancel.$post({ param: { flowId } });
 }
 
-/**
- * Drives one CLI login: starts and cancels the daemon flow, opens the auth URL once, relays
- * replies, and cancels a running flow when the panel unmounts.
- */
 export function useCliAuthFlow(entry: StarterCliStatusEntry) {
   const queryClient = useQueryClient();
   const [flowId, setFlowId] = useState<string | null>(null);

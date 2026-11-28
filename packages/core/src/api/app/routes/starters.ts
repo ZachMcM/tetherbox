@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
-import { starterIdParam } from "../params.ts";
+import { starterIdParam } from "../../params.ts";
 import type { StarterSummary } from "../schemas.ts";
 
 export interface StarterHandlers {

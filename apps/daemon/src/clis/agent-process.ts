@@ -75,7 +75,6 @@ export interface SpawnOptions {
   pty?: boolean;
 }
 
-/** Runs commands as the unprivileged agent user, or as the current user in local dev. */
 export class AgentProcessRunner {
   readonly #agentUser: string | undefined;
 

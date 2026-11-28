@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import type { EntryName, ProfileId } from "../../../ids.ts";
-import { profileEntryParam, profileIdParam, profileStarterParam } from "../params.ts";
+import { profileEntryParam, profileIdParam, profileStarterParam } from "../../params.ts";
 import {
   createProfileInputSchema,
   updateMemoryInputSchema,
