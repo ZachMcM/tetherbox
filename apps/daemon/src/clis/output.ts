@@ -11,7 +11,7 @@ const URL_PATTERN = /https:\/\/[^\s"'<>)\]]+/g;
 const DEVICE_CODE_PATTERN =
   /(?:one-time\s+code|enter\s+(?:the\s+)?code|user\s+code)[^\nA-Z0-9]*([A-Z0-9]{4}-[A-Z0-9]{4})/i;
 const PROMPT_LINE_PATTERN =
-  /(?:(?:paste|enter|code|token|url|password|passphrase|confirm)[^\n]*[:?]|(?:\(y\/n\)|\[y\/n\])[:?]?)\s*$/i;
+  /(?:(?:paste|enter|code|token|url|password|passphrase|confirm)[^\n]*[:?>]|(?:\(y\/n\)|\[y\/n\])[:?]?)\s*$/i;
 const INFO_LINK_PREFIX_PATTERN = /(?:read|learn)\s+more(?:\s+at)?[\s:]*$/i;
 const IGNORED_INFO_HOST_PATTERN = /^(?:docs|blog|help|support)\./;
 const IGNORED_INFO_PATH_PATTERN = /^\/(?:changelog|blog|docs|help|releases)(?:\/|$)/;

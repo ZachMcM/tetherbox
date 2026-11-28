@@ -422,11 +422,12 @@ export class StarterCatalog {
   }
 
   summaries(): StarterSummary[] {
-    return this.all().map(({ cli, ...starter }) => ({
+    return this.all().map(({ cli, connectionCheck, ...starter }) => ({
       ...starter,
       ...(cli !== undefined
         ? { cli: { binary: cli.binary, hasAuth: cli.auth !== undefined } }
         : {}),
+      hasConnectionCheck: connectionCheck !== undefined,
     }));
   }
 }

@@ -1,3 +1,10 @@
+import {
+  CodeBlock,
+  CodeBlockActions,
+  CodeBlockContent,
+  CodeBlockCopyButton,
+} from "@tetherbox/ui/components/code-block";
+
 const variantClasses = {
   log: "max-h-36",
   error: "max-h-32",
@@ -18,10 +25,13 @@ export function CliOutputLog({
   }
 
   return (
-    <pre
-      className={`${variantClasses[variant]} overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[11px] whitespace-pre-wrap text-muted-foreground`}
-    >
-      {trimmed}
-    </pre>
+    <CodeBlock size="sm" variant={variant === "error" ? "destructive" : "default"}>
+      <CodeBlockActions>
+        <CodeBlockCopyButton value={trimmed} />
+      </CodeBlockActions>
+      <CodeBlockContent wrap className={variantClasses[variant]}>
+        {trimmed}
+      </CodeBlockContent>
+    </CodeBlock>
   );
 }

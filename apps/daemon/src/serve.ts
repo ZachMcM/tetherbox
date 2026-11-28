@@ -148,6 +148,7 @@ export async function serveDaemon(
       cliStatus,
       cliInstalls,
       cliAuthFlows,
+      agentRunner,
       catalog,
       shutdownSignal: shutdownController.signal,
     }).fetch,

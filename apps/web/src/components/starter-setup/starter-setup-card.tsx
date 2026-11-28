@@ -8,12 +8,57 @@ import {
 } from "@tetherbox/core/app";
 import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
+import { Spinner } from "@tetherbox/ui/components/spinner";
 import { type CliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import { StarterIcon } from "../starter-icons.tsx";
 import { isStarterConfigValid, type StarterReadiness } from "../../lib/starter-readiness.ts";
 import { StarterBadges } from "./starter-badges.tsx";
-import { StarterConfigFields } from "./starter-config-fields.tsx";
+import { StarterConfigFields, type StarterConnectionState } from "./starter-config-fields.tsx";
 import { StarterVmSetupPanels } from "./starter-vm-setup-panels.tsx";
+
+function StarterSetupStatusBadge({
+  readiness,
+  starter,
+  allReady,
+  connectionState,
+}: {
+  readiness: StarterReadiness;
+  starter: StarterSummary;
+  allReady: boolean;
+  connectionState: StarterConnectionState;
+}) {
+  if (readiness.cliEntry?.status.kind === "error") {
+    return <Badge variant="destructive">Error</Badge>;
+  }
+
+  if (connectionState === "failed") {
+    return <Badge variant="destructive">Connection failed</Badge>;
+  }
+
+  if (connectionState === "checking") {
+    return (
+      <Badge variant="outline" className="gap-1.5">
+        <Spinner className="size-3" />
+        <span>Testing…</span>
+      </Badge>
+    );
+  }
+
+  if (allReady && (!starter.hasConnectionCheck || connectionState === "connected")) {
+    return (
+      <Badge variant="secondary" className="gap-1">
+        <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
+        <span>Ready</span>
+      </Badge>
+    );
+  }
+
+  if (allReady && starter.hasConnectionCheck) {
+    return <Badge variant="outline">Not tested</Badge>;
+  }
+
+  return <Badge variant="outline">Needs setup</Badge>;
+}
 
 export function StarterSetupCard({
   idPrefix,
@@ -25,6 +70,7 @@ export function StarterSetupCard({
   oauthLogins,
   installRunner,
   sharedOAuthProviders,
+  refreshNonce = 0,
   onConfigChange,
 }: {
   idPrefix: string;
@@ -36,12 +82,14 @@ export function StarterSetupCard({
   oauthLogins: readonly OAuthStatusEntry[];
   installRunner: CliInstallRunner;
   sharedOAuthProviders?: ReadonlySet<OAuthProviderId> | undefined;
+  refreshNonce?: number;
   onConfigChange: (starterId: string, fieldKey: string, value: string) => void;
 }) {
   const configReady = isStarterConfigValid(starter, starterConfig);
   const allReady = readiness.isVmReady && configReady;
   const hasConfigFields = starter.configFields.length > 0;
   const [userExpanded, setUserExpanded] = useState<boolean | null>(null);
+  const [connectionState, setConnectionState] = useState<StarterConnectionState>("idle");
   const expanded = userExpanded ?? (!allReady || hasConfigFields);
 
   return (
@@ -62,41 +110,41 @@ export function StarterSetupCard({
           <StarterBadges starter={starter} />
         </div>
 
-        {allReady ? (
-          <Badge variant="secondary" className="gap-1">
-            <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-            <span>Ready</span>
-          </Badge>
-        ) : readiness.cliEntry?.status.kind === "error" ? (
-          <Badge variant="destructive">Error</Badge>
-        ) : (
-          <Badge variant="outline">Needs setup</Badge>
-        )}
+        <StarterSetupStatusBadge
+          readiness={readiness}
+          starter={starter}
+          allReady={allReady}
+          connectionState={connectionState}
+        />
       </button>
 
-      {expanded && (
-        <div className="space-y-4 border-t border-border px-3.5 py-3">
-          {hasConfigFields && (
-            <StarterConfigFields
-              idPrefix={idPrefix}
-              starter={starter}
-              values={starterConfig[starter.id] ?? {}}
-              fieldErrors={fieldErrors}
-              onChange={(fieldKey, value) => onConfigChange(starter.id, fieldKey, value)}
-            />
-          )}
-
-          <StarterVmSetupPanels
+      <div
+        className={expanded ? "space-y-4 border-t border-border px-3.5 py-3" : "hidden"}
+        hidden={!expanded}
+      >
+        {hasConfigFields && (
+          <StarterConfigFields
+            idPrefix={idPrefix}
             starter={starter}
-            readiness={readiness}
-            starterConfig={starterConfig}
-            oauthPresets={oauthPresets}
-            oauthLogins={oauthLogins}
-            installRunner={installRunner}
-            sharedOAuthProviders={sharedOAuthProviders}
+            values={starterConfig[starter.id] ?? {}}
+            fieldErrors={fieldErrors}
+            canTestConnection={!readiness.needsBinaryInstall}
+            refreshNonce={refreshNonce}
+            onConnectionStateChange={setConnectionState}
+            onChange={(fieldKey, value) => onConfigChange(starter.id, fieldKey, value)}
           />
-        </div>
-      )}
+        )}
+
+        <StarterVmSetupPanels
+          starter={starter}
+          readiness={readiness}
+          starterConfig={starterConfig}
+          oauthPresets={oauthPresets}
+          oauthLogins={oauthLogins}
+          installRunner={installRunner}
+          sharedOAuthProviders={sharedOAuthProviders}
+        />
+      </div>
     </div>
   );
 }

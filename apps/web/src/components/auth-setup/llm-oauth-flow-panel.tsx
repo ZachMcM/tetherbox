@@ -1,11 +1,9 @@
-import type { FormEvent } from "react";
 import type { LlmProviderStatus } from "@tetherbox/core/app";
 import { Button } from "@tetherbox/ui/components/button";
-import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
-import { Input } from "@tetherbox/ui/components/input";
+import { FieldError } from "@tetherbox/ui/components/field";
 import { AuthorizationPendingAlert } from "./authorization-pending-alert.tsx";
+import { CodePastePrompt } from "./code-paste-prompt.tsx";
 import { DeviceCodePrompt } from "./device-code-prompt.tsx";
-import { ExternalLink } from "./external-link.tsx";
 import { useLlmOAuthFlow } from "./use-llm-oauth-flow.ts";
 
 export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus }) {
@@ -17,14 +15,6 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
       ? `Connected · expires ${provider.oauthExpires}`
       : "Not connected";
   const connectLabel = provider.oauthExpires !== undefined ? "Reconnect" : "Connect";
-
-  const handlePromptSubmit = (event: FormEvent) => {
-    event.preventDefault();
-
-    if (promptInput.trim() !== "") {
-      oauth.respond(promptInput.trim());
-    }
-  };
 
   return (
     <div className="space-y-3">
@@ -85,36 +75,17 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
               message="Open the verification page and enter this code to finish signing in:"
             />
           ) : activeFlow.status === "waiting_input" && activeFlow.prompt.kind === "text" ? (
-            <div className="space-y-2.5">
-              {authUrl !== undefined && (
-                <ExternalLink href={authUrl}>Open sign-in page</ExternalLink>
-              )}
-              <form onSubmit={handlePromptSubmit}>
-                <Field>
-                  <FieldLabel
-                    htmlFor={`oauth-prompt-${provider.provider}`}
-                    className="text-xs font-normal text-muted-foreground"
-                  >
-                    {activeFlow.prompt.message}
-                  </FieldLabel>
-                  <div className="flex items-center gap-2">
-                    <Input
-                      id={`oauth-prompt-${provider.provider}`}
-                      placeholder={activeFlow.prompt.placeholder}
-                      value={promptInput}
-                      onChange={(event) => oauth.setPromptInput(event.target.value)}
-                      required
-                    />
-                    <Button
-                      type="submit"
-                      disabled={oauth.isResponding || promptInput.trim() === ""}
-                    >
-                      Submit
-                    </Button>
-                  </div>
-                </Field>
-              </form>
-            </div>
+            <CodePastePrompt
+              inputId={`oauth-prompt-${provider.provider}`}
+              title={authUrl !== undefined ? "Paste your sign-in code" : activeFlow.prompt.message}
+              description={authUrl !== undefined ? activeFlow.prompt.message : undefined}
+              placeholder={activeFlow.prompt.placeholder}
+              value={promptInput}
+              pending={oauth.isResponding}
+              authUrl={authUrl}
+              onChange={oauth.setPromptInput}
+              onSubmit={() => oauth.respond(promptInput.trim())}
+            />
           ) : activeFlow.status === "waiting_input" && activeFlow.prompt.kind === "select" ? (
             <div className="space-y-2">
               <div className="text-xs text-muted-foreground">{activeFlow.prompt.message}</div>

@@ -6,10 +6,11 @@ import {
   type OAuthProviderId,
   type OAuthScopeMode,
 } from "@tetherbox/core/app";
-import { CheckIcon, CopyIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
+import { CodeBlockCopyButton } from "@tetherbox/ui/components/code-block";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
+import { InputGroup, InputGroupAddon, InputGroupInput } from "@tetherbox/ui/components/input-group";
 import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/native-select";
 import { appClient, queryKeys, unwrapJson } from "../../lib/api.ts";
 import { openAuthWindow } from "../../lib/auth-window.ts";
@@ -30,7 +31,6 @@ const OAUTH_PROVIDER_SETUP_DOCS: Readonly<Record<OAuthProviderId, { label: strin
 
 export function OAuthRedirectUriField() {
   const inputId = useId();
-  const [copied, setCopied] = useState(false);
   const redirectUri = `${window.location.origin}/api/oauth/callback`;
 
   return (
@@ -38,32 +38,18 @@ export function OAuthRedirectUriField() {
       <FieldLabel htmlFor={inputId} className="text-xs font-normal text-muted-foreground">
         Authorized redirect URI
       </FieldLabel>
-      <div className="flex items-center gap-2">
-        <Input
+      <InputGroup>
+        <InputGroupInput
           id={inputId}
           value={redirectUri}
           readOnly
           className="font-mono text-xs text-muted-foreground"
           onFocus={(event) => event.currentTarget.select()}
         />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            void navigator.clipboard
-              .writeText(redirectUri)
-              .then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              })
-              .catch(() => {});
-          }}
-        >
-          {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-          <span>{copied ? "Copied" : "Copy"}</span>
-        </Button>
-      </div>
+        <InputGroupAddon align="inline-end">
+          <CodeBlockCopyButton value={redirectUri} />
+        </InputGroupAddon>
+      </InputGroup>
     </Field>
   );
 }

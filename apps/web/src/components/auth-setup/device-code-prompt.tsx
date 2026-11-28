@@ -1,7 +1,6 @@
 import { useState } from "react";
-import { CheckIcon, CopyIcon } from "lucide-react";
-import { Button } from "@tetherbox/ui/components/button";
-import { ExternalLink } from "./external-link.tsx";
+import { CheckIcon, CopyIcon, ExternalLinkIcon } from "lucide-react";
+import { Button, buttonVariants } from "@tetherbox/ui/components/button";
 
 export function DeviceCodePrompt({
   userCode,
@@ -14,31 +13,36 @@ export function DeviceCodePrompt({
 }) {
   const [copied, setCopied] = useState(false);
 
+  const copyCode = () => {
+    void navigator.clipboard
+      .writeText(userCode)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => {});
+  };
+
   return (
-    <div className="space-y-2 text-xs">
-      <p className="text-muted-foreground">{message}</p>
-      <div className="flex flex-wrap items-center gap-2">
-        <code className="rounded bg-muted px-2 py-1 font-mono text-sm font-semibold tracking-wider">
-          {userCode}
-        </code>
-        <Button
-          type="button"
-          variant="outline"
-          size="xs"
-          onClick={() => {
-            void navigator.clipboard
-              .writeText(userCode)
-              .then(() => {
-                setCopied(true);
-                setTimeout(() => setCopied(false), 1500);
-              })
-              .catch(() => {});
-          }}
-        >
+    <div className="flex flex-col items-center gap-3 py-4 text-center">
+      <p className="max-w-sm text-xs text-muted-foreground">{message}</p>
+      <code className="select-all rounded-lg bg-muted/70 px-5 py-2.5 font-mono text-2xl font-semibold tracking-[0.2em] text-foreground">
+        {userCode}
+      </code>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={copyCode}>
           {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
-          <span>{copied ? "Copied" : "Copy"}</span>
+          <span>{copied ? "Copied" : "Copy code"}</span>
         </Button>
-        <ExternalLink href={verificationUri}>Open verification page</ExternalLink>
+        <a
+          href={verificationUri}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ size: "sm" })}
+        >
+          <span>Open verification page</span>
+          <ExternalLinkIcon className="size-3.5" />
+        </a>
       </div>
     </div>
   );

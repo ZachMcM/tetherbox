@@ -189,6 +189,7 @@ export function StarterCatalogRow({
                 starter={starter}
                 values={draftFields}
                 fieldErrors={fieldErrors}
+                canTestConnection={!readiness?.needsBinaryInstall}
                 onChange={(fieldKey, value) => {
                   const key = starterFieldKey(starter.id, fieldKey);
                   const nextErrors = { ...fieldErrors };

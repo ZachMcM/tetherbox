@@ -114,6 +114,19 @@ const builtinStarters = [
         placeholder: "workstation.tailnet.ts.net",
       },
     ],
+    connectionCheck: {
+      kind: "command",
+      command: [
+        "ssh",
+        "-o",
+        "BatchMode=yes",
+        "-o",
+        "ConnectTimeout=5",
+        "--",
+        "{{target}}",
+        'PATH="$HOME/.local/bin:/opt/homebrew/bin:/usr/local/bin:$PATH" orca worktree list --json',
+      ],
+    },
     setupNote:
       "Keep either the Orca desktop app or `orca serve` running on your workstation, and ensure `tetherbox-agent` on the VM can SSH into it over Tailscale.",
   },
@@ -138,6 +151,10 @@ const builtinStarters = [
         placeholder: "workstation.tailnet.ts.net",
       },
     ],
+    connectionCheck: {
+      kind: "command",
+      command: ["rex", "-S", "{{target}}", "ls", "--json"],
+    },
   },
   {
     kind: "skill",
@@ -159,6 +176,10 @@ const builtinStarters = [
         placeholder: "workstation.tailnet.ts.net:6767",
       },
     ],
+    connectionCheck: {
+      kind: "command",
+      command: ["paseo", "--host", "{{host}}", "ls"],
+    },
   },
   {
     kind: "skill",
@@ -177,6 +198,10 @@ const builtinStarters = [
         placeholder: "http://workstation.tailnet.ts.net:4096",
       },
     ],
+    connectionCheck: {
+      kind: "http",
+      urlField: "serverUrl",
+    },
     setupNote:
       "Keep `opencode serve` running on your workstation over Tailscale (for example via launchd on macOS or systemd --user on Linux) so Tetherbox can reach it.",
   },
@@ -207,6 +232,10 @@ const builtinStarters = [
         placeholder: "https://<environment-host>/mcp",
       },
     ],
+    connectionCheck: {
+      kind: "http",
+      urlField: "endpointUrl",
+    },
     secrets: [
       promptDomainProxySecret({
         key: "T3CODE_TOKEN",
@@ -286,6 +315,10 @@ const builtinStarters = [
         placeholder: "my-org",
       },
     ],
+    connectionCheck: {
+      kind: "http",
+      urlField: "apiBaseUrl",
+    },
     secrets: [
       promptDomainProxySecret({
         key: "SENTRY_AUTH_TOKEN",
@@ -308,6 +341,10 @@ const builtinStarters = [
         placeholder: "https://your-site.atlassian.net",
       },
     ],
+    connectionCheck: {
+      kind: "http",
+      urlField: "siteUrl",
+    },
     secrets: [
       promptDomainProxySecret({
         key: "JIRA_AUTH",

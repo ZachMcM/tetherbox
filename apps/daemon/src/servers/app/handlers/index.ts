@@ -1,4 +1,5 @@
 import type { AppApiHandlers } from "@tetherbox/core";
+import type { AgentProcessRunner } from "../../../clis/agent-process.ts";
 import type { CliAuthFlows } from "../../../clis/auth-flows.ts";
 import type { CliInstallJobs } from "../../../clis/install-jobs.ts";
 import type { CliStatusProbe } from "../../../clis/status.ts";
@@ -43,6 +44,7 @@ export interface AppHandlerDeps {
   cliStatus: CliStatusProbe;
   cliInstalls: CliInstallJobs;
   cliAuthFlows: CliAuthFlows;
+  agentRunner: AgentProcessRunner;
   catalog: StarterCatalog;
 }
 

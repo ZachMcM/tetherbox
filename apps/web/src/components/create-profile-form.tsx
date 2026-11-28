@@ -53,6 +53,7 @@ export function CreateProfileForm({
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<"select" | "prepare">("select");
   const [prepareStarterIds, setPrepareStarterIds] = useState<string[]>([]);
+  const [refreshNonce, setRefreshNonce] = useState(0);
 
   const {
     starters,
@@ -356,7 +357,10 @@ export function CreateProfileForm({
                   type="button"
                   variant="ghost"
                   size="xs"
-                  onClick={refreshStatus}
+                  onClick={() => {
+                    refreshStatus();
+                    setRefreshNonce((prev) => prev + 1);
+                  }}
                   disabled={isRefreshing}
                 >
                   <RefreshCwIcon className="size-3.5" />
@@ -383,6 +387,7 @@ export function CreateProfileForm({
                     oauthLogins={oauthLogins}
                     installRunner={installRunner}
                     sharedOAuthProviders={sharedOAuthProviders}
+                    refreshNonce={refreshNonce}
                     onConfigChange={updateStarterField}
                   />
                 );

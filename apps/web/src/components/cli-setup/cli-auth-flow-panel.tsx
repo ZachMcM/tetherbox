@@ -5,6 +5,7 @@ import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { AuthorizationPendingAlert } from "../auth-setup/authorization-pending-alert.tsx";
+import { CodePastePrompt } from "../auth-setup/code-paste-prompt.tsx";
 import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
 import { CliOutputLog } from "./cli-output-log.tsx";
 import { CliResponseForm } from "./cli-response-form.tsx";
@@ -175,13 +176,34 @@ export function CliAuthFlowPanel({
               verificationUri={auth.deviceCode.verificationUri}
               message="Open the verification page and enter this one-time code:"
             />
+          ) : activeFlow.prompt !== null ? (
+            <CodePastePrompt
+              inputId={`cli-auth-input-${entry.starterId}`}
+              title={
+                auth.authUrl !== undefined
+                  ? "Paste your sign-in code"
+                  : activeFlow.prompt.replace(/\s*[:?>]\s*$/, "")
+              }
+              description={
+                auth.authUrl !== undefined
+                  ? "After authorizing in the browser, paste the code below to finish signing in."
+                  : undefined
+              }
+              placeholder={auth.authUrl !== undefined ? "Paste code from browser" : "Enter reply"}
+              value={auth.responseInput}
+              pending={auth.isResponding}
+              authUrl={auth.authUrl}
+              requireValue={false}
+              onChange={auth.setResponseInput}
+              onSubmit={auth.respond}
+            />
           ) : auth.authUrl !== undefined ? (
             <AuthorizationPendingAlert url={auth.authUrl} message="Waiting for browser sign-in…" />
           ) : (
             <AuthorizationPendingAlert message={`Waiting for ${entry.binary} sign-in prompt…`} />
           )}
 
-          {(activeFlow.prompt !== null || auth.showOutput) && (
+          {activeFlow.prompt === null && auth.showOutput && (
             <CliResponseForm
               inputId={`cli-auth-input-${entry.starterId}`}
               prompt={activeFlow.prompt}

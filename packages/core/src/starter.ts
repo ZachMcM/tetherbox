@@ -64,6 +64,21 @@ export type StarterSecret = z.infer<typeof starterSecretSchema>;
 
 const commandSchema = z.tuple([z.string().min(1)], z.string());
 
+export const starterConnectionCheckSchema = z.discriminatedUnion("kind", [
+  z.object({
+    kind: z.literal("command"),
+    command: commandSchema,
+  }),
+  z.object({
+    kind: z.literal("http"),
+    urlField: z.string().min(1),
+    path: z.string().startsWith("/").optional(),
+  }),
+]);
+export type StarterConnectionCheck = z.infer<typeof starterConnectionCheckSchema>;
+
+export const CONFIG_PLACEHOLDER_PATTERN = /\{\{([A-Za-z0-9_-]+)\}\}/g;
+
 export const starterCliSchema = z.object({
   binary: z.string().regex(/^[A-Za-z0-9._-]+$/),
   install: z
@@ -96,6 +111,7 @@ export const starterSchema = z
     oauthPreset: oauthPresetSchema.optional(),
     cli: starterCliSchema.optional(),
     configFields: z.array(starterConfigFieldSchema).default([]),
+    connectionCheck: starterConnectionCheckSchema.optional(),
     setupNote: z.string().min(1).optional(),
   })
   .superRefine((starter, ctx) => {
@@ -115,6 +131,36 @@ export const starterSchema = z
           path: ["secrets", index, "fromConfigUrl"],
           message: "must name one of this starter's config fields",
         });
+      }
+    }
+
+    const check = starter.connectionCheck;
+
+    if (check !== undefined) {
+      if (check.kind === "http") {
+        const urlField = starter.configFields.find((field) => field.key === check.urlField);
+
+        if (urlField === undefined || urlField.kind !== "url") {
+          ctx.addIssue({
+            code: "custom",
+            path: ["connectionCheck", "urlField"],
+            message: 'must name one of this starter\'s "url" config fields',
+          });
+        }
+      } else {
+        for (const [index, arg] of check.command.entries()) {
+          for (const match of arg.matchAll(CONFIG_PLACEHOLDER_PATTERN)) {
+            const key = match[1];
+
+            if (key !== undefined && !configKeys.has(key)) {
+              ctx.addIssue({
+                code: "custom",
+                path: ["connectionCheck", "command", index],
+                message: `placeholder "{{${key}}}" must name one of this starter's config fields`,
+              });
+            }
+          }
+        }
       }
     }
   });

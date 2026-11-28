@@ -94,6 +94,13 @@ export const cliAuthRespondInputSchema = z.object({
 });
 export type CliAuthRespondInput = z.infer<typeof cliAuthRespondInputSchema>;
 
+export const checkStarterConnectionInputSchema = z.object({
+  config: z.record(z.string(), z.string()),
+});
+export type CheckStarterConnectionInput = z.infer<typeof checkStarterConnectionInputSchema>;
+
+export type StarterConnectionCheckResult = { ok: true } | { ok: false; error: string };
+
 export interface ProfileCronSummary {
   name: EntryName;
   job: CronJob;
@@ -125,9 +132,10 @@ export interface ProfileDetail {
   starterUpdates: string[];
 }
 
-export type StarterSummary = Omit<Starter, "cli"> & {
+export type StarterSummary = Omit<Starter, "cli" | "connectionCheck"> & {
   source: StarterSource;
   cli?: { binary: string; hasAuth: boolean };
+  hasConnectionCheck: boolean;
 };
 
 export type StarterCliStatus =
