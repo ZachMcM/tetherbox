@@ -20,6 +20,7 @@ export function StarterVmSetupPanels({
   installRunner,
   sharedOAuthProviders,
   showAllClis = false,
+  showStatusBadges = true,
 }: {
   starter: StarterSummary;
   readiness: StarterReadiness | undefined;
@@ -29,6 +30,7 @@ export function StarterVmSetupPanels({
   installRunner: CliInstallRunner;
   sharedOAuthProviders?: ReadonlySet<OAuthProviderId> | undefined;
   showAllClis?: boolean;
+  showStatusBadges?: boolean;
 }) {
   const missingSecretKeys = new Set(readiness?.missingSecrets.map((secret) => secret.key));
   const oauthPreset =
@@ -51,6 +53,7 @@ export function StarterVmSetupPanels({
           secret={secret}
           starterConfig={starterConfig}
           isConfigured={readiness?.isStatusLoaded === true && !missingSecretKeys.has(secret.key)}
+          showStatusBadge={showStatusBadges}
         />
       ))}
 
@@ -59,11 +62,16 @@ export function StarterVmSetupPanels({
           preset={oauthPreset}
           activeLogin={oauthLogin}
           credentialsHandledExternally={sharedOAuthProviders?.has(oauthPreset.provider) === true}
+          showStatusBadge={showStatusBadges}
         />
       )}
 
       {showCliPanel && readiness?.cliEntry !== undefined && (
-        <CliAuthFlowPanel entry={readiness.cliEntry} installRunner={installRunner} />
+        <CliAuthFlowPanel
+          entry={readiness.cliEntry}
+          installRunner={installRunner}
+          showStatusBadge={showStatusBadges}
+        />
       )}
 
       {starter.setupNote !== undefined && (

@@ -153,6 +153,7 @@ export function StarterSetupCard({
           oauthLogins={oauthLogins}
           installRunner={installRunner}
           sharedOAuthProviders={sharedOAuthProviders}
+          showStatusBadges={false}
         />
       </div>
     </div>

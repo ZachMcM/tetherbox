@@ -109,7 +109,7 @@ function StatusBadge({ done }: { done: boolean | undefined }) {
 
   return done ? (
     <Badge variant="secondary" className="gap-1">
-      <CheckCircle2Icon className="size-3" />
+      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
       <span>Done</span>
     </Badge>
   ) : (
@@ -201,7 +201,7 @@ function OAuthCard({
   return (
     <CardShell title={`Connect ${label}`} reason={reason} done={done}>
       {preset !== undefined ? (
-        <OAuthPresetInlineCard preset={preset} activeLogin={login} />
+        <OAuthPresetInlineCard preset={preset} activeLogin={login} showStatusBadge={false} />
       ) : (
         <p className="text-xs text-muted-foreground">Unknown OAuth preset {request.preset}.</p>
       )}
@@ -233,7 +233,7 @@ function CliLoginCard({
   return (
     <CardShell title={`Sign in to ${label}`} reason={reason} done={done}>
       {entry !== undefined ? (
-        <CliAuthFlowPanel entry={entry} installRunner={installRunner} />
+        <CliAuthFlowPanel entry={entry} installRunner={installRunner} showStatusBadge={false} />
       ) : (
         <p className="text-xs text-muted-foreground">
           No starter named {request.starter} has a CLI.

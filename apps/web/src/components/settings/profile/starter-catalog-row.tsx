@@ -239,6 +239,7 @@ export function StarterCatalogRow({
             oauthLogins={oauthLogins}
             installRunner={installRunner}
             showAllClis
+            showStatusBadges={false}
           />
         </div>
       )}

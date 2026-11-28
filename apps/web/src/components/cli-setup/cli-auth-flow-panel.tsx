@@ -79,9 +79,11 @@ function CliStatusBadge({
 export function CliAuthFlowPanel({
   entry,
   installRunner,
+  showStatusBadge = true,
 }: {
   entry: StarterCliStatusEntry;
   installRunner: CliInstallRunner;
+  showStatusBadge?: boolean;
 }) {
   const auth = useCliAuthFlow(entry);
   const { activeFlow, flow } = auth;
@@ -96,6 +98,7 @@ export function CliAuthFlowPanel({
       : entry.hasAuth
         ? "unauthenticated"
         : "none";
+  const cliLabel = entry.name.endsWith("CLI") ? entry.name : `${entry.name} CLI`;
 
   return (
     <div className="space-y-2.5">
@@ -103,13 +106,7 @@ export function CliAuthFlowPanel({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold">
-              {entry.name.endsWith("CLI")
-                ? entry.hasAuth
-                  ? `${entry.name} login`
-                  : entry.name
-                : entry.hasAuth
-                  ? `${entry.name} CLI login`
-                  : `${entry.name} CLI`}
+              {entry.hasAuth ? `${cliLabel} login` : cliLabel}
             </span>
             <code className="font-mono text-xs text-muted-foreground">{entry.binary}</code>
             <Badge variant="secondary" className="text-[10px] font-normal">
@@ -127,12 +124,14 @@ export function CliAuthFlowPanel({
         </div>
 
         <div className="flex items-center gap-2">
-          <CliStatusBadge
-            entry={entry}
-            isInstalled={isInstalled}
-            isInstalling={isInstalling}
-            authState={authState}
-          />
+          {showStatusBadge && (
+            <CliStatusBadge
+              entry={entry}
+              isInstalled={isInstalled}
+              isInstalling={isInstalling}
+              authState={authState}
+            />
+          )}
 
           {entry.status.kind === "error" ? null : !isInstalled ? (
             entry.hasInstall &&
@@ -207,11 +206,6 @@ export function CliAuthFlowPanel({
                 auth.authUrl !== undefined
                   ? "Paste your sign-in code"
                   : activeFlow.prompt.replace(/\s*[:?>]\s*$/, "")
-              }
-              description={
-                auth.authUrl !== undefined
-                  ? "After authorizing in the browser, paste the code below to finish signing in."
-                  : undefined
               }
               placeholder={auth.authUrl !== undefined ? "Paste code from browser" : "Enter reply"}
               value={auth.responseInput}

@@ -1,5 +1,6 @@
 import type { FormEvent } from "react";
-import { Button } from "@tetherbox/ui/components/button";
+import { ExternalLinkIcon } from "lucide-react";
+import { Button, buttonVariants } from "@tetherbox/ui/components/button";
 import { Input } from "@tetherbox/ui/components/input";
 import { ExternalLink } from "./external-link.tsx";
 
@@ -63,13 +64,19 @@ export function CodePastePrompt({
 
   if (variant === "compact") {
     return (
-      <div className="space-y-2 py-1">
+      <div className="space-y-2.5 pt-1">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="text-xs font-medium text-foreground">{title}</div>
           {authUrl !== undefined && (
-            <div className="text-xs">
-              <ExternalLink href={authUrl}>Open sign-in page</ExternalLink>
-            </div>
+            <a
+              href={authUrl}
+              target="_blank"
+              rel="noreferrer"
+              className={buttonVariants({ variant: "outline", size: "xs" })}
+            >
+              <span>Open sign-in page</span>
+              <ExternalLinkIcon className="size-3" />
+            </a>
           )}
         </div>
         {form}

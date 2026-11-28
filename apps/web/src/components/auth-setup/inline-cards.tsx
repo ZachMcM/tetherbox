@@ -69,10 +69,12 @@ export function StarterSecretInlineCard({
   secret,
   starterConfig,
   isConfigured,
+  showStatusBadge = true,
 }: {
   secret: StarterSecret;
   starterConfig: StarterConfig;
   isConfigured: boolean;
+  showStatusBadge?: boolean;
 }) {
   const derivedDomain =
     secret.kind === "prompt-domain"
@@ -95,14 +97,15 @@ export function StarterSecretInlineCard({
             {describeStarterSecretBinding(secret, domain)}
           </div>
         </div>
-        {isConfigured ? (
-          <Badge variant="secondary" className="gap-1">
-            <CheckCircle2Icon className="size-3" />
-            <span>Saved</span>
-          </Badge>
-        ) : (
-          <Badge variant="outline">Missing</Badge>
-        )}
+        {showStatusBadge &&
+          (isConfigured ? (
+            <Badge variant="secondary" className="gap-1">
+              <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
+              <span>Saved</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline">Missing</Badge>
+          ))}
       </div>
 
       {!isConfigured && (
@@ -134,10 +137,12 @@ export function OAuthPresetInlineCard({
   preset,
   activeLogin,
   credentialsHandledExternally = false,
+  showStatusBadge = true,
 }: {
   preset: OAuthPresetSummary;
   activeLogin?: PresetLogin | undefined;
   credentialsHandledExternally?: boolean;
+  showStatusBadge?: boolean;
 }) {
   const connected = activeLogin !== undefined;
 
@@ -155,16 +160,17 @@ export function OAuthPresetInlineCard({
             {describePresetLogin(preset, activeLogin)}
           </div>
         </div>
-        {connected ? (
-          <Badge variant="secondary" className="gap-1">
-            <CheckCircle2Icon className="size-3" />
-            <span>Connected</span>
-          </Badge>
-        ) : (
-          <Badge variant="outline">
-            {preset.hasClientCredentials ? "Not connected" : "Needs client secret"}
-          </Badge>
-        )}
+        {showStatusBadge &&
+          (connected ? (
+            <Badge variant="secondary" className="gap-1">
+              <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
+              <span>Connected</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline">
+              {preset.hasClientCredentials ? "Not connected" : "Needs client secret"}
+            </Badge>
+          ))}
       </div>
 
       {!connected &&
