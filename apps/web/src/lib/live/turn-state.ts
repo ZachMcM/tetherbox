@@ -94,15 +94,13 @@ function updateToolStep(
 }
 
 export function applyTurnEventToState(
-  previous: LiveTurnState | undefined,
+  current: LiveTurnState | undefined,
   runId: RunId,
   event: TurnStreamEvent,
 ): LiveTurnState | undefined {
-  if (previous?.runId !== runId) {
-    return previous;
+  if (current?.runId !== runId) {
+    return current;
   }
-
-  const current = previous;
 
   switch (event.kind) {
     case "thinking_delta":
