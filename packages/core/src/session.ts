@@ -61,6 +61,7 @@ export const daemonEventSchema = z.discriminatedUnion("kind", [
     sessionId: sessionIdSchema,
     runId: runIdSchema,
     trigger: turnTriggerSchema,
+    baselineEntryCount: z.int().nonnegative(),
   }),
   z.object({
     kind: z.literal("turn_event"),

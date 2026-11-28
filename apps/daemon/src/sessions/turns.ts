@@ -13,16 +13,17 @@ import {
   type RunId,
   type SessionId,
   type TurnModelAuth,
+  type TurnStreamEvent,
   type TurnTrigger,
 } from "@tetherbox/core";
 import { runAgent } from "./agent-spawner.ts";
 import type { DaemonConfig } from "../config.ts";
 import type { SessionTable } from "../db/sessions.ts";
 import type { AppSettingsTable } from "../db/settings.ts";
-import type { DaemonEventBus } from "../events.ts";
+import type { DaemonEvent, DaemonEventBus } from "../events.ts";
 import type { LlmOAuth } from "../credentials/llm-oauth.ts";
 import type { LoadedProfile, ProfileRegistry } from "../profiles/registry.ts";
-import { sessionTranscriptPath } from "./transcript.ts";
+import { readSessionTranscript, sessionTranscriptPath } from "./transcript.ts";
 
 const MAX_SESSION_TITLE_CHARS = 80;
 
@@ -36,6 +37,23 @@ export function sessionTitleFromText(text: string): string {
   }
 
   return `${compact.slice(0, MAX_SESSION_TITLE_CHARS - 1).trimEnd()}…`;
+}
+
+export type LiveRunEvent = Extract<DaemonEvent, { kind: "turn_started" | "turn_event" }>;
+
+function mergeDeltas(
+  previous: TurnStreamEvent,
+  next: TurnStreamEvent,
+): TurnStreamEvent | undefined {
+  if (previous.kind === "text_delta" && next.kind === "text_delta") {
+    return { kind: "text_delta", delta: previous.delta + next.delta };
+  }
+
+  if (previous.kind === "thinking_delta" && next.kind === "thinking_delta") {
+    return { kind: "thinking_delta", delta: previous.delta + next.delta };
+  }
+
+  return undefined;
 }
 
 interface ActiveRun {
@@ -88,10 +106,15 @@ export class TurnRunner {
   readonly #queuedProfile = new Map<SessionId, ProfileId>();
   readonly #deletedSessions = new Set<SessionId>();
   readonly #deletingProfiles = new Set<ProfileId>();
+  readonly #liveEvents = new Map<RunId, LiveRunEvent[]>();
   #closing = false;
 
   constructor(deps: TurnRunnerDeps) {
     this.#deps = deps;
+  }
+
+  liveRunEvents(): LiveRunEvent[] {
+    return [...this.#liveEvents.values()].flat();
   }
 
   enqueue(
@@ -404,6 +427,10 @@ export class TurnRunner {
 
       await mkdir(dirname(sessionFile), { recursive: true });
 
+      const baselineEntryCount = (
+        await readSessionTranscript(config.sessionsDir, profileId, sessionId)
+      ).length;
+
       if (controller.signal.aborted || this.#isCancelled(profileId, sessionId)) {
         return;
       }
@@ -412,7 +439,14 @@ export class TurnRunner {
       this.#runsById.set(runId, run);
       started = true;
       this.#setSessionStatus(sessionId, "running", null);
-      events.emit({ kind: "turn_started", profileId, sessionId, runId, trigger });
+      this.#emitLive({
+        kind: "turn_started",
+        profileId,
+        sessionId,
+        runId,
+        trigger,
+        baselineEntryCount,
+      });
 
       await runAgent(
         config.agent,
@@ -432,7 +466,7 @@ export class TurnRunner {
           signal: controller.signal,
           onEvent: (event) => {
             if (!this.#deletedSessions.has(sessionId)) {
-              events.emit({ kind: "turn_event", profileId, sessionId, runId, event });
+              this.#emitLive({ kind: "turn_event", profileId, sessionId, runId, event });
             }
           },
         },
@@ -447,6 +481,7 @@ export class TurnRunner {
         ? "Run was aborted."
         : "This run failed before it finished. Check the daemon logs.";
     } finally {
+      this.#liveEvents.delete(runId);
       this.#revokeRun(run);
 
       if (this.#activeBySession.get(sessionId) === run) {
@@ -472,6 +507,24 @@ export class TurnRunner {
     if (!this.#closing && !this.#deletingProfiles.has(profileId)) {
       await this.#reloadAfterRun(profileId);
     }
+  }
+
+  #emitLive(event: LiveRunEvent): void {
+    const buffered = this.#liveEvents.get(event.runId) ?? [];
+    const last = buffered.at(-1);
+    const merged =
+      event.kind === "turn_event" && last?.kind === "turn_event"
+        ? mergeDeltas(last.event, event.event)
+        : undefined;
+
+    if (last?.kind === "turn_event" && merged !== undefined) {
+      buffered[buffered.length - 1] = { ...last, event: merged };
+    } else {
+      buffered.push(event);
+    }
+
+    this.#liveEvents.set(event.runId, buffered);
+    this.#deps.events.emit(event);
   }
 
   async #reloadAfterRun(profileId: ProfileId): Promise<void> {

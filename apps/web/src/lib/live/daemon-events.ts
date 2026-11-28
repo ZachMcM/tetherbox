@@ -51,18 +51,12 @@ function handleDaemonEvent(queryClient: QueryClient, event: DaemonEvent): void {
       );
       queryClient.removeQueries({ queryKey: queryKeys.session(event.sessionId) });
       break;
-    case "turn_started": {
-      const cached = queryClient.getQueryData<{
-        session: SessionRecord;
-        entries: TranscriptEntry[];
-      }>(queryKeys.session(event.sessionId));
-
+    case "turn_started":
       startTurn(event.sessionId, event.runId, {
         ...(event.trigger.kind === "user" ? { triggerText: event.trigger.text } : {}),
-        ...(cached !== undefined ? { baselineEntryCount: cached.entries.length } : {}),
+        baselineEntryCount: event.baselineEntryCount,
       });
       break;
-    }
     case "turn_event":
       applyTurnEvent(event.sessionId, event.runId, event.event);
       break;

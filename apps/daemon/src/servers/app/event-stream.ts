@@ -39,9 +39,11 @@ function matchesEventFilter(
 
 export function createEventStreamHandler({
   events,
+  liveRunEvents,
   shutdownSignal,
 }: {
   events: DaemonEventBus;
+  liveRunEvents: () => readonly DaemonEvent[];
   shutdownSignal?: AbortSignal | undefined;
 }) {
   return (c: Context) => {
@@ -69,16 +71,12 @@ export function createEventStreamHandler({
       let closedFlag = false;
       const { promise: closed, resolve: resolveClosed } = Promise.withResolvers<void>();
 
-      const unsubscribe = events.subscribe((event) => {
-        if (closedFlag || !matchesEventFilter(event, filterProfileId, filterSessionId)) {
-          return;
+      const send = (event: DaemonEvent): void => {
+        if (!closedFlag && matchesEventFilter(event, filterProfileId, filterSessionId)) {
+          void stream.writeSSE({ event: event.kind, data: JSON.stringify(event) });
         }
-
-        void stream.writeSSE({
-          event: event.kind,
-          data: JSON.stringify(event),
-        });
-      });
+      };
+      const unsubscribe = events.subscribe(send);
 
       const heartbeat = setInterval(() => {
         if (!closedFlag) {
@@ -103,10 +101,11 @@ export function createEventStreamHandler({
       stream.onAbort(close);
       shutdownSignal?.addEventListener("abort", close, { once: true });
 
-      await stream.writeSSE({
-        event: "connected",
-        data: JSON.stringify({ ok: true }),
-      });
+      void stream.writeSSE({ event: "connected", data: JSON.stringify({ ok: true }) });
+
+      for (const event of liveRunEvents()) {
+        send(event);
+      }
 
       await closed;
     });

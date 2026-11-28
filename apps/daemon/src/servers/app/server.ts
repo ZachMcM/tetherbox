@@ -18,14 +18,21 @@ export interface AppServerDeps extends AppHandlerDeps {
  * (including `tetherbox-agent`) cannot hit admin routes over loopback.
  */
 export function createAppServer(deps: AppServerDeps) {
-  const { config, appToken, events, oauth, shutdownSignal } = deps;
+  const { config, appToken, events, oauth, turns, shutdownSignal } = deps;
   const api = createAppApi(createAppHandlers(deps));
   const app = new Hono();
 
   app.route("/api/auth", createAuthRoutes(appToken));
   app.get("/api/oauth/callback", createOAuthCallbackHandler(oauth));
   app.use("/api/*", requireAppToken(appToken));
-  app.get("/api/events", createEventStreamHandler({ events, shutdownSignal }));
+  app.get(
+    "/api/events",
+    createEventStreamHandler({
+      events,
+      liveRunEvents: () => turns.liveRunEvents(),
+      shutdownSignal,
+    }),
+  );
   app.route("/api", api);
   app.all("/api/*", (c) => c.json({ error: "not found" }, 404));
 
