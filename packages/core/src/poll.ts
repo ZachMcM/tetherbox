@@ -5,7 +5,7 @@ export const pollJobSchema = z.object({
   check: z.object({
     command: z.tuple([z.string().min(1)], z.string()),
   }),
-  intervalSeconds: z.int().min(10),
+  intervalSeconds: z.int().min(10).max(86_400),
   stallAfterSeconds: z.int().positive(),
   prompt: z.string().min(1),
 });

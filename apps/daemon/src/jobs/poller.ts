@@ -34,33 +34,26 @@ function readCheck(result: CaptureResult): CheckReading {
   const status = stdout.split("\n", 1)[0]?.trim();
 
   if (status === "running" || status === "done" || status === "failed") {
-    return { kind: status, output: tail(stdout) };
+    return { kind: status, output: stdout };
   }
 
   const stderr = result.stderr.trim();
 
   return {
     kind: "invalid",
-    output: tail(
-      [
-        `The check exited with code ${result.code} without printing running, done, or failed as its first line.`,
-        stdout !== "" ? `stdout:\n${stdout}` : "",
-        stderr !== "" ? `stderr:\n${stderr}` : "",
-      ]
-        .filter((part) => part !== "")
-        .join("\n\n"),
-    ),
+    output: [
+      `The check exited with code ${result.code} without printing running, done, or failed as its first line.`,
+      stdout !== "" ? `stdout:\n${stdout}` : "",
+      stderr !== "" ? `stderr:\n${stderr}` : "",
+    ]
+      .filter((part) => part !== "")
+      .join("\n\n"),
   };
 }
 
 /**
  * Watches long-running external tasks (such as coding harness sessions) that agent runs register
  * over RPC, and starts a follow-up run in the originating session when one finishes or stalls.
- *
- * Each check runs as the agent OS user in the profile directory. Its first stdout line is the
- * status: `running`, `done`, or `failed`. A `running` check whose output differs from the previous
- * one counts as progress. Any other output counts as no progress, so a broken check surfaces as
- * `stalled` once stallAfterSeconds pass.
  */
 export class Poller {
   readonly #table: PollJobTable;
@@ -68,7 +61,6 @@ export class Poller {
   readonly #profileDir: (profileId: ProfileId) => string | undefined;
   readonly #onFire: PollFire;
   readonly #jobs = new Map<ProfileId, Map<EntryName, WatchedJob>>();
-  #stopped = false;
 
   constructor({
     table,
@@ -89,8 +81,6 @@ export class Poller {
 
   loadAll(): void {
     this.stopAll();
-    this.#jobs.clear();
-    this.#stopped = false;
 
     for (const { profileId, job } of this.#table.listAll()) {
       this.#watch(profileId, job);
@@ -121,10 +111,11 @@ export class Poller {
   }
 
   cancel(profileId: ProfileId, name: EntryName): boolean {
-    const watched = this.#jobs.get(profileId)?.get(name);
+    const jobs = this.#jobs.get(profileId);
+    const watched = jobs?.get(name);
 
     clearTimeout(watched?.timer);
-    this.#jobs.get(profileId)?.delete(name);
+    jobs?.delete(name);
     this.#table.delete(profileId, name);
 
     return watched !== undefined;
@@ -149,25 +140,24 @@ export class Poller {
   }
 
   stopAll(): void {
-    this.#stopped = true;
-
     for (const jobs of this.#jobs.values()) {
       for (const watched of jobs.values()) {
         clearTimeout(watched.timer);
-        watched.timer = undefined;
       }
     }
+
+    this.#jobs.clear();
   }
 
   #watch(profileId: ProfileId, registered: RegisteredPollJob): void {
-    clearTimeout(this.#jobs.get(profileId)?.get(registered.name)?.timer);
-
     let jobs = this.#jobs.get(profileId);
 
     if (jobs === undefined) {
       jobs = new Map();
       this.#jobs.set(profileId, jobs);
     }
+
+    clearTimeout(jobs.get(registered.name)?.timer);
 
     const watched: WatchedJob = {
       profileId,
@@ -188,14 +178,10 @@ export class Poller {
   }
 
   #isCurrent(watched: WatchedJob): boolean {
-    return (
-      !this.#stopped && this.#jobs.get(watched.profileId)?.get(watched.registered.name) === watched
-    );
+    return this.#jobs.get(watched.profileId)?.get(watched.registered.name) === watched;
   }
 
   async #check(watched: WatchedJob): Promise<void> {
-    watched.timer = undefined;
-
     const cwd = this.#profileDir(watched.profileId);
 
     if (cwd === undefined) {
@@ -237,6 +223,17 @@ export class Poller {
 
   #finish(watched: WatchedJob, outcome: PollOutcome): void {
     this.cancel(watched.profileId, watched.registered.name);
-    this.#onFire(watched.profileId, watched.registered, outcome);
+
+    try {
+      this.#onFire(watched.profileId, watched.registered, {
+        ...outcome,
+        output: tail(outcome.output),
+      });
+    } catch (error) {
+      console.error(
+        `failed to start follow-up turn for poll job ${watched.registered.name}`,
+        error,
+      );
+    }
   }
 }

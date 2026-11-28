@@ -223,7 +223,7 @@ function createPollTools(client: InternalClient): ToolDefinition[] {
     parameters: Type.Object({
       name: Type.String({ pattern: SLUG_PATTERN }),
       command: Type.Array(Type.String({ minLength: 1 }), { minItems: 1 }),
-      intervalSeconds: Type.Integer({ minimum: 10 }),
+      intervalSeconds: Type.Integer({ minimum: 10, maximum: 86_400 }),
       stallAfterSeconds: Type.Integer({ minimum: 1 }),
       prompt: Type.String({ minLength: 1 }),
     }),

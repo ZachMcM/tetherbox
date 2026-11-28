@@ -114,11 +114,20 @@ export class AgentProcessRunner {
     command: readonly string[],
     { timeoutMs = CAPTURE_TIMEOUT_MS, cwd }: { timeoutMs?: number; cwd?: string } = {},
   ): Promise<CaptureResult> {
-    const child = this.spawn(command, {
-      stdio: ["ignore", "pipe", "pipe"],
-      extraEnv: { NO_COLOR: "1", FORCE_COLOR: "0" },
-      ...(cwd !== undefined ? { cwd } : {}),
-    });
+    let child: ChildProcess;
+
+    try {
+      child = this.spawn(command, {
+        stdio: ["ignore", "pipe", "pipe"],
+        extraEnv: { NO_COLOR: "1", FORCE_COLOR: "0" },
+        ...(cwd !== undefined ? { cwd } : {}),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+
+      return Promise.resolve({ code: 1, stdout: "", stderr: message });
+    }
+
     const stdout: Buffer[] = [];
     const stderr: Buffer[] = [];
     let timedOut = false;
