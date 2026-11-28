@@ -78,6 +78,7 @@ interface ShapeGeometry {
   body: React.ReactNode
   face: Point
   spread: number
+  highlight: Point
   distance: (x: number, y: number) => number
 }
 
@@ -88,6 +89,7 @@ const SHAPES: Record<BuddyShape, ShapeGeometry> = {
     body: <circle cx="12" cy="12" r="9.8" />,
     face: [12, 11.4],
     spread: 3.6,
+    highlight: [7.9, 6.7],
     distance: (x, y) => Math.hypot(x - 12, y - 12) - 9.8,
   },
   squircle: {
@@ -96,12 +98,14 @@ const SHAPES: Record<BuddyShape, ShapeGeometry> = {
     ),
     face: [12, 11.6],
     spread: 3.6,
+    highlight: [7.4, 7],
     distance: roundRectDistance([12, 12], 9.2, 7, 10),
   },
   triangle: {
     body: <path d={roundedPolygonPath(triangleVertices, 4.4)} />,
     face: [12, 14.2],
     spread: 3.2,
+    highlight: [10.2, 8],
     distance: polygonDistance(triangleVertices, [12, 13.8]),
   },
 }
@@ -176,6 +180,7 @@ function Buddy({
   size?: number
   animated?: boolean
 } & Omit<React.ComponentProps<"svg">, "color">) {
+  const id = React.useId()
   const geometry = SHAPES[shape]
   const small = size < 24
   const half = small ? 1.25 : 1.1
@@ -183,6 +188,9 @@ function Buddy({
   const gazeVector = GAZES[gaze]
   const lean = 0.5 + gazeVector[0] * 0.45
   const eyes = eyePositions({ geometry, gaze: gazeVector, half, lean, strokeWidth })
+  const fill = `var(--buddy-${color})`
+  const [hx, hy] = geometry.highlight
+  const shineX = hx - gazeVector[0] * 0.5
 
   return (
     <svg
@@ -195,15 +203,47 @@ function Buddy({
       style={{ width: size, height: size, ...style }}
       {...props}
     >
+      <defs>
+        <radialGradient id={`${id}-fill`} cx="0.34" cy="0.28" r="0.9">
+          <stop offset="0" style={{ stopColor: `color-mix(in oklch, ${fill}, white 55%)` }} />
+          <stop offset="0.42" style={{ stopColor: fill }} />
+          <stop offset="1" style={{ stopColor: `color-mix(in oklch, ${fill}, black 42%)` }} />
+        </radialGradient>
+        <linearGradient id={`${id}-bounce`} x1="0" y1="0" x2="0" y2="1">
+          <stop
+            offset="0"
+            stopOpacity="0"
+            style={{ stopColor: `color-mix(in oklch, ${fill}, white 40%)` }}
+          />
+          <stop
+            offset="1"
+            stopOpacity="0.7"
+            style={{ stopColor: `color-mix(in oklch, ${fill}, white 40%)` }}
+          />
+        </linearGradient>
+        <radialGradient id={`${id}-shadow`}>
+          <stop offset="0" stopColor="black" stopOpacity="0.3" />
+          <stop offset="1" stopColor="black" stopOpacity="0" />
+        </radialGradient>
+        <clipPath id={`${id}-clip`}>{geometry.body}</clipPath>
+      </defs>
+      {size >= 28 && (
+        <ellipse cx="12" cy="22.8" rx="8.5" ry="1.7" fill={`url(#${id}-shadow)`} />
+      )}
       <g className="buddy-body">
-        <g fill={`var(--buddy-${color})`}>{geometry.body}</g>
-        <g
-          fill="none"
-          stroke={`color-mix(in oklch, var(--buddy-${color}), black 30%)`}
-          strokeWidth="0.6"
-          opacity="0.45"
-        >
-          {geometry.body}
+        <g fill={`url(#${id}-fill)`}>{geometry.body}</g>
+        <g clipPath={`url(#${id}-clip)`}>
+          <ellipse cx="12" cy="22.4" rx="9" ry="3.4" fill={`url(#${id}-bounce)`} />
+          <ellipse
+            cx={shineX}
+            cy={hy}
+            rx="3"
+            ry="1.55"
+            fill="white"
+            opacity="0.75"
+            transform={`rotate(-30 ${hx} ${hy})`}
+          />
+          <circle cx={shineX + 3.2} cy={hy - 1.6} r="0.65" fill="white" opacity="0.6" />
         </g>
         <g
           className={animated ? "buddy-look" : undefined}
@@ -225,6 +265,17 @@ function Buddy({
                 y2={y + half}
               />
             ))}
+            {size >= 20 &&
+              eyes.map(([x, y]) => (
+                <circle
+                  key={`glint-${x}`}
+                  cx={x - lean / 2 + 0.15}
+                  cy={y - half + 0.2}
+                  r="0.45"
+                  fill="white"
+                  stroke="none"
+                />
+              ))}
           </g>
         </g>
       </g>
