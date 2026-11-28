@@ -1,10 +1,13 @@
 #!/usr/bin/env node
-import { runLlmCommand, runOAuthCommand, runProfilesCommand, runSecretsCommand } from "./admin.ts";
-import { loadOrCreateAppToken } from "./app-auth.ts";
+import { runLlmCommand } from "./admin/llm.ts";
+import { runOAuthCommand } from "./admin/oauth.ts";
+import { runProfilesCommand } from "./admin/profiles.ts";
+import { runSecretsCommand } from "./admin/secrets.ts";
+import { loadOrCreateAppToken } from "./servers/app/app-token.ts";
 import { loadConfig } from "./config.ts";
-import { createLlmOAuth } from "./llm-oauth.ts";
-import { createOAuthStore } from "./oauth.ts";
-import { createFileSecretStore } from "./secret-store.ts";
+import { createLlmOAuth } from "./credentials/llm-oauth.ts";
+import { createOAuthStore } from "./credentials/oauth-store.ts";
+import { createFileSecretStore } from "./credentials/secret-store.ts";
 import { serveDaemon } from "./serve.ts";
 
 const [command = "serve", ...args] = process.argv.slice(2);

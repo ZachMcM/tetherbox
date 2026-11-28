@@ -1,5 +1,5 @@
 import type { TranscriptEntry } from "@tetherbox/core/app";
-import type { LiveAssistantBlock, LiveToolCall, LiveTurnState } from "./live-store.ts";
+import type { LiveAssistantBlock, LiveToolCall, LiveTurnState } from "./live/turn-state.ts";
 
 export type DisplayToolBlock = LiveToolCall & { kind: "tool" };
 export type AssistantBlock = LiveAssistantBlock;

@@ -15,13 +15,11 @@ import {
   oauthStatusQueryOptions,
   secretsQueryOptions,
 } from "../lib/queries.ts";
-import {
-  describeSecretBinding,
-  findPresetLogin,
-  OAuthPresetInlineCard,
-  SecretValueForm,
-} from "./auth-setup-panels.tsx";
-import { CliAuthFlowPanel, useCliInstallRunner } from "./cli-setup-panels.tsx";
+import { OAuthPresetInlineCard } from "./auth-setup/inline-cards.tsx";
+import { SecretValueForm } from "./auth-setup/secret-value-form.tsx";
+import { describeSecretBinding, findPresetLogin } from "../lib/auth-status.ts";
+import { CliAuthFlowPanel } from "./cli-setup/cli-auth-flow-panel.tsx";
+import { useCliInstallRunner } from "./cli-setup/use-cli-install-runner.ts";
 
 type ValueRequest = Extract<AuthRequest, { kind: "value" }>;
 type OAuthRequest = Extract<AuthRequest, { kind: "oauth" }>;

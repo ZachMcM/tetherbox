@@ -32,7 +32,7 @@ import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, expectOk, unwrapJson } from "../../lib/api.ts";
 import { parseDomainsList } from "../../lib/lists.ts";
 import { invalidateSecretQueries, secretsQueryOptions } from "../../lib/queries.ts";
-import { describeSecretBinding } from "../auth-setup-panels.tsx";
+import { describeSecretBinding } from "../../lib/auth-status.ts";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
 
 type SecretViewMode = { kind: "create" } | { kind: "edit"; entry: SecretListEntry };

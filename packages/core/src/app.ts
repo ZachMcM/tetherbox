@@ -1,3 +1,7 @@
+export * from "./api/app/client.ts";
+export * from "./api/app/routes/index.ts";
+export * from "./api/app/schemas.ts";
+export * from "./api/errors.ts";
 export * from "./auth-request.ts";
 export * from "./cli.ts";
 export * from "./ids.ts";
@@ -7,8 +11,6 @@ export * from "./paths.ts";
 export * from "./poll.ts";
 export * from "./profile.ts";
 export * from "./reminder.ts";
-export * from "./rpc/app-api.ts";
-export * from "./rpc/app-client.ts";
 export * from "./secrets.ts";
 export * from "./session.ts";
 export * from "./starter.ts";

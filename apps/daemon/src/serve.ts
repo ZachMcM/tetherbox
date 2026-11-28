@@ -1,24 +1,27 @@
 import { serve } from "@hono/node-server";
-import { loadOrCreateAppToken } from "./app-auth.ts";
-import { createAppServer } from "./app-server.ts";
-import { CliManager } from "./cli-manager.ts";
+import { loadOrCreateAppToken } from "./servers/app/app-token.ts";
+import { createAppServer } from "./servers/app/server.ts";
+import { AgentProcessRunner } from "./clis/agent-process.ts";
+import { CliAuthFlows } from "./clis/auth-flows.ts";
+import { CliInstallJobs } from "./clis/install-jobs.ts";
+import { CliStatusProbe } from "./clis/status.ts";
 import type { DaemonConfig } from "./config.ts";
-import { DaemonDb } from "./db.ts";
+import { openDaemonDb } from "./db/database.ts";
 import { DaemonEventBus } from "./events.ts";
-import { startInternalServer } from "./internal-server.ts";
-import type { LlmOAuth } from "./llm-oauth.ts";
-import { LlmWebAuthManager } from "./llm-web-auth.ts";
-import type { OAuthStore } from "./oauth.ts";
+import { startInternalServer } from "./servers/internal/server.ts";
+import type { LlmOAuth } from "./credentials/llm-oauth.ts";
+import { LlmWebAuthManager } from "./credentials/llm-web-auth.ts";
+import type { OAuthStore } from "./credentials/oauth-store.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
-import { Poller } from "./poller.ts";
-import { ProfileRegistry } from "./profiles.ts";
-import { createPublicServer } from "./public-server.ts";
-import { ReminderStore } from "./reminders.ts";
-import { Scheduler } from "./scheduler.ts";
-import { StarterCatalog } from "./starter-catalog.ts";
-import type { SecretStore } from "./secret-store.ts";
-import { TurnRunner } from "./turns.ts";
-import { loadOrCreateVapidKeys } from "./vapid.ts";
+import { Poller } from "./jobs/poller.ts";
+import { ProfileRegistry } from "./profiles/registry.ts";
+import { createPublicServer } from "./servers/public/server.ts";
+import { ReminderStore } from "./jobs/reminders.ts";
+import { Scheduler } from "./jobs/scheduler.ts";
+import { StarterCatalog } from "./profiles/starter-catalog.ts";
+import type { SecretStore } from "./credentials/secret-store.ts";
+import { TurnRunner } from "./sessions/turns.ts";
+import { loadOrCreateVapidKeys } from "./credentials/vapid.ts";
 
 export interface DaemonStores {
   secrets: SecretStore;
@@ -32,8 +35,8 @@ export async function serveDaemon(
 ): Promise<void> {
   const appToken = loadOrCreateAppToken(config.dataDir);
   const vapidKeys = loadOrCreateVapidKeys(config.dataDir);
-  const db = new DaemonDb(config.dataDir);
-  const resetCount = db.resetRunningSessions();
+  const db = openDaemonDb(config.dataDir);
+  const resetCount = db.sessions.resetRunning();
 
   if (resetCount > 0) {
     console.warn(`reset ${resetCount} stale running session(s) from a previous daemon run`);
@@ -42,7 +45,10 @@ export async function serveDaemon(
   const events = new DaemonEventBus();
   const llmWebAuth = new LlmWebAuthManager(llmOAuth);
   const catalog = new StarterCatalog(config.dataDir);
-  const clis = new CliManager({ agentUser: config.agent.user, events, catalog });
+  const agentRunner = new AgentProcessRunner(config.agent.user);
+  const cliStatus = new CliStatusProbe({ runner: agentRunner, catalog });
+  const cliInstalls = new CliInstallJobs({ runner: agentRunner, catalog, events });
+  const cliAuthFlows = new CliAuthFlows({ runner: agentRunner, catalog, events });
   const registry = new ProfileRegistry(config.profilesDir);
   const scheduler = new Scheduler((profile, name, job) => {
     turns.enqueue(
@@ -51,7 +57,7 @@ export async function serveDaemon(
       { sessionId: job.sessionId },
     );
   });
-  const poller = new Poller(db, (profileId, registered, outcome) => {
+  const poller = new Poller(db.pollJobs, (profileId, registered, outcome) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
@@ -62,7 +68,7 @@ export async function serveDaemon(
       );
     }
   });
-  const reminders = new ReminderStore(db, (profileId, reminder) => {
+  const reminders = new ReminderStore(db.reminders, (profileId, reminder) => {
     const profile = registry.get(profileId);
 
     if (profile !== undefined) {
@@ -77,7 +83,8 @@ export async function serveDaemon(
     config,
     registry,
     llmOAuth,
-    db,
+    sessions: db.sessions,
+    settings: db.settings,
     events,
     onProfileReloaded: async (profile) => [
       ...scheduler.sync(profile),
@@ -135,7 +142,9 @@ export async function serveDaemon(
       llmOAuth,
       llmWebAuth,
       oauth,
-      clis,
+      cliStatus,
+      cliInstalls,
+      cliAuthFlows,
       catalog,
       shutdownSignal: shutdownController.signal,
     }).fetch,
@@ -170,7 +179,8 @@ export async function serveDaemon(
       poller.stopAll();
       reminders.stopAll();
       llmWebAuth.stopAll();
-      clis.stopAll();
+      cliInstalls.stop();
+      cliAuthFlows.stop();
       shutdownController.abort();
       internal.close();
       publicServer.close();

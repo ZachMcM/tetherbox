@@ -8,7 +8,7 @@ import { CliToolsSection } from "./cli-tools-section.tsx";
 import { GeneralSection } from "./general-section.tsx";
 import { IntegrationsSection } from "./integrations-section.tsx";
 import { LibrarySection } from "./library-section.tsx";
-import { ProfileSettingsSection } from "./profile-section.tsx";
+import { ProfileSettingsSection } from "./profile/profile-section.tsx";
 import { ProfilesSection } from "./profiles-section.tsx";
 import { ProvidersSection } from "./providers-section.tsx";
 import { SecretsSection } from "./secrets-section.tsx";

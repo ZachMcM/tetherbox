@@ -9,3 +9,10 @@ export const profileLayout = {
   cronDir: "cron",
   webhooksDir: "webhooks",
 } as const;
+
+export function webhookPath<P extends string, N extends string>(
+  profileId: P,
+  name: N,
+): `/hooks/${P}/${N}` {
+  return `/hooks/${profileId}/${name}`;
+}
