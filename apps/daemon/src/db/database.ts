@@ -4,6 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { FavoriteModelTable } from "./favorite-models.ts";
 import { migrate } from "./migrations.ts";
 import { PollJobTable } from "./poll-jobs.ts";
+import { ProfileTable } from "./profiles.ts";
 import { PushSubscriptionTable } from "./push-subscriptions.ts";
 import { ReminderTable } from "./reminders.ts";
 import { SessionTable } from "./sessions.ts";
@@ -16,6 +17,7 @@ export interface DaemonDb {
   readonly settings: AppSettingsTable;
   readonly favoriteModels: FavoriteModelTable;
   readonly pushSubscriptions: PushSubscriptionTable;
+  readonly profiles: ProfileTable;
   close(): void;
 }
 
@@ -28,6 +30,7 @@ export function openDaemonDb(dataDir: string): DaemonDb {
   chmodSync(dbPath, 0o600);
   db.exec("PRAGMA journal_mode = WAL;");
   db.exec("PRAGMA foreign_keys = ON;");
+  db.exec("PRAGMA busy_timeout = 5000;");
   migrate(db);
 
   return {
@@ -37,6 +40,7 @@ export function openDaemonDb(dataDir: string): DaemonDb {
     settings: new AppSettingsTable(db),
     favoriteModels: new FavoriteModelTable(db),
     pushSubscriptions: new PushSubscriptionTable(db),
+    profiles: new ProfileTable(db),
     close: () => db.close(),
   };
 }

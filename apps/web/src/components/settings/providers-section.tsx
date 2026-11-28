@@ -14,7 +14,6 @@ import {
 } from "../../lib/queries.ts";
 import { LlmProviderAuthPanel } from "../auth-setup/llm-provider-auth-panel.tsx";
 import { findProviderApiKey, isProviderConnected } from "../../lib/auth-status.ts";
-import { EffortPicker } from "../effort-picker.tsx";
 import { ModelPicker } from "../model-picker.tsx";
 import { ProviderIcon } from "../provider-icons.tsx";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
@@ -96,17 +95,14 @@ export function ProvidersSection() {
             description={descriptionParts.length > 0 ? descriptionParts.join(" · ") : undefined}
             control={
               <div className="flex items-center gap-2">
-                {item.hasApiKey && <Badge>api-key</Badge>}
-                {item.oauthExpires !== undefined && <Badge>oauth</Badge>}
-                {!isProviderConnected(item) && (
-                  <span className="text-xs text-muted-foreground">unset</span>
-                )}
+                {item.hasApiKey && <Badge variant="attribute">API key</Badge>}
+                {item.oauthExpires !== undefined && <Badge variant="attribute">OAuth</Badge>}
                 <Button
-                  variant="outline"
+                  variant={isProviderConnected(item) ? "ghost" : "outline"}
                   size="xs"
                   onClick={() => setActiveProviderId(item.provider)}
                 >
-                  Configure
+                  {isProviderConnected(item) ? "Manage" : "Configure"}
                 </Button>
               </div>
             }
@@ -146,23 +142,13 @@ export function ProvidersSection() {
             <Spinner className="size-4 text-muted-foreground" />
           </div>
         ) : (
-          <div className="flex items-start gap-2">
-            <div className="min-w-0 flex-1">
-              <ModelPicker
-                models={models}
-                value={defaultModel}
-                disabled={defaultModelMutation.isPending}
-                onChange={saveDefaultModel}
-                placeholder="Choose default model…"
-              />
-            </div>
-            <EffortPicker
-              models={models}
-              value={defaultModel}
-              disabled={defaultModelMutation.isPending}
-              onChange={saveDefaultModel}
-            />
-          </div>
+          <ModelPicker
+            models={models}
+            value={defaultModel}
+            disabled={defaultModelMutation.isPending}
+            onChange={saveDefaultModel}
+            placeholder="Choose default model…"
+          />
         )}
         {defaultModelMutation.error !== null && (
           <FieldError>{defaultModelMutation.error.message}</FieldError>

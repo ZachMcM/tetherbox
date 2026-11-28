@@ -22,6 +22,26 @@ export async function initRepo(dir: string): Promise<void> {
   await git(dir, ["config", "commit.gpgsign", "false"]);
 }
 
+export async function commitFile({
+  dir,
+  file,
+  message,
+}: {
+  dir: string;
+  file: string;
+  message: string;
+}): Promise<void> {
+  if (!existsSync(join(dir, ".git"))) {
+    return;
+  }
+
+  await git(dir, ["add", "--", file]);
+
+  if ((await git(dir, ["diff", "--cached", "--name-only", "--", file])).trim() !== "") {
+    await git(dir, ["commit", "-q", "--no-verify", "--no-gpg-sign", "-m", message, "--", file]);
+  }
+}
+
 export async function commitAll(dir: string, message: string): Promise<void> {
   await git(dir, ["add", "-A"]);
 

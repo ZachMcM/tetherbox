@@ -29,7 +29,7 @@ Tetherbox is a self-hosted personal assistant for engineers. It runs on a user's
 A profile is a git-backed directory under the profiles root. Sessions are grouped under their profile, backed by Pi `.jsonl` files and indexed in SQLite. Files are the source of truth for profile config, and `profileLayout` in `packages/core` names them:
 
 ```
-profile.json                 name, model, enabled starters
+profile.json                 enabled starters and their config
 MEMORY.md                    memory index, loaded into every turn (capped at 8 KB)
 memory/                      topic files; folders get an INDEX.md
 skills/<name>/SKILL.md
@@ -42,7 +42,7 @@ webhooks/<name>.json         prompt and verification, served at /hooks/<profileI
 
 Agent-written skills and modules need a `starter.json`. Copies of enabled starters do not.
 
-The daemon validates these files with the schemas in `packages/core` at startup and reloads a profile after each of its runs exits. Files hold what a user would want versioned. Short-lived runtime state (sessions, poll jobs, reminders, push subscriptions) lives in SQLite in the daemon's data dir. Profile modules run under Node's type stripping outside any package, so they may only `import type` from `@tetherbox/core` and get everything else from `ModuleContext`.
+The daemon validates these files with the schemas in `packages/core` at startup and reloads a profile after each of its runs exits. Files hold what the agent reads or edits and what a user would want versioned. A profile's name, model override, and buddy live in the `profiles` table in the daemon's SQLite, keyed by the profile directory name, because only the daemon and the web app use them. The daemon creates missing rows and deletes orphaned ones each time it loads profiles. Short-lived runtime state (sessions, poll jobs, reminders, push subscriptions) also lives in SQLite in the daemon's data dir. Profile modules run under Node's type stripping outside any package, so they may only `import type` from `@tetherbox/core` and get everything else from `ModuleContext`.
 
 ## Built-in vs starters
 

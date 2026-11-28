@@ -1,10 +1,10 @@
 import { useState } from "react";
 import type { StarterCliStatusEntry } from "@tetherbox/core/app";
-import { CheckCircle2Icon, DownloadIcon, TerminalIcon } from "lucide-react";
+import { DownloadIcon, RotateCcwIcon, TerminalIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
-import { Spinner } from "@tetherbox/ui/components/spinner";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { CliOutputLog } from "./cli-output-log.tsx";
 import { isCliInstalled, type CliInstallRunner } from "./use-cli-install-runner.ts";
 
@@ -39,9 +39,7 @@ export function CliInstallCard({
         <div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">Install CLIs on VM</span>
-            <Badge variant="secondary" className="text-[10px] font-normal">
-              VM-wide · once
-            </Badge>
+            <Badge variant="attribute">VM-wide · once</Badge>
           </div>
           <p className="mt-0.5 text-xs text-muted-foreground">
             Installs binaries into user space (<code>~/.local/bin</code>) for the agent user. Runs
@@ -57,7 +55,7 @@ export function CliInstallCard({
               void runner.installAll(installableMissing.map((entry) => entry.starterId))
             }
           >
-            <DownloadIcon className="size-3.5" />
+            <DownloadIcon data-icon="inline-start" />
             <span>
               {installableMissing.length === 1
                 ? `Install ${installableMissing[0]?.binary}`
@@ -110,15 +108,9 @@ export function CliInstallCard({
                   )}
 
                   {isInstalled ? (
-                    <Badge variant="secondary" className="gap-1">
-                      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-                      <span>Installed</span>
-                    </Badge>
+                    <StatusBadge status="success">Installed</StatusBadge>
                   ) : isRunning ? (
-                    <Badge variant="outline" className="gap-1.5">
-                      <Spinner className="size-3" />
-                      <span>Installing…</span>
-                    </Badge>
+                    <StatusBadge status="pending">Installing…</StatusBadge>
                   ) : entry.hasInstall ? (
                     <Button
                       type="button"
@@ -126,10 +118,15 @@ export function CliInstallCard({
                       size="xs"
                       onClick={() => void runner.installOne(entry.starterId)}
                     >
-                      {hasFailed ? "Retry" : "Install"}
+                      {hasFailed ? (
+                        <RotateCcwIcon data-icon="inline-start" />
+                      ) : (
+                        <DownloadIcon data-icon="inline-start" />
+                      )}
+                      <span>{hasFailed ? "Retry" : "Install"}</span>
                     </Button>
                   ) : (
-                    <Badge variant="outline">Manual install</Badge>
+                    <StatusBadge status="attention">Manual install</StatusBadge>
                   )}
                 </div>
               </div>

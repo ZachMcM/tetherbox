@@ -1,6 +1,5 @@
 import type { StarterConfig, StarterSummary } from "@tetherbox/core/app";
-import { CheckCircle2Icon } from "lucide-react";
-import { Badge } from "@tetherbox/ui/components/badge";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { isStarterConfigValid, type StarterReadiness } from "../../../lib/starter-readiness.ts";
 
 export function starterStatusBadge(
@@ -15,45 +14,37 @@ export function starterStatusBadge(
 
   if (!enabled) {
     return readiness.hasVmRequirements && readiness.isVmReady ? (
-      <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 dark:text-emerald-400">
-        <CheckCircle2Icon className="size-3" />
-        <span>Ready on VM</span>
-      </span>
+      <StatusBadge status="success">Ready on VM</StatusBadge>
     ) : null;
   }
 
   if (!readiness.isStatusLoaded) {
-    return <Badge variant="outline">Checking…</Badge>;
+    return <StatusBadge status="pending">Checking…</StatusBadge>;
   }
 
   if (readiness.cliEntry?.status.kind === "error") {
-    return <Badge variant="destructive">Error</Badge>;
+    return <StatusBadge status="error">Error</StatusBadge>;
   }
 
   if (readiness.needsBinaryInstall) {
-    return <Badge variant="outline">Needs install</Badge>;
+    return <StatusBadge status="attention">Needs install</StatusBadge>;
   }
 
   if (readiness.needsCliAuth) {
-    return <Badge variant="outline">Needs sign-in</Badge>;
+    return <StatusBadge status="attention">Needs sign-in</StatusBadge>;
   }
 
   if (readiness.missingSecrets.length > 0) {
-    return <Badge variant="outline">Needs secret</Badge>;
+    return <StatusBadge status="attention">Needs secret</StatusBadge>;
   }
 
   if (readiness.missingOAuthPreset !== undefined) {
-    return <Badge variant="outline">Needs OAuth</Badge>;
+    return <StatusBadge status="attention">Needs OAuth</StatusBadge>;
   }
 
   if (!isStarterConfigValid(starter, starterConfig)) {
-    return <Badge variant="outline">Needs config</Badge>;
+    return <StatusBadge status="attention">Needs config</StatusBadge>;
   }
 
-  return (
-    <Badge variant="secondary" className="gap-1">
-      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-      <span>Ready</span>
-    </Badge>
-  );
+  return <StatusBadge status="success">Ready</StatusBadge>;
 }

@@ -14,6 +14,7 @@ import { LlmWebAuthManager } from "./credentials/llm-web-auth.ts";
 import type { OAuthStore } from "./credentials/oauth-store.ts";
 import { removePidFile, writePidFile } from "./pid.ts";
 import { Poller } from "./jobs/poller.ts";
+import { importProfileRecord, reconcileProfileRecords } from "./profiles/records.ts";
 import { ProfileRegistry } from "./profiles/registry.ts";
 import { createPublicServer } from "./servers/public/server.ts";
 import { ReminderStore } from "./jobs/reminders.ts";
@@ -87,16 +88,24 @@ export async function serveDaemon(
     registry,
     llmOAuth,
     sessions: db.sessions,
+    profiles: db.profiles,
     settings: db.settings,
     events,
-    onProfileReloaded: async (profile) => [
-      ...scheduler.sync(profile),
-      ...(await catalog.sync(profile)),
-    ],
+    onProfileReloaded: async (profile) => {
+      await importProfileRecord({ profile, table: db.profiles });
+
+      return [...scheduler.sync(profile), ...(await catalog.sync(profile))];
+    },
   });
 
   const reloadAll = async () => {
     const issues = [...(await catalog.load()), ...(await registry.loadAll())];
+
+    await reconcileProfileRecords({
+      profilesDir: config.profilesDir,
+      registry,
+      table: db.profiles,
+    });
 
     issues.push(...scheduler.syncAll(registry.all()));
 

@@ -6,9 +6,8 @@ import {
   type StarterConfig,
   type StarterSummary,
 } from "@tetherbox/core/app";
-import { AlertCircleIcon, CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
-import { Badge } from "@tetherbox/ui/components/badge";
-import { Spinner } from "@tetherbox/ui/components/spinner";
+import { ChevronDownIcon, ChevronRightIcon } from "lucide-react";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { type CliInstallRunner } from "../cli-setup/use-cli-install-runner.ts";
 import { StarterIcon } from "../starter-icons.tsx";
 import { isStarterConfigValid, type StarterReadiness } from "../../lib/starter-readiness.ts";
@@ -28,46 +27,26 @@ function StarterSetupStatusBadge({
   connectionState: StarterConnectionState;
 }) {
   if (readiness.cliEntry?.status.kind === "error") {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <AlertCircleIcon className="size-3 text-destructive" />
-        <span>Error</span>
-      </Badge>
-    );
+    return <StatusBadge status="error">Error</StatusBadge>;
   }
 
   if (connectionState === "failed") {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <AlertCircleIcon className="size-3 text-destructive" />
-        <span>Connection failed</span>
-      </Badge>
-    );
+    return <StatusBadge status="error">Connection failed</StatusBadge>;
   }
 
   if (connectionState === "checking") {
-    return (
-      <Badge variant="outline" className="gap-1.5">
-        <Spinner className="size-3" />
-        <span>Testing…</span>
-      </Badge>
-    );
+    return <StatusBadge status="pending">Testing…</StatusBadge>;
   }
 
   if (allReady && (!starter.hasConnectionCheck || connectionState === "connected")) {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-        <span>Ready</span>
-      </Badge>
-    );
+    return <StatusBadge status="success">Ready</StatusBadge>;
   }
 
   if (allReady && starter.hasConnectionCheck) {
-    return <Badge variant="outline">Not tested</Badge>;
+    return <StatusBadge status="attention">Not tested</StatusBadge>;
   }
 
-  return <Badge variant="outline">Needs setup</Badge>;
+  return <StatusBadge status="attention">Needs setup</StatusBadge>;
 }
 
 export function StarterSetupCard({

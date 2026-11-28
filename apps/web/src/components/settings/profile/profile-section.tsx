@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ProfileDetail } from "@tetherbox/core/app";
 import { AlertCircleIcon } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
+import { Buddy } from "@tetherbox/ui/components/buddy";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../../../lib/api.ts";
 import { useStarterSetupState } from "../../starter-setup/use-starter-setup-state.ts";
@@ -57,7 +58,12 @@ export function ProfileSettingsSection({
     <div className="space-y-6">
       <SectionHeader
         onBack={onBack}
-        title={profile.config.name}
+        title={
+          <span className="flex items-center gap-3">
+            <Buddy {...profile.buddy} size={32} />
+            {profile.name}
+          </span>
+        }
         description={`Profile ID: ${profile.id}`}
       />
 

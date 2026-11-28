@@ -1,10 +1,12 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type {
-  OAuthPresetSummary,
-  OAuthProviderId,
-  StarterConfig,
-  StarterSummary,
+import {
+  defaultBuddy,
+  type Buddy as BuddyValue,
+  type OAuthPresetSummary,
+  type OAuthProviderId,
+  type StarterConfig,
+  type StarterSummary,
 } from "@tetherbox/core/app";
 import { RefreshCwIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
@@ -17,6 +19,7 @@ import {
   OAUTH_PROVIDER_LABELS,
   OAuthPresetCredentialsForm,
 } from "./auth-setup/oauth-preset-forms.tsx";
+import { BuddyPicker, BuddyTile } from "./buddy-picker.tsx";
 import { CliInstallCard } from "./cli-setup/cli-install-card.tsx";
 import { StarterSelectionFields } from "./starter-setup/starter-selection-fields.tsx";
 import { StarterSetupCard } from "./starter-setup/starter-setup-card.tsx";
@@ -48,12 +51,14 @@ export function CreateProfileForm({
   const queryClient = useQueryClient();
   const [id, setId] = useState("");
   const [name, setName] = useState("");
+  const [chosenBuddy, setChosenBuddy] = useState<BuddyValue | null>(null);
   const [selectedStarters, setSelectedStarters] = useState<string[]>([]);
   const [starterConfig, setStarterConfig] = useState<StarterConfig>({});
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [step, setStep] = useState<"select" | "prepare">("select");
   const [prepareStarterIds, setPrepareStarterIds] = useState<string[]>([]);
   const [refreshNonce, setRefreshNonce] = useState(0);
+  const buddy = chosenBuddy ?? defaultBuddy(id.trim().toLowerCase() || "profile");
 
   const {
     starters,
@@ -83,6 +88,7 @@ export function CreateProfileForm({
         json: {
           id: trimmedId.toLowerCase(),
           name: name.trim() || trimmedId,
+          buddy,
           starters: selectedStarters,
           starterConfig: validatedConfig,
         },
@@ -223,29 +229,34 @@ export function CreateProfileForm({
         })}
         <form onSubmit={handleSelectSubmit} className="flex min-h-0 flex-1 flex-col">
           <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 pb-4">
-            <div className="grid grid-cols-2 gap-3">
-              <Field>
-                <FieldLabel htmlFor={`${idPrefix}-id`}>Profile ID</FieldLabel>
-                <Input
-                  id={`${idPrefix}-id`}
-                  placeholder="work"
-                  value={id}
-                  onChange={(event) => setId(event.target.value)}
-                  pattern="[A-Za-z0-9][A-Za-z0-9-]{0,62}"
-                  title="Letters, numbers, and hyphens"
-                  required
-                />
-              </Field>
-              <Field>
-                <FieldLabel htmlFor={`${idPrefix}-name`}>Display name</FieldLabel>
-                <Input
-                  id={`${idPrefix}-name`}
-                  placeholder="Work"
-                  value={name}
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </Field>
+            <div className="flex items-end gap-4">
+              <BuddyTile buddy={buddy} />
+              <div className="grid flex-1 grid-cols-2 gap-3">
+                <Field>
+                  <FieldLabel htmlFor={`${idPrefix}-id`}>Profile ID</FieldLabel>
+                  <Input
+                    id={`${idPrefix}-id`}
+                    placeholder="work"
+                    value={id}
+                    onChange={(event) => setId(event.target.value)}
+                    pattern="[A-Za-z0-9][A-Za-z0-9-]{0,62}"
+                    title="Letters, numbers, and hyphens"
+                    required
+                  />
+                </Field>
+                <Field>
+                  <FieldLabel htmlFor={`${idPrefix}-name`}>Display name</FieldLabel>
+                  <Input
+                    id={`${idPrefix}-name`}
+                    placeholder="Work"
+                    value={name}
+                    onChange={(event) => setName(event.target.value)}
+                  />
+                </Field>
+              </div>
             </div>
+
+            <BuddyPicker value={buddy} onChange={setChosenBuddy} />
 
             <div className="space-y-2">
               <div className="flex items-center justify-between gap-2">
@@ -333,9 +344,7 @@ export function CreateProfileForm({
                   <span className="text-sm font-semibold">
                     {OAUTH_PROVIDER_LABELS[group.provider]} OAuth app credentials
                   </span>
-                  <Badge variant="secondary" className="text-[10px] font-normal">
-                    VM-wide · once
-                  </Badge>
+                  <Badge variant="attribute">VM-wide · once</Badge>
                 </div>
                 <p className="mt-0.5 text-xs text-muted-foreground">
                   Shared by {group.starterNames.join(", ")}.

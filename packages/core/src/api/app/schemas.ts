@@ -4,9 +4,12 @@ import type { LlmAuthKind, LlmProvider } from "../../llm-auth.ts";
 import { oauthScopeModeSchema, type OAuthPreset, type OAuthProviderConfig } from "../../oauth.ts";
 import type { RegisteredPollJob } from "../../poll.ts";
 import {
+  buddySchema,
   modelSelectionSchema,
   profileConfigSchema,
+  type Buddy,
   type ModelEffort,
+  type ModelSelection,
   starterConfigSchema,
   type CronJob,
   type ProfileConfig,
@@ -20,12 +23,15 @@ import { secretBindingSchema } from "../../secrets.ts";
 export const createProfileInputSchema = profileConfigSchema.extend({
   id: profileIdSchema,
   name: z.string().trim().min(1),
+  model: modelSelectionSchema.optional(),
+  buddy: buddySchema.optional(),
 });
 export type CreateProfileInput = z.infer<typeof createProfileInputSchema>;
 
 export const updateProfileInputSchema = z.object({
   name: z.string().trim().min(1).optional(),
   model: modelSelectionSchema.nullable().optional(),
+  buddy: buddySchema.optional(),
   starters: z.array(z.string().min(1)).optional(),
   starterConfig: starterConfigSchema.optional(),
 });
@@ -111,7 +117,13 @@ export interface ProfileWebhookSummary {
   webhook: Webhook;
 }
 
-export interface ProfileSummary {
+export interface ProfileRecord {
+  name: string;
+  buddy: Buddy;
+  model: ModelSelection | null;
+}
+
+export interface ProfileSummary extends ProfileRecord {
   id: ProfileId;
   config: ProfileConfig;
   cronCount: number;
@@ -120,7 +132,7 @@ export interface ProfileSummary {
   reminderCount: number;
 }
 
-export interface ProfileDetail {
+export interface ProfileDetail extends ProfileRecord {
   id: ProfileId;
   config: ProfileConfig;
   memory: string;

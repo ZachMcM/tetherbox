@@ -2,8 +2,8 @@ import { useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import type { LlmProvider, LlmProviderStatus, ModelSelection } from "@tetherbox/core/app";
-import { ArrowLeftIcon, CheckCircle2Icon } from "lucide-react";
-import { Badge } from "@tetherbox/ui/components/badge";
+import { ArrowLeftIcon } from "lucide-react";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { Button } from "@tetherbox/ui/components/button";
 import {
   Card,
@@ -25,7 +25,6 @@ import {
 import { LlmProviderAuthPanel } from "./auth-setup/llm-provider-auth-panel.tsx";
 import { findProviderApiKey, isProviderConnected } from "../lib/auth-status.ts";
 import { CreateProfileForm } from "./create-profile-form.tsx";
-import { EffortPicker } from "./effort-picker.tsx";
 import { ModelPicker, resolveAvailableModel } from "./model-picker.tsx";
 import { ProviderIcon } from "./provider-icons.tsx";
 
@@ -188,21 +187,12 @@ export function OnboardingScreen() {
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            <div className="flex items-start gap-2">
-              <div className="min-w-0 flex-1">
-                <ModelPicker
-                  models={models}
-                  value={effectiveDefaultModel}
-                  onChange={setSelectedModel}
-                  placeholder="Choose a default model…"
-                />
-              </div>
-              <EffortPicker
-                models={models}
-                value={effectiveDefaultModel}
-                onChange={setSelectedModel}
-              />
-            </div>
+            <ModelPicker
+              models={models}
+              value={effectiveDefaultModel}
+              onChange={setSelectedModel}
+              placeholder="Choose a default model…"
+            />
             {completeMutation.error !== null && (
               <FieldError>{completeMutation.error.message}</FieldError>
             )}
@@ -306,14 +296,11 @@ export function OnboardingScreen() {
                         </div>
                         <div className="flex shrink-0 items-center gap-2">
                           {connected && (
-                            <Badge className="gap-1">
-                              <CheckCircle2Icon className="size-3" />
-                              <span>{connectionLabel(item)}</span>
-                            </Badge>
+                            <StatusBadge status="success">{connectionLabel(item)}</StatusBadge>
                           )}
                           <Button
                             type="button"
-                            variant="outline"
+                            variant={connected ? "ghost" : "outline"}
                             size="xs"
                             onClick={() => setActiveProviderId(item.provider)}
                           >

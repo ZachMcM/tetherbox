@@ -7,9 +7,8 @@ import {
   type SecretBinding,
   type SecretInjection,
 } from "@tetherbox/core/app";
-import { CheckCircle2Icon, KeyRoundIcon } from "lucide-react";
-import { Badge } from "@tetherbox/ui/components/badge";
-import { Spinner } from "@tetherbox/ui/components/spinner";
+import { KeyRoundIcon } from "lucide-react";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import {
   cliStatusQueryOptions,
   oauthStatusQueryOptions,
@@ -102,18 +101,15 @@ function useNotifyWhenCompleted(
   }, [done, message, onComplete]);
 }
 
-function StatusBadge({ done }: { done: boolean | undefined }) {
+function RequestStatusBadge({ done }: { done: boolean | undefined }) {
   if (done === undefined) {
-    return <Spinner className="size-3.5 text-muted-foreground" />;
+    return <StatusBadge status="pending">Checking…</StatusBadge>;
   }
 
   return done ? (
-    <Badge variant="secondary" className="gap-1">
-      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-      <span>Done</span>
-    </Badge>
+    <StatusBadge status="success">Done</StatusBadge>
   ) : (
-    <Badge variant="outline">Needs setup</Badge>
+    <StatusBadge status="attention">Needs setup</StatusBadge>
   );
 }
 
@@ -138,7 +134,7 @@ function CardShell({
             <p className="mt-0.5 text-xs text-muted-foreground">{reason}</p>
           </div>
         </div>
-        <StatusBadge done={done} />
+        <RequestStatusBadge done={done} />
       </div>
       {done === false && children}
     </div>

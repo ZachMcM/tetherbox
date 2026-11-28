@@ -61,7 +61,7 @@ export function DangerZone({
               </AlertDialogTrigger>
               <AlertDialogContent>
                 <AlertDialogHeader>
-                  <AlertDialogTitle>Delete {profile.config.name}?</AlertDialogTitle>
+                  <AlertDialogTitle>Delete {profile.name}?</AlertDialogTitle>
                   <AlertDialogDescription>
                     This permanently deletes profile <code>{profile.id}</code> and all of its
                     conversations.

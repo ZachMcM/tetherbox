@@ -131,7 +131,7 @@ function SessionView({ sessionId }: { sessionId: string }) {
   const activeModel = resolveAvailableModel(models, [
     chosenModel,
     session.model,
-    profile?.config.model,
+    profile?.model,
     settingsQuery.data?.defaultModel,
   ]);
 

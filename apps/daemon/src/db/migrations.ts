@@ -65,6 +65,15 @@ const MIGRATIONS: readonly string[] = [
     PRIMARY KEY (provider, auth, model_id)
   );
   `,
+  `
+  CREATE TABLE profiles (
+    profile_id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    buddy_json TEXT NOT NULL,
+    model_json TEXT,
+    updated_at TEXT NOT NULL
+  );
+  `,
 ];
 
 export function migrate(db: DatabaseSync): void {

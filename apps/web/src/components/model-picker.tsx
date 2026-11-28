@@ -7,7 +7,7 @@ import type {
   ModelRef,
   ModelSelection,
 } from "@tetherbox/core/app";
-import { CheckIcon, ChevronDownIcon, SearchIcon, Settings2Icon, StarIcon } from "lucide-react";
+import { CheckIcon, ChevronDownIcon, CogIcon, SearchIcon, StarIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@tetherbox/ui/components/input-group";
 import { Kbd } from "@tetherbox/ui/components/kbd";
@@ -45,10 +45,6 @@ function groupKey(model: Pick<ModelRef, "provider" | "auth">): string {
   return `${model.provider}:${model.auth}`;
 }
 
-function effortLevelsOf(option: LlmModelOption): ModelEffort[] {
-  return option.effortOptions.map((entry) => entry.level);
-}
-
 function selectionFor(
   option: LlmModelOption,
   preferredEffort: ModelEffort | undefined,
@@ -59,7 +55,10 @@ function selectionFor(
     return ref;
   }
 
-  const effort = nearestEffort(effortLevelsOf(option), preferredEffort ?? PI_DEFAULT_EFFORT);
+  const effort = nearestEffort(
+    option.effortOptions.map((entry) => entry.level),
+    preferredEffort ?? PI_DEFAULT_EFFORT,
+  );
 
   return effort !== undefined ? { ...ref, effort } : ref;
 }
@@ -138,8 +137,9 @@ export function ModelPicker({
   onChange,
   onConfigureProviders,
   disabled = false,
-  compact = false,
+  variant = "outline",
   side = "bottom",
+  align = "start",
   placeholder = "Select a model…",
 }: {
   models: readonly LlmModelOption[];
@@ -147,8 +147,9 @@ export function ModelPicker({
   onChange: (model: ModelSelection) => void;
   onConfigureProviders?: (() => void) | undefined;
   disabled?: boolean;
-  compact?: boolean;
+  variant?: "outline" | "ghost";
   side?: "top" | "bottom";
+  align?: "start" | "end";
   placeholder?: string;
 }) {
   const queryClient = useQueryClient();
@@ -182,12 +183,11 @@ export function ModelPicker({
       return (
         <Button
           type="button"
-          variant="outline"
-          size={compact ? "xs" : "sm"}
+          variant={variant}
           onClick={onConfigureProviders}
           className="gap-1.5 text-muted-foreground"
         >
-          <Settings2Icon className="size-3.5" />
+          <CogIcon className="size-3.5" />
           <span>Configure provider</span>
         </Button>
       );
@@ -221,6 +221,16 @@ export function ModelPicker({
     : activeTab === FAVORITES_TAB
       ? "Star a model to pin it here."
       : "No models.";
+
+  const effortOptions =
+    selectedOption !== undefined && selectedOption.effortOptions.length > 1
+      ? selectedOption.effortOptions
+      : [];
+  const activeEffort = nearestEffort(
+    effortOptions.map((entry) => entry.level),
+    value?.effort ?? PI_DEFAULT_EFFORT,
+  );
+  const activeEffortLabel = effortOptions.find((entry) => entry.level === activeEffort)?.label;
 
   const handleOpenChange = (nextOpen: boolean) => {
     setOpen(nextOpen);
@@ -258,27 +268,40 @@ export function ModelPicker({
           render={
             <Button
               type="button"
-              variant={compact ? "ghost" : "outline"}
-              size={compact ? "xs" : "default"}
+              variant={variant}
               disabled={disabled}
-              className={
-                compact
-                  ? "max-w-64 justify-between gap-1.5 px-2 font-normal text-muted-foreground hover:text-foreground"
-                  : "w-full justify-between font-normal"
-              }
+              className={cn(
+                "justify-between",
+                variant === "outline" && "font-normal",
+                variant === "ghost" && "px-2",
+                variant === "ghost" ? "max-w-72" : "w-full",
+              )}
             />
           }
         >
           <span className="flex min-w-0 items-center gap-1.5">
             {value !== null && <ProviderIcon provider={value.provider} className="size-3.5" />}
             <span className="truncate">{selectedOption?.name ?? value?.id ?? placeholder}</span>
+            {activeEffortLabel !== undefined && (
+              <span className="shrink-0 text-muted-foreground">{activeEffortLabel}</span>
+            )}
           </span>
-          <ChevronDownIcon className="size-3.5 shrink-0 opacity-50" />
+          <ChevronDownIcon
+            className={cn(
+              "shrink-0",
+              variant === "ghost" ? "size-4 text-muted-foreground" : "size-3.5 opacity-50",
+            )}
+          />
         </PopoverTrigger>
         <PopoverContent
           side={side}
-          align="start"
-          className="h-80 w-[min(28rem,calc(100vw-2rem))] flex-row gap-0 p-0"
+          align={align}
+          className={cn(
+            "h-80 flex-row gap-0 p-0",
+            effortOptions.length > 0
+              ? "w-[min(36rem,calc(100vw-2rem))]"
+              : "w-[min(28rem,calc(100vw-2rem))]",
+          )}
           onKeyDown={handleShortcut}
         >
           <Tabs
@@ -383,6 +406,32 @@ export function ModelPicker({
               )}
             </div>
           </div>
+          {effortOptions.length > 0 && (
+            <div className="flex w-32 shrink-0 flex-col gap-0.5 border-l border-border p-1.5">
+              <span className="px-2 pt-1 pb-1.5 text-xs text-muted-foreground">Reasoning</span>
+              {effortOptions.map((entry) => {
+                const checked = entry.level === activeEffort;
+
+                return (
+                  <Button
+                    key={entry.level}
+                    type="button"
+                    variant="ghost"
+                    aria-pressed={checked}
+                    onClick={() => {
+                      if (value !== null) {
+                        onChange({ ...value, effort: entry.level });
+                      }
+                    }}
+                    className="justify-between font-normal"
+                  >
+                    <span>{entry.label}</span>
+                    {checked && <CheckIcon className="text-muted-foreground" />}
+                  </Button>
+                );
+              })}
+            </div>
+          )}
         </PopoverContent>
       </Popover>
     </div>

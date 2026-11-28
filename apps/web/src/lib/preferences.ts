@@ -5,15 +5,62 @@ const STORAGE_KEY = "tetherbox-preferences";
 export type TranscriptVerbosity = "compact" | "standard" | "verbose";
 export type SendShortcut = "enter" | "mod-enter";
 
+export const UPDATED_WITHIN_OPTIONS = ["any", "today", "7d", "30d"] as const;
+export type UpdatedWithin = (typeof UPDATED_WITHIN_OPTIONS)[number];
+
+export const SESSION_STATUS_FILTERS = ["running", "unread", "error"] as const;
+export type SessionStatusFilter = (typeof SESSION_STATUS_FILTERS)[number];
+
+export interface SessionFilter {
+  profileIds: string[];
+  updatedWithin: UpdatedWithin;
+  statuses: SessionStatusFilter[];
+}
+
+export const EMPTY_SESSION_FILTER: SessionFilter = {
+  profileIds: [],
+  updatedWithin: "any",
+  statuses: [],
+};
+
 export interface UiPreferences {
   verbosity: TranscriptVerbosity;
   sendShortcut: SendShortcut;
+  sessionFilter: SessionFilter;
 }
 
 const DEFAULT_PREFERENCES: UiPreferences = {
   verbosity: "standard",
   sendShortcut: "enter",
+  sessionFilter: EMPTY_SESSION_FILTER,
 };
+
+function isUpdatedWithin(value: unknown): value is UpdatedWithin {
+  return UPDATED_WITHIN_OPTIONS.some((option) => option === value);
+}
+
+function isSessionStatusFilter(value: unknown): value is SessionStatusFilter {
+  return SESSION_STATUS_FILTERS.some((option) => option === value);
+}
+
+function parseSessionFilter(value: unknown): SessionFilter {
+  if (typeof value !== "object" || value === null) {
+    return EMPTY_SESSION_FILTER;
+  }
+
+  const profileIds =
+    "profileIds" in value && Array.isArray(value.profileIds)
+      ? value.profileIds.filter((id): id is string => typeof id === "string")
+      : [];
+  const updatedWithin =
+    "updatedWithin" in value && isUpdatedWithin(value.updatedWithin) ? value.updatedWithin : "any";
+  const statuses =
+    "statuses" in value && Array.isArray(value.statuses)
+      ? value.statuses.filter(isSessionStatusFilter)
+      : [];
+
+  return { profileIds, updatedWithin, statuses };
+}
 
 function parseVerbosity(value: unknown): TranscriptVerbosity {
   return value === "compact" || value === "standard" || value === "verbose"
@@ -46,6 +93,9 @@ function readPreferences(): UiPreferences {
     return {
       verbosity: parseVerbosity("verbosity" in parsed ? parsed.verbosity : undefined),
       sendShortcut: parseSendShortcut("sendShortcut" in parsed ? parsed.sendShortcut : undefined),
+      sessionFilter: parseSessionFilter(
+        "sessionFilter" in parsed ? parsed.sessionFilter : undefined,
+      ),
     };
   } catch {
     return DEFAULT_PREFERENCES;
@@ -88,10 +138,6 @@ export function isSendShortcutEvent(
   return shortcut === "enter"
     ? !event.shiftKey && !event.metaKey && !event.ctrlKey
     : event.metaKey || event.ctrlKey;
-}
-
-export function sendShortcutHint(shortcut: SendShortcut): string {
-  return shortcut === "enter" ? "Enter to send, Shift+Enter for newline" : "Cmd+Enter to send";
 }
 
 export function usePreferences(): {

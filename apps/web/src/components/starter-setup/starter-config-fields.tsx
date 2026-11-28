@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { starterConfigFieldSchemas, type StarterSummary } from "@tetherbox/core/app";
-import { AlertCircleIcon, CheckCircle2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { appClient, unwrapJson } from "../../lib/api.ts";
 import { starterFieldKey } from "../../lib/starter-readiness.ts";
 import { CliOutputLog } from "../cli-setup/cli-output-log.tsx";
@@ -103,23 +103,15 @@ export function StarterConfigFields({
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2">
           <span className="text-xs font-semibold">Profile settings</span>
-          <Badge variant="outline" className="text-[10px] font-normal">
-            This profile only
-          </Badge>
+          <Badge variant="attribute">This profile only</Badge>
         </div>
         {starter.hasConnectionCheck && (
           <div className="flex items-center gap-2">
             {onConnectionStateChange === undefined && connectionState === "connected" && (
-              <Badge variant="secondary" className="gap-1">
-                <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-                <span>Connected</span>
-              </Badge>
+              <StatusBadge status="success">Connected</StatusBadge>
             )}
             {onConnectionStateChange === undefined && connectionState === "failed" && (
-              <Badge variant="secondary" className="gap-1">
-                <AlertCircleIcon className="size-3 text-destructive" />
-                <span>Connection failed</span>
-              </Badge>
+              <StatusBadge status="error">Connection failed</StatusBadge>
             )}
             <Button
               type="button"

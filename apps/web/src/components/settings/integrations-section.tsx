@@ -6,8 +6,8 @@ import {
   type CustomOAuthLoginInput,
   type OAuthPresetSummary,
 } from "@tetherbox/core/app";
-import { PlusIcon, RefreshCwIcon } from "lucide-react";
-import { Badge } from "@tetherbox/ui/components/badge";
+import { KeyRoundIcon, LinkIcon, PlusIcon, RefreshCwIcon } from "lucide-react";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldDescription, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
@@ -363,29 +363,25 @@ export function IntegrationsSection() {
             description={describePresetLogin(preset, activeLogin)}
             control={
               <div className="flex items-center gap-2">
-                {activeLogin !== undefined ? (
-                  <Badge variant="secondary">connected</Badge>
-                ) : (
-                  <Badge variant={preset.hasClientCredentials ? "secondary" : "outline"}>
-                    {preset.hasClientCredentials ? "ready" : "needs client secret"}
-                  </Badge>
-                )}
+                {activeLogin !== undefined && <StatusBadge status="success">Connected</StatusBadge>}
                 {!preset.hasClientCredentials ? (
                   <Button
                     variant="outline"
                     size="xs"
                     onClick={() => setSubView({ kind: "credentials", preset })}
                   >
-                    Set credentials
+                    <KeyRoundIcon data-icon="inline-start" />
+                    <span>Set credentials</span>
                   </Button>
                 ) : (
                   <>
                     <Button
-                      variant="outline"
+                      variant={activeLogin !== undefined ? "ghost" : "outline"}
                       size="xs"
                       onClick={() => setSubView({ kind: "connect", preset })}
                     >
-                      {activeLogin !== undefined ? "Reconnect" : "Connect"}
+                      {activeLogin === undefined && <LinkIcon data-icon="inline-start" />}
+                      <span>{activeLogin !== undefined ? "Reconnect" : "Connect"}</span>
                     </Button>
                     {activeLogin !== undefined && (
                       <Button
@@ -446,8 +442,8 @@ export function IntegrationsSection() {
       <SettingGroup
         title="Custom OAuth2"
         action={
-          <Button variant="outline" size="xs" onClick={() => setSubView({ kind: "custom" })}>
-            <PlusIcon className="size-3.5" />
+          <Button size="sm" onClick={() => setSubView({ kind: "custom" })}>
+            <PlusIcon data-icon="inline-start" />
             <span>Add custom</span>
           </Button>
         }

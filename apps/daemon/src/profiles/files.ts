@@ -1,6 +1,7 @@
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  modelSelectionSchema,
   profileConfigSchema,
   profileLayout,
   RpcError,
@@ -10,8 +11,9 @@ import {
   starterPath,
   type UpdateProfileInput,
 } from "@tetherbox/core";
+import { z } from "zod";
 import { isMissing } from "../file-store.ts";
-import { commitAll, initRepo } from "./git-repo.ts";
+import { commitAll, commitFile, initRepo } from "./git-repo.ts";
 import { loadProfile } from "./registry.ts";
 import type { StarterCatalog } from "./starter-catalog.ts";
 
@@ -66,8 +68,6 @@ export async function createProfileOnDisk({
 }): Promise<ProfileConfig> {
   const selectedStarters = catalog.resolve(input.starters);
   const profileConfig = profileConfigSchema.parse({
-    name: input.name,
-    model: input.model,
     starters: selectedStarters.map((starter) => starter.id),
     starterConfig: input.starterConfig,
   });
@@ -87,7 +87,7 @@ export async function createProfileOnDisk({
 
   try {
     await writeProfileConfigFile(profileDir, profileConfig);
-    await writeFile(join(profileDir, profileLayout.memory), `# ${profileConfig.name}\n`);
+    await writeFile(join(profileDir, profileLayout.memory), `# ${input.name}\n`);
 
     for (const starter of selectedStarters) {
       await catalog.copyInto({ profileId: input.id, profileDir, starter });
@@ -112,7 +112,7 @@ export async function updateProfileOnDisk({
   profilesDir: string;
   catalog: StarterCatalog;
   id: ProfileId;
-  input: UpdateProfileInput;
+  input: Pick<UpdateProfileInput, "starters" | "starterConfig">;
 }): Promise<ProfileConfig> {
   const profileDir = join(profilesDir, id);
 
@@ -130,10 +130,7 @@ export async function updateProfileOnDisk({
   const currentStarterIds = catalog.enabledIds(load.profile);
   const resolvedStarters = catalog.resolve(input.starters ?? currentStarterIds);
   const nextStarterSet = new Set(resolvedStarters.map((starter) => starter.id));
-  const nextModel = input.model === null ? undefined : (input.model ?? current.model);
   const updated = profileConfigSchema.parse({
-    name: input.name ?? current.name,
-    model: nextModel,
     starters: resolvedStarters.map((starter) => starter.id),
     starterConfig: input.starterConfig ?? current.starterConfig,
   });
@@ -159,6 +156,42 @@ export async function updateProfileOnDisk({
   await writeProfileConfigFile(profileDir, updated);
 
   return updated;
+}
+
+const legacyProfileFieldsSchema = z.object({
+  name: z.string().trim().min(1).optional().catch(undefined),
+  model: modelSelectionSchema.optional().catch(undefined),
+});
+
+export async function takeLegacyProfileFields(
+  profileDir: string,
+): Promise<z.infer<typeof legacyProfileFieldsSchema>> {
+  const path = join(profileDir, profileLayout.config);
+  let raw: unknown;
+
+  try {
+    raw = JSON.parse(await readFile(path, "utf8"));
+  } catch {
+    return {};
+  }
+
+  if (typeof raw !== "object" || raw === null || !("name" in raw || "model" in raw)) {
+    return {};
+  }
+
+  const legacy = legacyProfileFieldsSchema.parse(raw);
+  const config = profileConfigSchema.safeParse(raw);
+
+  if (config.success) {
+    await writeProfileConfigFile(profileDir, config.data);
+    await commitFile({
+      dir: profileDir,
+      file: profileLayout.config,
+      message: "Move profile name and model to Tetherbox settings",
+    });
+  }
+
+  return legacy;
 }
 
 export async function deleteProfileOnDisk(profilesDir: string, id: ProfileId): Promise<void> {

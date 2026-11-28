@@ -1,8 +1,9 @@
 import { parseArgs } from "node:util";
 import { modelRefSchema, profileIdSchema, starterConfigFlagsSchema } from "@tetherbox/core";
 import type { DaemonConfig } from "../config.ts";
+import { openDaemonDb, type DaemonDb } from "../db/database.ts";
 import { signalDaemonReload } from "../pid.ts";
-import { createProfileOnDisk, updateProfileOnDisk } from "../profiles/files.ts";
+import { createProfileOnDisk } from "../profiles/files.ts";
 import { ProfileRegistry } from "../profiles/registry.ts";
 import { StarterCatalog } from "../profiles/starter-catalog.ts";
 
@@ -26,6 +27,16 @@ function modelInput(values: ModelArgs) {
   };
 }
 
+function withDb(config: DaemonConfig, task: (db: DaemonDb) => void): void {
+  const db = openDaemonDb(config.dataDir);
+
+  try {
+    task(db);
+  } finally {
+    db.close();
+  }
+}
+
 async function reportReload(config: DaemonConfig, message: string): Promise<void> {
   const reloaded = await signalDaemonReload(config.dataDir);
 
@@ -42,9 +53,11 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
         console.warn(`${issue.file}: ${issue.message}`);
       }
 
-      for (const profile of registry.all()) {
-        console.log(`${profile.id}\t${profile.config.name}`);
-      }
+      withDb(config, (db) => {
+        for (const profile of registry.all()) {
+          console.log(`${profile.id}\t${db.profiles.get(profile.id).name}`);
+        }
+      });
 
       return;
     }
@@ -73,11 +86,14 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       const starterConfig = starterConfigFlagsSchema.parse(values["starter-config"]);
       const model = modelRefSchema.parse(modelInput(values));
 
+      const name = values.name ?? id;
+
       await createProfileOnDisk({
         profilesDir: config.profilesDir,
         catalog: await StarterCatalog.open(config.dataDir),
-        input: { id, name: values.name ?? id, model, starters: values.starter, starterConfig },
+        input: { id, name, starters: values.starter, starterConfig },
       });
+      withDb(config, (db) => db.profiles.upsert(id, { name, model }));
 
       // TODO: Set profileDir ownership to config.agent.user once the VM installer configures a
       // shared group or chown rule for the daemon user.
@@ -93,12 +109,11 @@ export async function runProfilesCommand(config: DaemonConfig, args: string[]): 
       });
       const model = modelRefSchema.parse(modelInput(values));
 
-      await updateProfileOnDisk({
-        profilesDir: config.profilesDir,
-        catalog: await StarterCatalog.open(config.dataDir),
-        id,
-        input: { model },
-      });
+      if ((await registry.reload(id)).kind !== "loaded") {
+        throw new Error(`profile "${id}" does not exist or is invalid`);
+      }
+
+      withDb(config, (db) => db.profiles.upsert(id, { model }));
       await reportReload(
         config,
         `set ${id} model to ${model.provider}/${model.id} (${model.auth})`,

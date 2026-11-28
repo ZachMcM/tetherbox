@@ -31,7 +31,7 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
           {activeFlow !== null ? (
             <Button
               type="button"
-              variant="outline"
+              variant="ghost"
               size="xs"
               disabled={oauth.isCancelling}
               onClick={oauth.cancel}
@@ -53,7 +53,7 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
               )}
               <Button
                 type="button"
-                variant="outline"
+                variant={provider.oauthExpires !== undefined ? "ghost" : "outline"}
                 size="xs"
                 disabled={oauth.isStarting}
                 onClick={oauth.start}

@@ -56,17 +56,20 @@ export function SettingGroup({
 }
 
 export function SettingRow({
+  leading,
   title,
   description,
   control,
 }: {
+  leading?: ReactNode;
   title: ReactNode;
   description?: string | undefined;
   control: ReactNode;
 }) {
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3.5">
-      <div className="min-w-0">
+    <div className="flex items-center gap-3 px-4 py-3.5">
+      {leading}
+      <div className="min-w-0 flex-1">
         <div className="text-sm font-medium">{title}</div>
         {description !== undefined && (
           <div className="mt-0.5 text-xs text-muted-foreground">{description}</div>

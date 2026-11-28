@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { ProfileSummary, SessionRecord } from "@tetherbox/core/app";
@@ -6,23 +6,16 @@ import {
   ActivityIcon,
   BellIcon,
   ClockIcon,
-  FolderIcon,
-  FolderPlusIcon,
-  ListFilterIcon,
-  MessageSquareIcon,
   MoreHorizontalIcon,
-  MoreVerticalIcon,
   PlusIcon,
-  SettingsIcon,
+  SearchIcon,
+  CogIcon,
   Trash2Icon,
   WebhookIcon,
+  XIcon,
 } from "lucide-react";
+import { Buddy } from "@tetherbox/ui/components/buddy";
 import { Button } from "@tetherbox/ui/components/button";
-import {
-  Collapsible,
-  CollapsibleContent,
-  CollapsibleTrigger,
-} from "@tetherbox/ui/components/collapsible";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +28,7 @@ import {
   SidebarFooter,
   SidebarGroup,
   SidebarGroupContent,
+  SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
   SidebarMenuAction,
@@ -44,125 +38,181 @@ import {
 } from "@tetherbox/ui/components/sidebar";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, expectOk, queryKeys } from "../lib/api.ts";
+import { EMPTY_SESSION_FILTER, usePreferences, type SessionFilter } from "../lib/preferences.ts";
 import { profilesQueryOptions, sessionsQueryOptions } from "../lib/queries.ts";
+import { groupSessionsByDay, matchesSessionFilter } from "../lib/session-list.ts";
+import { CommandPalette } from "./command-palette.tsx";
 import { CreateProfileDialog } from "./create-profile-dialog.tsx";
+import {
+  SessionFilterPopover,
+  STATUS_FILTER_LABELS,
+  UPDATED_WITHIN_LABELS,
+} from "./session-filter-popover.tsx";
 import type { SettingsTab } from "./settings/types.ts";
 
-function TriggerIcon({ kind }: { kind: SessionRecord["triggerKind"] }) {
-  switch (kind) {
+function SessionStatusMark({ session }: { session: SessionRecord }) {
+  if (session.status === "running") {
+    return <Spinner className="size-3.5 shrink-0 text-muted-foreground" />;
+  }
+
+  if (session.status === "error") {
+    return <span className="size-2 shrink-0 rounded-full bg-destructive" title="Last run failed" />;
+  }
+
+  if (session.unreadAlert) {
+    return <span className="size-2 shrink-0 rounded-full bg-primary" title="Unread" />;
+  }
+
+  const iconClass = "size-3.5 shrink-0 text-muted-foreground";
+
+  switch (session.triggerKind) {
     case "cron":
-      return <ClockIcon className="size-3.5 text-muted-foreground" />;
+      return <ClockIcon className={iconClass} />;
     case "webhook":
-      return <WebhookIcon className="size-3.5 text-muted-foreground" />;
+      return <WebhookIcon className={iconClass} />;
     case "poll":
-      return <ActivityIcon className="size-3.5 text-muted-foreground" />;
+      return <ActivityIcon className={iconClass} />;
     case "reminder":
-      return <BellIcon className="size-3.5 text-muted-foreground" />;
+      return <BellIcon className={iconClass} />;
     case "user":
-      return <MessageSquareIcon className="size-3.5 text-muted-foreground" />;
+      return null;
     default: {
-      const exhaustive: never = kind;
+      const exhaustive: never = session.triggerKind;
 
       return exhaustive;
     }
   }
 }
 
-function ProfileGroup({
+function SessionRow({
+  session,
   profile,
-  sessions,
-  activePath,
-  onStartConversation,
-  onDeleteSession,
-  onOpenSettings,
+  isActive,
+  onDelete,
 }: {
-  profile: ProfileSummary;
-  sessions: readonly SessionRecord[];
-  activePath: string;
-  onStartConversation: (profileId: string) => void;
-  onDeleteSession: (sessionId: string) => void;
-  onOpenSettings: (profileId: string) => void;
+  session: SessionRecord;
+  profile: ProfileSummary | undefined;
+  isActive: boolean;
+  onDelete: () => void;
 }) {
-  const [open, setOpen] = useState(true);
+  return (
+    <SidebarMenuItem>
+      <SidebarMenuButton
+        size="lg"
+        isActive={isActive}
+        className="gap-2.5"
+        render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} />}
+      >
+        {profile !== undefined && <Buddy {...profile.buddy} size={28} />}
+        <span className="flex min-w-0 flex-1 flex-col">
+          <span className="truncate">{session.title}</span>
+          {profile !== undefined && (
+            <span className="truncate text-xs font-normal text-muted-foreground">
+              {profile.name}
+            </span>
+          )}
+        </span>
+        <SessionStatusMark session={session} />
+      </SidebarMenuButton>
+      <DropdownMenu>
+        <DropdownMenuTrigger
+          render={
+            <SidebarMenuAction
+              showOnHover
+              aria-label="Session actions"
+              className="top-1/2! -translate-y-1/2"
+            />
+          }
+        >
+          <MoreHorizontalIcon className="size-3.5" />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="end">
+          <DropdownMenuItem variant="destructive-outline" onClick={onDelete}>
+            <Trash2Icon className="size-3.5" />
+            <span>Delete conversation</span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarMenuItem>
+  );
+}
+
+function ActiveFilterChips({
+  filter,
+  profiles,
+  onChange,
+}: {
+  filter: SessionFilter;
+  profiles: readonly ProfileSummary[];
+  onChange: (next: SessionFilter) => void;
+}) {
+  const chips = [
+    ...filter.profileIds.flatMap((id) => {
+      const profile = profiles.find((entry) => entry.id === id);
+
+      return profile === undefined
+        ? []
+        : [
+            {
+              key: `profile-${id}`,
+              label: profile.name,
+              buddy: profile.buddy,
+              remove: () =>
+                onChange({
+                  ...filter,
+                  profileIds: filter.profileIds.filter((entry) => entry !== id),
+                }),
+            },
+          ];
+    }),
+    ...(filter.updatedWithin === "any"
+      ? []
+      : [
+          {
+            key: "updated",
+            label: UPDATED_WITHIN_LABELS[filter.updatedWithin],
+            buddy: undefined,
+            remove: () => onChange({ ...filter, updatedWithin: "any" }),
+          },
+        ]),
+    ...filter.statuses.map((status) => ({
+      key: `status-${status}`,
+      label: STATUS_FILTER_LABELS[status],
+      buddy: undefined,
+      remove: () =>
+        onChange({ ...filter, statuses: filter.statuses.filter((entry) => entry !== status) }),
+    })),
+  ];
+
+  if (chips.length === 0) {
+    return null;
+  }
 
   return (
-    <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
-      <div className="flex items-center justify-between gap-1 px-1">
-        <CollapsibleTrigger className="flex h-8 min-w-0 flex-1 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-sidebar-foreground/80 ring-sidebar-ring outline-hidden hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:ring-2 [&>svg]:size-4 [&>svg]:shrink-0">
-          <FolderIcon className="text-muted-foreground" />
-          <span className="truncate">{profile.config.name}</span>
-        </CollapsibleTrigger>
-        <div className="flex items-center gap-0.5">
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => onOpenSettings(profile.id)}
-            title={`${profile.config.name} settings`}
-            aria-label={`${profile.config.name} settings`}
-          >
-            <MoreVerticalIcon className="size-3.5 text-muted-foreground" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => onStartConversation(profile.id)}
-            title={`New conversation in ${profile.config.name}`}
-            aria-label={`New conversation in ${profile.config.name}`}
-          >
-            <PlusIcon className="size-3.5 text-muted-foreground" />
-          </Button>
-        </div>
-      </div>
-      <CollapsibleContent className="pl-3">
-        <SidebarMenu className="mt-0.5">
-          {sessions.length === 0 ? (
-            <div className="px-3 py-1.5 text-xs text-muted-foreground">No conversations yet</div>
-          ) : (
-            sessions.map((session) => {
-              const isActive = activePath === `/sessions/${session.id}`;
-
-              return (
-                <SidebarMenuItem key={session.id}>
-                  <SidebarMenuButton
-                    isActive={isActive}
-                    render={<Link to="/sessions/$sessionId" params={{ sessionId: session.id }} />}
-                  >
-                    {session.status === "running" ? (
-                      <Spinner className="size-3.5 shrink-0" />
-                    ) : (
-                      <TriggerIcon kind={session.triggerKind} />
-                    )}
-                    <span className="flex-1 truncate">{session.title}</span>
-                    {session.unreadAlert && (
-                      <span className="size-2 shrink-0 rounded-full bg-primary" />
-                    )}
-                    {session.status === "error" && (
-                      <span className="size-2 shrink-0 rounded-full bg-destructive" />
-                    )}
-                  </SidebarMenuButton>
-                  <DropdownMenu>
-                    <DropdownMenuTrigger
-                      render={<SidebarMenuAction showOnHover aria-label="Session actions" />}
-                    >
-                      <MoreHorizontalIcon className="size-3.5" />
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      <DropdownMenuItem
-                        variant="destructive-outline"
-                        onClick={() => onDeleteSession(session.id)}
-                      >
-                        <Trash2Icon className="size-3.5" />
-                        <span>Delete conversation</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </SidebarMenuItem>
-              );
-            })
-          )}
-        </SidebarMenu>
-      </CollapsibleContent>
-    </Collapsible>
+    <div className="flex flex-wrap items-center gap-1">
+      {chips.map((chip) => (
+        <Button
+          key={chip.key}
+          variant="secondary"
+          size="xs"
+          className="rounded-full pr-1"
+          onClick={chip.remove}
+          aria-label={`Remove ${chip.label} filter`}
+        >
+          {chip.buddy !== undefined && <Buddy {...chip.buddy} size={16} animated={false} />}
+          <span>{chip.label}</span>
+          <XIcon className="text-muted-foreground" />
+        </Button>
+      ))}
+      <Button
+        variant="ghost"
+        size="xs"
+        className="text-muted-foreground"
+        onClick={() => onChange(EMPTY_SESSION_FILTER)}
+      >
+        Clear
+      </Button>
+    </div>
   );
 }
 
@@ -170,10 +220,25 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const pathname = useRouterState({ select: (state) => state.location.pathname });
+  const { preferences, updatePreferences } = usePreferences();
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const profilesQuery = useQuery(profilesQueryOptions);
   const sessionsQuery = useQuery(sessionsQueryOptions);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setPaletteOpen((open) => !open);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   const deleteSessionMutation = useMutation({
     mutationFn: async (sessionId: string) => {
@@ -191,87 +256,93 @@ export function AppSidebar() {
   });
 
   const openSettings = (tab: SettingsTab) => {
-    void navigate({
-      to: ".",
-      search: (prev) => ({ ...prev, settings: tab }),
-    });
+    void navigate({ to: ".", search: (prev) => ({ ...prev, settings: tab }) });
   };
 
   const profiles = profilesQuery.data?.profiles ?? [];
   const sessions = sessionsQuery.data?.sessions ?? [];
+  const profileById = new Map(profiles.map((profile) => [profile.id, profile]));
+  const storedFilter = preferences.sessionFilter;
+  const filter = profilesQuery.isSuccess
+    ? {
+        ...storedFilter,
+        profileIds: storedFilter.profileIds.filter((id) =>
+          profiles.some((profile) => profile.id === id),
+        ),
+      }
+    : storedFilter;
+  const setFilter = (sessionFilter: SessionFilter) => updatePreferences({ sessionFilter });
+  const now = new Date();
+  const visibleSessions = sessions.filter((session) => matchesSessionFilter(session, filter, now));
+  const dayGroups = groupSessionsByDay(visibleSessions, now);
 
   return (
     <>
       <Sidebar>
-        <SidebarHeader className="h-16 justify-center px-3">
+        <SidebarHeader className="gap-2 px-3 pt-3">
+          <div className="flex h-8 items-center justify-between pl-1.5">
+            <span className="font-heading text-base font-semibold tracking-tight">Tetherbox</span>
+            <div className="flex items-center gap-0.5">
+              <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label="Search"
+                className="text-sidebar-foreground/75"
+                onClick={() => setPaletteOpen(true)}
+              >
+                <SearchIcon />
+              </Button>
+              <SessionFilterPopover
+                profiles={profiles}
+                sessions={sessions}
+                filter={filter}
+                visibleCount={visibleSessions.length}
+                onChange={setFilter}
+              />
+            </div>
+          </div>
           <Button
-            variant="default"
-            className="w-full justify-start gap-2"
+            className="w-full justify-start"
             onClick={() => void navigate({ to: "/" })}
             disabled={profiles.length === 0}
-            title={profiles.length === 0 ? "Create a profile first" : undefined}
           >
-            <PlusIcon className="size-4" />
+            <PlusIcon data-icon="inline-start" />
             <span>New conversation</span>
           </Button>
+          <ActiveFilterChips filter={filter} profiles={profiles} onChange={setFilter} />
         </SidebarHeader>
 
         <SidebarContent>
-          <SidebarGroup>
-            <div className="mb-1 flex items-center justify-between px-2">
-              <span className="text-xs font-medium text-sidebar-foreground/60">Profiles</span>
-              <div className="flex items-center gap-0.5">
-                {/* TODO: Wire sidebar profile filter and sort controls */}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  disabled
-                  title="Filter and sort profiles"
-                  aria-label="Filter and sort profiles"
-                >
-                  <ListFilterIcon className="size-4 text-muted-foreground" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  onClick={() => setCreateOpen(true)}
-                  title="New profile"
-                  aria-label="New profile"
-                >
-                  <FolderPlusIcon className="size-4 text-muted-foreground" />
-                </Button>
-              </div>
+          {sessions.length > 0 && dayGroups.length === 0 && (
+            <div className="px-4 py-2 text-xs text-muted-foreground">
+              No conversations match these filters.
             </div>
-            <SidebarGroupContent className="space-y-1">
-              {profiles.length === 0 ? (
-                <div className="px-2 py-1.5 text-xs text-muted-foreground">No profiles yet</div>
-              ) : (
-                profiles.map((profile) => (
-                  <ProfileGroup
-                    key={profile.id}
-                    profile={profile}
-                    sessions={sessions.filter((session) => session.profileId === profile.id)}
-                    activePath={pathname}
-                    onStartConversation={(profileId) =>
-                      void navigate({
-                        to: "/",
-                        search: (prev) => ({ ...prev, profile: profileId }),
-                      })
-                    }
-                    onDeleteSession={(sessionId) => deleteSessionMutation.mutate(sessionId)}
-                    onOpenSettings={(profileId) => openSettings(`profile:${profileId}`)}
-                  />
-                ))
-              )}
-            </SidebarGroupContent>
-          </SidebarGroup>
+          )}
+          {dayGroups.map((group) => (
+            <SidebarGroup key={group.label} className="py-1">
+              <SidebarGroupLabel>{group.label}</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <SidebarMenu>
+                  {group.sessions.map((session) => (
+                    <SessionRow
+                      key={session.id}
+                      session={session}
+                      profile={profileById.get(session.profileId)}
+                      isActive={pathname === `/sessions/${session.id}`}
+                      onDelete={() => deleteSessionMutation.mutate(session.id)}
+                    />
+                  ))}
+                </SidebarMenu>
+              </SidebarGroupContent>
+            </SidebarGroup>
+          ))}
         </SidebarContent>
 
         <SidebarFooter>
           <SidebarMenu>
             <SidebarMenuItem>
               <SidebarMenuButton onClick={() => openSettings("general")}>
-                <SettingsIcon className="size-4" />
+                <CogIcon className="size-4" />
                 <span>Settings</span>
               </SidebarMenuButton>
             </SidebarMenuItem>
@@ -280,12 +351,17 @@ export function AppSidebar() {
         <SidebarRail />
       </Sidebar>
 
+      <CommandPalette
+        open={paletteOpen}
+        onOpenChange={setPaletteOpen}
+        profiles={profiles}
+        sessions={sessions}
+        onNewProfile={() => setCreateOpen(true)}
+      />
       <CreateProfileDialog
         open={createOpen}
         onOpenChange={setCreateOpen}
-        onCreated={(profileId) => {
-          void navigate({ to: "/", search: (prev) => ({ ...prev, profile: profileId }) });
-        }}
+        onCreated={(profileId) => void navigate({ to: "/", search: { profile: profileId } })}
       />
     </>
   );

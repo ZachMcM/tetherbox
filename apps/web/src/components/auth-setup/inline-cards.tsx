@@ -6,8 +6,8 @@ import {
   type StarterConfig,
   type StarterSecret,
 } from "@tetherbox/core/app";
-import { CheckCircle2Icon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { Field, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import {
@@ -89,9 +89,7 @@ export function StarterSecretInlineCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-mono text-xs font-semibold">{secret.key}</span>
-            <Badge variant="secondary" className="text-[10px] font-normal">
-              VM-wide
-            </Badge>
+            <Badge variant="attribute">VM-wide</Badge>
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {describeStarterSecretBinding(secret, domain)}
@@ -99,12 +97,9 @@ export function StarterSecretInlineCard({
         </div>
         {showStatusBadge &&
           (isConfigured ? (
-            <Badge variant="secondary" className="gap-1">
-              <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-              <span>Saved</span>
-            </Badge>
+            <StatusBadge status="success">Saved</StatusBadge>
           ) : (
-            <Badge variant="outline">Missing</Badge>
+            <StatusBadge status="attention">Missing</StatusBadge>
           ))}
       </div>
 
@@ -152,9 +147,7 @@ export function OAuthPresetInlineCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold">{preset.label} OAuth</span>
-            <Badge variant="secondary" className="text-[10px] font-normal">
-              VM-wide
-            </Badge>
+            <Badge variant="attribute">VM-wide</Badge>
           </div>
           <div className="mt-0.5 text-xs text-muted-foreground">
             {describePresetLogin(preset, activeLogin)}
@@ -162,14 +155,11 @@ export function OAuthPresetInlineCard({
         </div>
         {showStatusBadge &&
           (connected ? (
-            <Badge variant="secondary" className="gap-1">
-              <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-              <span>Connected</span>
-            </Badge>
+            <StatusBadge status="success">Connected</StatusBadge>
           ) : (
-            <Badge variant="outline">
+            <StatusBadge status="attention">
               {preset.hasClientCredentials ? "Not connected" : "Needs client secret"}
-            </Badge>
+            </StatusBadge>
           ))}
       </div>
 

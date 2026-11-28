@@ -94,7 +94,10 @@ export function SettingsDialog({ activeTab }: { activeTab: SettingsTab | undefin
           {activeTab === "tools" && <CliToolsSection />}
           {activeTab === "library" && <LibrarySection />}
           {activeTab === "profiles" && (
-            <ProfilesSection onOpenProfile={(id) => setTab(`profile:${id}`)} />
+            <ProfilesSection
+              onOpenProfile={(id) => setTab(`profile:${id}`)}
+              onProfileCreated={(id) => void navigate({ to: "/", search: { profile: id } })}
+            />
           )}
           {profileId !== undefined && (
             <ProfileSettingsSection

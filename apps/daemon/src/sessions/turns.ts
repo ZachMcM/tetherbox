@@ -20,6 +20,7 @@ import { runAgent } from "./agent-spawner.ts";
 import type { DaemonConfig } from "../config.ts";
 import type { SessionTable } from "../db/sessions.ts";
 import type { AppSettingsTable } from "../db/settings.ts";
+import type { ProfileTable } from "../db/profiles.ts";
 import type { DaemonEvent, DaemonEventBus } from "../events.ts";
 import type { LlmOAuth } from "../credentials/llm-oauth.ts";
 import type { LoadedProfile, ProfileRegistry } from "../profiles/registry.ts";
@@ -69,6 +70,7 @@ export interface TurnRunnerDeps {
   registry: ProfileRegistry;
   llmOAuth: LlmOAuth;
   sessions: SessionTable;
+  profiles: ProfileTable;
   settings: AppSettingsTable;
   events: DaemonEventBus;
   onProfileReloaded(profile: LoadedProfile): Promise<ProfileIssue[]>;
@@ -327,13 +329,10 @@ export class TurnRunner {
     }
   }
 
-  #resolveModel(
-    sessionId: SessionId,
-    profileModel: ModelSelection | undefined,
-  ): ModelSelection | undefined {
+  #resolveModel(sessionId: SessionId, profileId: ProfileId): ModelSelection | undefined {
     return (
       this.#deps.sessions.get(sessionId)?.model ??
-      profileModel ??
+      this.#deps.profiles.get(profileId).model ??
       this.#deps.settings.get().defaultModel ??
       undefined
     );
@@ -357,7 +356,7 @@ export class TurnRunner {
     let model: ModelSelection | undefined;
 
     try {
-      model = requestedModel ?? this.#resolveModel(sessionId, profile.config.model);
+      model = requestedModel ?? this.#resolveModel(sessionId, profileId);
     } catch (error) {
       console.error(`could not resolve the model for session ${sessionId}`, error);
       this.#setSessionStatus(

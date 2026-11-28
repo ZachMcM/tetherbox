@@ -1,15 +1,9 @@
 import type { StarterCliStatusEntry } from "@tetherbox/core/app";
-import {
-  AlertCircleIcon,
-  CheckCircle2Icon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  DownloadIcon,
-} from "lucide-react";
+import { ChevronDownIcon, ChevronRightIcon, DownloadIcon, LogInIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
-import { Spinner } from "@tetherbox/ui/components/spinner";
+import { StatusBadge } from "@tetherbox/ui/components/status-badge";
 import { AuthorizationPendingAlert } from "../auth-setup/authorization-pending-alert.tsx";
 import { CodePastePrompt } from "../auth-setup/code-paste-prompt.tsx";
 import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
@@ -32,48 +26,26 @@ function CliStatusBadge({
   authState: AuthState;
 }) {
   if (entry.status.kind === "error") {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <AlertCircleIcon className="size-3 text-destructive" />
-        <span>Error</span>
-      </Badge>
-    );
+    return <StatusBadge status="error">Error</StatusBadge>;
+  }
+
+  if (isInstalling) {
+    return <StatusBadge status="pending">Installing…</StatusBadge>;
   }
 
   if (!isInstalled) {
-    return isInstalling ? (
-      <Badge variant="outline" className="gap-1.5">
-        <Spinner className="size-3" />
-        <span>Installing…</span>
-      </Badge>
-    ) : (
-      <Badge variant="outline">Not installed</Badge>
-    );
-  }
-
-  if (!entry.hasAuth || authState === "none") {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-        <span>Installed</span>
-      </Badge>
-    );
+    return entry.hasInstall ? null : <StatusBadge status="attention">Not installed</StatusBadge>;
   }
 
   if (authState === "authenticated") {
-    return (
-      <Badge variant="secondary" className="gap-1">
-        <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
-        <span>Signed in</span>
-      </Badge>
-    );
+    return <StatusBadge status="success">Signed in</StatusBadge>;
   }
 
-  if (authState === "unknown") {
-    return <Badge variant="secondary">Installed</Badge>;
+  if (authState === "unauthenticated") {
+    return null;
   }
 
-  return <Badge variant="outline">Not signed in</Badge>;
+  return <StatusBadge status="success">Installed</StatusBadge>;
 }
 
 export function CliAuthFlowPanel({
@@ -109,9 +81,7 @@ export function CliAuthFlowPanel({
               {entry.hasAuth ? `${cliLabel} login` : cliLabel}
             </span>
             <code className="font-mono text-xs text-muted-foreground">{entry.binary}</code>
-            <Badge variant="secondary" className="text-[10px] font-normal">
-              VM-wide
-            </Badge>
+            <Badge variant="attribute">VM-wide</Badge>
           </div>
           {entry.status.kind === "error" && (
             <div className="mt-0.5 text-xs text-destructive">{entry.status.message}</div>
@@ -142,7 +112,7 @@ export function CliAuthFlowPanel({
                 size="xs"
                 onClick={() => void installRunner.installOne(entry.starterId)}
               >
-                <DownloadIcon className="size-3" />
+                <DownloadIcon data-icon="inline-start" />
                 <span>Install</span>
               </Button>
             )
@@ -150,7 +120,7 @@ export function CliAuthFlowPanel({
             activeFlow !== null ? (
               <Button
                 type="button"
-                variant="outline"
+                variant="ghost"
                 size="xs"
                 disabled={auth.isCancelling}
                 onClick={auth.cancel}
@@ -160,16 +130,19 @@ export function CliAuthFlowPanel({
             ) : (
               <Button
                 type="button"
-                variant="outline"
+                variant={authState === "authenticated" ? "ghost" : "outline"}
                 size="xs"
                 disabled={auth.isStarting}
                 onClick={auth.start}
               >
-                {auth.isStarting
-                  ? "Starting…"
-                  : authState === "authenticated"
-                    ? "Reconnect"
-                    : "Sign in"}
+                {authState !== "authenticated" && <LogInIcon data-icon="inline-start" />}
+                <span>
+                  {auth.isStarting
+                    ? "Starting…"
+                    : authState === "authenticated"
+                      ? "Reconnect"
+                      : "Sign in"}
+                </span>
               </Button>
             )
           ) : null}

@@ -1,14 +1,20 @@
 import { useState, type KeyboardEvent } from "react";
 import type { LlmModelOption, ModelSelection } from "@tetherbox/core/app";
-import { ArrowUpIcon, SquareIcon } from "lucide-react";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@tetherbox/ui/components/input-group";
-import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
-import { EffortPicker } from "./effort-picker.tsx";
+  PromptInput,
+  PromptInputActions,
+  PromptInputFooter,
+  PromptInputStop,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@tetherbox/ui/components/prompt-input";
+import { isSendShortcutEvent, usePreferences } from "../lib/preferences.ts";
+import {
+  AttachmentList,
+  AttachmentButton,
+  useComposerAttachments,
+} from "./composer-attachments.tsx";
 import { ModelPicker } from "./model-picker.tsx";
 
 export function SessionComposer({
@@ -36,6 +42,7 @@ export function SessionComposer({
 }) {
   const [value, setValue] = useState("");
   const { preferences } = usePreferences();
+  const attachments = useComposerAttachments();
 
   const submit = async () => {
     const trimmed = value.trim();
@@ -45,8 +52,10 @@ export function SessionComposer({
     }
 
     try {
+      // TODO: Upload attachments once turns accept files.
       await onSend(trimmed);
       setValue("");
+      attachments.clear();
     } catch {
       return;
     }
@@ -55,72 +64,47 @@ export function SessionComposer({
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isSendShortcutEvent(event, preferences.sendShortcut)) {
       event.preventDefault();
-      void submit();
+      event.currentTarget.form?.requestSubmit();
     }
   };
-
-  const placeholder = `Message this session… (${sendShortcutHint(preferences.sendShortcut)})`;
 
   return (
     <div className="border-t border-border bg-background/80 px-4 py-3 backdrop-blur-sm sm:px-6">
       <div className="mx-auto w-full max-w-3xl">
-        <InputGroup className="rounded-xl">
-          <InputGroupTextarea
+        <PromptInput onSubmit={() => void submit()} {...attachments.dropTarget}>
+          <AttachmentList attachments={attachments.attachments} onRemove={attachments.remove} />
+          <PromptInputTextarea
             value={value}
             onChange={(event) => setValue(event.target.value)}
             onKeyDown={onKeyDown}
-            placeholder={placeholder}
+            onPaste={attachments.onPaste}
+            placeholder="Reply…"
             rows={2}
-            className="max-h-48 min-h-12 resize-none px-4 py-3 text-sm"
             disabled={disabled}
           />
-          <InputGroupAddon align="block-end" className="justify-between gap-2 px-3 pb-2.5">
-            <div className="flex min-w-0 items-center gap-2">
+          <PromptInputFooter>
+            <PromptInputTools>
+              <AttachmentButton onFiles={attachments.add} />
+            </PromptInputTools>
+            <PromptInputActions>
               <ModelPicker
-                compact
+                variant="ghost"
                 side="top"
+                align="end"
                 models={models}
                 value={model}
                 disabled={running}
                 onChange={onModelChange}
                 onConfigureProviders={onConfigureProviders}
               />
-              <EffortPicker
-                compact
-                models={models}
-                value={model}
-                disabled={running}
-                onChange={onModelChange}
-              />
-              {running && (
-                <span className="hidden text-xs text-muted-foreground sm:inline">Streaming…</span>
+              {running ? (
+                <PromptInputStop stopping={aborting} onClick={onAbort} />
+              ) : (
+                <PromptInputSubmit disabled={disabled || value.trim() === "" || model === null} />
               )}
-            </div>
-            <div className="flex items-center gap-1.5">
-              {running && (
-                <InputGroupButton
-                  variant="destructive"
-                  size="sm"
-                  onClick={onAbort}
-                  disabled={aborting}
-                  aria-label="Abort active turn"
-                >
-                  <SquareIcon className="size-3.5 fill-current" />
-                  <span>{aborting ? "Stopping…" : "Stop"}</span>
-                </InputGroupButton>
-              )}
-              <InputGroupButton
-                variant="default"
-                size="icon-sm"
-                onClick={() => void submit()}
-                disabled={disabled || value.trim() === "" || model === null}
-                aria-label="Send message"
-              >
-                <ArrowUpIcon className="size-4" />
-              </InputGroupButton>
-            </div>
-          </InputGroupAddon>
-        </InputGroup>
+            </PromptInputActions>
+          </PromptInputFooter>
+        </PromptInput>
         {error !== null && <p className="mt-2 px-2 text-xs text-destructive">{error}</p>}
       </div>
     </div>

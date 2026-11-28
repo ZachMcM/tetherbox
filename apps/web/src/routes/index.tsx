@@ -2,7 +2,8 @@ import { useState, type KeyboardEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import type { ModelSelection } from "@tetherbox/core/app";
-import { ArrowUpIcon, MessageSquarePlusIcon, PlusIcon } from "lucide-react";
+import { MessageSquarePlusIcon, PlusIcon } from "lucide-react";
+import { Buddy } from "@tetherbox/ui/components/buddy";
 import { Button } from "@tetherbox/ui/components/button";
 import {
   Empty,
@@ -13,19 +14,25 @@ import {
   EmptyTitle,
 } from "@tetherbox/ui/components/empty";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupButton,
-  InputGroupTextarea,
-} from "@tetherbox/ui/components/input-group";
-import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/native-select";
+  PromptInput,
+  PromptInputActions,
+  PromptInputFooter,
+  PromptInputSubmit,
+  PromptInputTextarea,
+  PromptInputTools,
+} from "@tetherbox/ui/components/prompt-input";
 import { Separator } from "@tetherbox/ui/components/separator";
 import { SidebarTrigger } from "@tetherbox/ui/components/sidebar";
+import {
+  AttachmentList,
+  AttachmentButton,
+  useComposerAttachments,
+} from "../components/composer-attachments.tsx";
 import { CreateProfileDialog } from "../components/create-profile-dialog.tsx";
-import { EffortPicker } from "../components/effort-picker.tsx";
 import { ModelPicker, resolveAvailableModel } from "../components/model-picker.tsx";
+import { ProfileSelect } from "../components/profile-select.tsx";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
-import { isSendShortcutEvent, sendShortcutHint, usePreferences } from "../lib/preferences.ts";
+import { isSendShortcutEvent, usePreferences } from "../lib/preferences.ts";
 import {
   appSettingsQueryOptions,
   llmModelsQueryOptions,
@@ -45,6 +52,7 @@ function HomePage() {
   const [createOpen, setCreateOpen] = useState(false);
   const [draft, setDraft] = useState("");
   const [chosenModel, setChosenModel] = useState<ModelSelection | null>(null);
+  const attachments = useComposerAttachments();
 
   const profilesQuery = useQuery(profilesQueryOptions);
   const settingsQuery = useQuery(appSettingsQueryOptions);
@@ -58,7 +66,7 @@ function HomePage() {
 
   const activeModel = resolveAvailableModel(models, [
     chosenModel,
-    activeProfile?.config.model,
+    activeProfile?.model,
     settingsQuery.data?.defaultModel,
   ]);
 
@@ -83,6 +91,7 @@ function HomePage() {
     },
     onSuccess: (session) => {
       setDraft("");
+      attachments.clear();
       void queryClient.invalidateQueries({ queryKey: queryKeys.sessions });
       void navigate({ to: "/sessions/$sessionId", params: { sessionId: session.id } });
     },
@@ -100,6 +109,7 @@ function HomePage() {
       return;
     }
 
+    // TODO: Upload attachments once turns accept files.
     startConversationMutation.mutate({
       profileId: activeProfileId,
       text: trimmed,
@@ -110,11 +120,9 @@ function HomePage() {
   const onKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
     if (isSendShortcutEvent(event, preferences.sendShortcut)) {
       event.preventDefault();
-      submit();
+      event.currentTarget.form?.requestSubmit();
     }
   };
-
-  const placeholder = `Start a conversation… (${sendShortcutHint(preferences.sendShortcut)})`;
 
   return (
     <div className="flex flex-1 flex-col">
@@ -128,7 +136,7 @@ function HomePage() {
       </header>
 
       <div className="flex flex-1 items-center justify-center p-6">
-        {profiles.length === 0 ? (
+        {profilesQuery.isPending ? null : activeProfile === undefined ? (
           <Empty className="max-w-md border">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -136,63 +144,59 @@ function HomePage() {
               </EmptyMedia>
               <EmptyTitle>Create your first profile</EmptyTitle>
               <EmptyDescription>
-                Profiles isolate memory, skills, modules, cron jobs, and Pi sessions.
+                Profiles keep separate memory and tools for each part of your life, like work and
+                side projects.
               </EmptyDescription>
             </EmptyHeader>
             <EmptyContent>
               <Button onClick={() => setCreateOpen(true)}>
-                <PlusIcon className="size-4" />
+                <PlusIcon data-icon="inline-start" />
                 <span>New profile</span>
               </Button>
             </EmptyContent>
           </Empty>
         ) : (
-          <div className="w-full max-w-2xl space-y-4">
-            <div className="text-center">
-              <h1 className="font-heading text-xl font-semibold tracking-tight">
-                Start a conversation
+          <div className="w-full max-w-2xl space-y-6">
+            <div className="flex flex-col items-center gap-4 text-center">
+              <Buddy {...activeProfile.buddy} size={56} />
+              <h1 className="font-heading text-2xl font-medium tracking-tight text-balance">
+                Hey, what are we working on?
               </h1>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Pick a profile and model below to launch a new Pi session.
-              </p>
             </div>
 
-            <InputGroup className="rounded-xl">
-              <InputGroupTextarea
+            <PromptInput onSubmit={submit} {...attachments.dropTarget}>
+              <AttachmentList attachments={attachments.attachments} onRemove={attachments.remove} />
+              <PromptInputTextarea
                 value={draft}
                 onChange={(event) => setDraft(event.target.value)}
                 onKeyDown={onKeyDown}
-                placeholder={placeholder}
+                onPaste={attachments.onPaste}
+                placeholder={`Ask ${activeProfile.name} anything...`}
                 rows={3}
-                className="max-h-48 min-h-20 resize-none px-4 py-3 text-sm"
+                className="min-h-20"
                 disabled={startConversationMutation.isPending}
               />
-              <InputGroupAddon align="block-end" className="justify-between gap-2 px-3 pb-2.5">
-                <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                  <NativeSelect
-                    aria-label="Target profile"
-                    size="sm"
-                    value={activeProfileId ?? ""}
-                    onChange={(event) => {
-                      const nextId = event.target.value;
-
+              <PromptInputFooter>
+                <PromptInputTools>
+                  <AttachmentButton onFiles={attachments.add} />
+                  <ProfileSelect
+                    profiles={profiles}
+                    value={activeProfile.id}
+                    onChange={(nextId) =>
                       void navigate({
                         to: "/",
                         search: (prev) => ({ ...prev, profile: nextId }),
                         replace: true,
-                      });
-                    }}
-                  >
-                    {profiles.map((profile) => (
-                      <NativeSelectOption key={profile.id} value={profile.id}>
-                        {profile.config.name}
-                      </NativeSelectOption>
-                    ))}
-                  </NativeSelect>
-
+                      })
+                    }
+                    onCreateProfile={() => setCreateOpen(true)}
+                  />
+                </PromptInputTools>
+                <PromptInputActions>
                   <ModelPicker
-                    compact
+                    variant="ghost"
                     side="top"
+                    align="end"
                     models={models}
                     value={activeModel}
                     onChange={setChosenModel}
@@ -203,30 +207,16 @@ function HomePage() {
                       })
                     }
                   />
-                  <EffortPicker
-                    compact
-                    models={models}
-                    value={activeModel}
-                    onChange={setChosenModel}
+                  <PromptInputSubmit
+                    disabled={
+                      startConversationMutation.isPending ||
+                      draft.trim() === "" ||
+                      activeModel === null
+                    }
                   />
-                </div>
-
-                <InputGroupButton
-                  variant="default"
-                  size="icon-sm"
-                  onClick={submit}
-                  disabled={
-                    startConversationMutation.isPending ||
-                    draft.trim() === "" ||
-                    activeProfileId === undefined ||
-                    activeModel === null
-                  }
-                  aria-label="Send message"
-                >
-                  <ArrowUpIcon className="size-4" />
-                </InputGroupButton>
-              </InputGroupAddon>
-            </InputGroup>
+                </PromptInputActions>
+              </PromptInputFooter>
+            </PromptInput>
 
             {startConversationMutation.error !== null && (
               <p className="px-2 text-xs text-destructive">

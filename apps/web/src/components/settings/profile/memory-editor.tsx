@@ -81,7 +81,7 @@ export function ProfileMemorySection({ profile }: { profile: ProfileDetail }) {
           </p>
         </div>
         {!editingMemory && (
-          <Button variant="outline" size="xs" onClick={() => setEditingMemory(true)}>
+          <Button variant="ghost" size="xs" onClick={() => setEditingMemory(true)}>
             Edit
           </Button>
         )}

@@ -3,7 +3,7 @@ import type { ProfileDetail } from "@tetherbox/core/app";
 import { Button } from "@tetherbox/ui/components/button";
 import { appClient, unwrapJson } from "../../../lib/api.ts";
 import { SettingGroup, SettingRow } from "../shared.tsx";
-import { ProfileNameRow } from "./profile-name-row.tsx";
+import { ProfileIdentityRow } from "./profile-identity-row.tsx";
 
 export function ProfileModelGroup({
   profile,
@@ -27,14 +27,14 @@ export function ProfileModelGroup({
 
   return (
     <SettingGroup title="Profile">
-      <ProfileNameRow key={profile.config.name} profile={profile} onSaved={onUpdated} />
-      {profile.config.model !== undefined && (
+      <ProfileIdentityRow key={profile.name} profile={profile} onSaved={onUpdated} />
+      {profile.model !== null && (
         <SettingRow
           title="Pinned model override"
-          description={`${profile.config.model.provider}/${profile.config.model.id} (${profile.config.model.auth})`}
+          description={`${profile.model.provider}/${profile.model.id} (${profile.model.auth})`}
           control={
             <Button
-              variant="outline"
+              variant="ghost"
               size="xs"
               disabled={clearModelOverrideMutation.isPending}
               onClick={() => clearModelOverrideMutation.mutate()}

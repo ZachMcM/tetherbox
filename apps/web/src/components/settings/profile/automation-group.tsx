@@ -44,7 +44,7 @@ export function AutomationGroup({ profile }: { profile: ProfileDetail }) {
             ? profile.cron.map(({ name, job }) => `${name} (${job.schedule})`).join(", ")
             : undefined
         }
-        control={<Badge variant="outline">{profile.cron.length}</Badge>}
+        control={<Badge variant="attribute">{profile.cron.length}</Badge>}
       />
       <SettingRow
         title="Webhooks"
@@ -58,7 +58,7 @@ export function AutomationGroup({ profile }: { profile: ProfileDetail }) {
                 .join(", ")
             : undefined
         }
-        control={<Badge variant="outline">{profile.webhooks.length}</Badge>}
+        control={<Badge variant="attribute">{profile.webhooks.length}</Badge>}
       />
       {profile.pollJobs.map((job) => (
         <SettingRow
@@ -67,7 +67,7 @@ export function AutomationGroup({ profile }: { profile: ProfileDetail }) {
           description={`Every ${job.job.intervalSeconds}s`}
           control={
             <Button
-              variant="outline"
+              variant="destructive-outline"
               size="xs"
               disabled={cancelPollMutation.isPending}
               onClick={() => cancelPollMutation.mutate(job.name)}
@@ -84,7 +84,7 @@ export function AutomationGroup({ profile }: { profile: ProfileDetail }) {
           description={`Due ${new Date(reminder.fireAt).toLocaleString()}`}
           control={
             <Button
-              variant="outline"
+              variant="destructive-outline"
               size="xs"
               disabled={cancelReminderMutation.isPending}
               onClick={() => cancelReminderMutation.mutate(reminder.name)}

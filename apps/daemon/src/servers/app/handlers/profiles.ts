@@ -1,6 +1,7 @@
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  defaultBuddy,
   RpcError,
   type ProfileDetail,
   type ProfileHandlers,
@@ -8,6 +9,7 @@ import {
   type ProfileSummary,
 } from "@tetherbox/core";
 import type { DaemonConfig } from "../../../config.ts";
+import type { ProfileTable } from "../../../db/profiles.ts";
 import type { SessionTable } from "../../../db/sessions.ts";
 import type { DaemonEventBus } from "../../../events.ts";
 import type { Poller } from "../../../jobs/poller.ts";
@@ -32,6 +34,7 @@ import { requireProfile } from "./require-profile.ts";
 export function createProfileHandlers({
   config,
   sessions,
+  records,
   events,
   registry,
   scheduler,
@@ -42,6 +45,7 @@ export function createProfileHandlers({
 }: {
   config: DaemonConfig;
   sessions: SessionTable;
+  records: ProfileTable;
   events: DaemonEventBus;
   registry: ProfileRegistry;
   scheduler: Scheduler;
@@ -51,6 +55,7 @@ export function createProfileHandlers({
   catalog: StarterCatalog;
 }): ProfileHandlers {
   const toSummary = (profile: LoadedProfile): ProfileSummary => ({
+    ...records.get(profile.id),
     id: profile.id,
     config: { ...profile.config, starters: catalog.enabledIds(profile) },
     cronCount: profile.cron.size,
@@ -66,6 +71,7 @@ export function createProfileHandlers({
     ]);
 
     return {
+      ...records.get(profile.id),
       id: profile.id,
       config: { ...profile.config, starters: catalog.enabledIds(profile) },
       memory,
@@ -99,14 +105,36 @@ export function createProfileHandlers({
     },
     async create(input) {
       await createProfileOnDisk({ profilesDir: config.profilesDir, catalog, input });
+      records.upsert(input.id, {
+        name: input.name,
+        model: input.model ?? null,
+        buddy: input.buddy ?? defaultBuddy(input.id),
+      });
 
       return toDetail(await reloadOrThrow(input.id));
     },
-    async update(id, input) {
-      requireProfile(registry, id);
-      await updateProfileOnDisk({ profilesDir: config.profilesDir, catalog, id, input });
+    async update(id, { name, model, buddy, starters, starterConfig }) {
+      const profile = requireProfile(registry, id);
+      const fileChanged = starters !== undefined || starterConfig !== undefined;
 
-      return toDetail(await reloadOrThrow(id));
+      if (fileChanged) {
+        await updateProfileOnDisk({
+          profilesDir: config.profilesDir,
+          catalog,
+          id,
+          input: { starters, starterConfig },
+        });
+      }
+
+      if (name !== undefined || model !== undefined || buddy !== undefined) {
+        records.upsert(id, {
+          ...(name !== undefined && { name }),
+          ...(model !== undefined && { model }),
+          ...(buddy !== undefined && { buddy }),
+        });
+      }
+
+      return toDetail(fileChanged ? await reloadOrThrow(id) : profile);
     },
     async updateMemory(id, content) {
       const profile = requireProfile(registry, id);
@@ -131,6 +159,7 @@ export function createProfileHandlers({
         await rm(join(config.sessionsDir, id), { recursive: true, force: true });
         await deleteProfileOnDisk(config.profilesDir, id);
         await registry.remove(id);
+        records.delete(id);
 
         for (const sessionId of deletedIds) {
           events.emit({ kind: "session_deleted", profileId: id, sessionId });

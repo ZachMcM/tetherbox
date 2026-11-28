@@ -68,12 +68,45 @@ export const starterConfigFlagsSchema = z
   .pipe(starterConfigSchema);
 
 export const profileConfigSchema = z.object({
-  name: z.string().min(1),
-  model: modelSelectionSchema.optional(),
   starters: z.array(z.string().min(1)).default([]),
   starterConfig: starterConfigSchema.default({}),
 });
 export type ProfileConfig = z.infer<typeof profileConfigSchema>;
+
+const BUDDY_SHAPES = ["circle", "squircle", "triangle"] as const;
+const BUDDY_COLORS = ["coral", "amber", "lime", "mint", "sky", "iris", "rose", "stone"] as const;
+const BUDDY_GAZES = ["ahead", "left", "right", "up", "up-right", "down"] as const;
+
+export const buddyShapeSchema = z.enum(BUDDY_SHAPES);
+
+export const buddyColorSchema = z.enum(BUDDY_COLORS);
+
+export const buddyGazeSchema = z.enum(BUDDY_GAZES);
+export type BuddyGaze = z.infer<typeof buddyGazeSchema>;
+
+export const buddySchema = z.object({
+  shape: buddyShapeSchema,
+  color: buddyColorSchema,
+  gaze: buddyGazeSchema,
+});
+export type Buddy = z.infer<typeof buddySchema>;
+
+export function defaultBuddy(profileId: string): Buddy {
+  let hash = 7;
+
+  for (const char of profileId) {
+    hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+  }
+
+  const pick = <T>(options: readonly [T, ...T[]], salt: number): T =>
+    options[(hash >>> salt) % options.length] ?? options[0];
+
+  return {
+    shape: pick(BUDDY_SHAPES, 0),
+    color: pick(BUDDY_COLORS, 3),
+    gaze: pick(BUDDY_GAZES, 7),
+  };
+}
 
 export const cronJobSchema = z.object({
   schedule: z.string().min(1),

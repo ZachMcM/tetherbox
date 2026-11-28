@@ -328,9 +328,9 @@ export function SecretsSection() {
             description={describeSecretBinding(entry.binding)}
             control={
               <div className="flex items-center gap-2">
-                <Badge variant="outline">{entry.binding.kind}</Badge>
+                <Badge variant="attribute">{entry.binding.kind}</Badge>
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="xs"
                   onClick={() => setViewMode({ kind: "edit", entry })}
                 >
@@ -398,8 +398,8 @@ export function SecretsSection() {
       <SettingGroup
         title="Stored keys"
         action={
-          <Button variant="outline" size="xs" onClick={() => setViewMode({ kind: "create" })}>
-            <PlusIcon className="size-3.5" />
+          <Button size="sm" onClick={() => setViewMode({ kind: "create" })}>
+            <PlusIcon data-icon="inline-start" />
             <span>Add secret</span>
           </Button>
         }

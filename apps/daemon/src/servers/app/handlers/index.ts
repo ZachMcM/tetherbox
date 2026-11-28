@@ -53,7 +53,7 @@ export function createAppHandlers(deps: AppHandlerDeps): AppApiHandlers {
 
   return {
     settings: createSettingsHandlers({ settings: db.settings }),
-    profiles: createProfileHandlers({ ...deps, sessions: db.sessions }),
+    profiles: createProfileHandlers({ ...deps, sessions: db.sessions, records: db.profiles }),
     starters: createStarterHandlers(deps),
     clis: createCliHandlers(deps),
     sessions: createSessionHandlers({ ...deps, sessions: db.sessions }),
