@@ -28,6 +28,7 @@ export default defineConfig({
       "/api": {
         target: apiTarget,
         changeOrigin: true,
+        xfwd: true,
       },
     },
   },

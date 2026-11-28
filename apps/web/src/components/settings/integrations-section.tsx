@@ -20,6 +20,7 @@ import { AuthorizationPendingAlert } from "../auth-setup/authorization-pending-a
 import {
   OAuthPresetConnectForm,
   OAuthPresetCredentialsForm,
+  OAuthRedirectUriField,
 } from "../auth-setup/oauth-preset-forms.tsx";
 import { describePresetLogin, findPresetLogin } from "../../lib/auth-status.ts";
 import { SectionHeader, SettingGroup, SettingRow } from "./shared.tsx";
@@ -168,10 +169,11 @@ function CustomOAuthView({ onClose }: { onClose: () => void }) {
       <SectionHeader
         onBack={onClose}
         title="Add custom OAuth2 integration"
-        description={`Register ${window.location.origin}/api/oauth/callback as the redirect URI with your provider.`}
+        description="Register the redirect URI below with your provider before authorizing."
       />
 
       <form onSubmit={handleSubmit} className="space-y-3">
+        <OAuthRedirectUriField />
         <Field>
           <FieldLabel htmlFor="custom-oauth-key">Token secret key</FieldLabel>
           <Input

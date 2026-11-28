@@ -1,7 +1,7 @@
 const variantClasses = {
-  log: "max-h-36 bg-muted/50",
-  error: "max-h-32 bg-muted/50",
-  live: "max-h-36 bg-background",
+  log: "max-h-36",
+  error: "max-h-32",
+  live: "max-h-36",
 } as const;
 
 export function CliOutputLog({
@@ -19,7 +19,7 @@ export function CliOutputLog({
 
   return (
     <pre
-      className={`${variantClasses[variant]} overflow-auto rounded-md border border-border p-2 font-mono text-[11px] whitespace-pre-wrap text-muted-foreground`}
+      className={`${variantClasses[variant]} overflow-auto rounded-md bg-muted/50 p-2 font-mono text-[11px] whitespace-pre-wrap text-muted-foreground`}
     >
       {trimmed}
     </pre>

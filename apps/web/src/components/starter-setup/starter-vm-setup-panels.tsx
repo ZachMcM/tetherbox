@@ -1,5 +1,6 @@
 import {
   type OAuthPresetSummary,
+  type OAuthProviderId,
   type OAuthStatusEntry,
   type StarterConfig,
   type StarterSummary,
@@ -17,6 +18,7 @@ export function StarterVmSetupPanels({
   oauthPresets,
   oauthLogins,
   installRunner,
+  sharedOAuthProviders,
   showAllClis = false,
 }: {
   starter: StarterSummary;
@@ -25,6 +27,7 @@ export function StarterVmSetupPanels({
   oauthPresets: readonly OAuthPresetSummary[];
   oauthLogins: readonly OAuthStatusEntry[];
   installRunner: CliInstallRunner;
+  sharedOAuthProviders?: ReadonlySet<OAuthProviderId> | undefined;
   showAllClis?: boolean;
 }) {
   const missingSecretKeys = new Set(readiness?.missingSecrets.map((secret) => secret.key));
@@ -52,7 +55,11 @@ export function StarterVmSetupPanels({
       ))}
 
       {oauthPreset !== undefined && (
-        <OAuthPresetInlineCard preset={oauthPreset} activeLogin={oauthLogin} />
+        <OAuthPresetInlineCard
+          preset={oauthPreset}
+          activeLogin={oauthLogin}
+          credentialsHandledExternally={sharedOAuthProviders?.has(oauthPreset.provider) === true}
+        />
       )}
 
       {showCliPanel && readiness?.cliEntry !== undefined && (

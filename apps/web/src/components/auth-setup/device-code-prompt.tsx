@@ -7,12 +7,10 @@ export function DeviceCodePrompt({
   userCode,
   verificationUri,
   message,
-  codeBackground,
 }: {
   userCode: string;
   verificationUri: string;
   message: string;
-  codeBackground: "bg-muted" | "bg-background";
 }) {
   const [copied, setCopied] = useState(false);
 
@@ -20,9 +18,7 @@ export function DeviceCodePrompt({
     <div className="space-y-2 text-xs">
       <p className="text-muted-foreground">{message}</p>
       <div className="flex flex-wrap items-center gap-2">
-        <code
-          className={`${codeBackground} rounded px-2 py-1 font-mono text-sm font-semibold tracking-wider`}
-        >
+        <code className="rounded bg-muted px-2 py-1 font-mono text-sm font-semibold tracking-wider">
           {userCode}
         </code>
         <Button
@@ -30,10 +26,13 @@ export function DeviceCodePrompt({
           variant="outline"
           size="xs"
           onClick={() => {
-            void navigator.clipboard.writeText(userCode).then(() => {
-              setCopied(true);
-              setTimeout(() => setCopied(false), 1500);
-            });
+            void navigator.clipboard
+              .writeText(userCode)
+              .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              })
+              .catch(() => {});
           }}
         >
           {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}

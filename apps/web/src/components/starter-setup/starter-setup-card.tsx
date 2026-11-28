@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   type OAuthPresetSummary,
+  type OAuthProviderId,
   type OAuthStatusEntry,
   type StarterConfig,
   type StarterSummary,
@@ -23,6 +24,7 @@ export function StarterSetupCard({
   oauthPresets,
   oauthLogins,
   installRunner,
+  sharedOAuthProviders,
   onConfigChange,
 }: {
   idPrefix: string;
@@ -33,6 +35,7 @@ export function StarterSetupCard({
   oauthPresets: readonly OAuthPresetSummary[];
   oauthLogins: readonly OAuthStatusEntry[];
   installRunner: CliInstallRunner;
+  sharedOAuthProviders?: ReadonlySet<OAuthProviderId> | undefined;
   onConfigChange: (starterId: string, fieldKey: string, value: string) => void;
 }) {
   const configReady = isStarterConfigValid(starter, starterConfig);
@@ -90,6 +93,7 @@ export function StarterSetupCard({
             oauthPresets={oauthPresets}
             oauthLogins={oauthLogins}
             installRunner={installRunner}
+            sharedOAuthProviders={sharedOAuthProviders}
           />
         </div>
       )}

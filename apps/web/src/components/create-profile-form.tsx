@@ -1,12 +1,22 @@
 import { useState, type FormEvent, type ReactNode } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import type { StarterConfig, StarterSummary } from "@tetherbox/core/app";
+import type {
+  OAuthPresetSummary,
+  OAuthProviderId,
+  StarterConfig,
+  StarterSummary,
+} from "@tetherbox/core/app";
 import { RefreshCwIcon } from "lucide-react";
+import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
 import { Spinner } from "@tetherbox/ui/components/spinner";
 import { appClient, queryKeys, unwrapJson } from "../lib/api.ts";
+import {
+  OAUTH_PROVIDER_LABELS,
+  OAuthPresetCredentialsForm,
+} from "./auth-setup/oauth-preset-forms.tsx";
 import { CliInstallCard } from "./cli-setup/cli-install-card.tsx";
 import { StarterSelectionFields } from "./starter-setup/starter-selection-fields.tsx";
 import { StarterSetupCard } from "./starter-setup/starter-setup-card.tsx";
@@ -156,6 +166,41 @@ export function CreateProfileForm({
     );
   });
 
+  const groupsByProvider = new Map<
+    OAuthProviderId,
+    { provider: OAuthProviderId; preset: OAuthPresetSummary; starterNames: string[] }
+  >();
+
+  for (const starter of configOrAuthStarters) {
+    if (starter.oauthPreset === undefined) {
+      continue;
+    }
+
+    const preset = oauthPresets.find((entry) => entry.id === starter.oauthPreset);
+
+    if (preset === undefined || preset.hasClientCredentials) {
+      continue;
+    }
+
+    const existing = groupsByProvider.get(preset.provider);
+
+    if (existing !== undefined) {
+      existing.starterNames.push(starter.name);
+    } else {
+      groupsByProvider.set(preset.provider, {
+        provider: preset.provider,
+        preset,
+        starterNames: [starter.name],
+      });
+    }
+  }
+
+  const sharedOAuthCredentialsGroups = [...groupsByProvider.values()].filter(
+    (group) => group.starterNames.length >= 2,
+  );
+
+  const sharedOAuthProviders = new Set(sharedOAuthCredentialsGroups.map((group) => group.provider));
+
   const incompleteVmCount = countIncompleteVmItems(selectedSummaries, readinessById);
   const additionsSummary = describeStarterAdditions(selectedSummaries);
   const canContinue = !mutation.isPending && id.trim() !== "";
@@ -280,6 +325,27 @@ export function CreateProfileForm({
             <CliInstallCard entries={installEntries} runner={installRunner} />
           )}
 
+          {sharedOAuthCredentialsGroups.map((group) => (
+            <div key={group.provider} className="rounded-xl border border-border bg-card">
+              <div className="px-3.5 py-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-semibold">
+                    {OAUTH_PROVIDER_LABELS[group.provider]} OAuth app credentials
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] font-normal">
+                    VM-wide · once
+                  </Badge>
+                </div>
+                <p className="mt-0.5 text-xs text-muted-foreground">
+                  Shared by {group.starterNames.join(", ")}.
+                </p>
+              </div>
+              <div className="border-t border-border px-3.5 py-3">
+                <OAuthPresetCredentialsForm preset={group.preset} />
+              </div>
+            </div>
+          ))}
+
           {configOrAuthStarters.length > 0 && (
             <div className="space-y-2.5">
               <div className="flex items-center justify-between gap-2">
@@ -316,6 +382,7 @@ export function CreateProfileForm({
                     oauthPresets={oauthPresets}
                     oauthLogins={oauthLogins}
                     installRunner={installRunner}
+                    sharedOAuthProviders={sharedOAuthProviders}
                     onConfigChange={updateStarterField}
                   />
                 );

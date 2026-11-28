@@ -1,18 +1,13 @@
 import type { StarterCliStatusEntry } from "@tetherbox/core/app";
-import {
-  CheckCircle2Icon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-  DownloadIcon,
-  ExternalLinkIcon,
-} from "lucide-react";
+import { CheckCircle2Icon, ChevronDownIcon, ChevronRightIcon, DownloadIcon } from "lucide-react";
 import { Badge } from "@tetherbox/ui/components/badge";
 import { Button } from "@tetherbox/ui/components/button";
 import { FieldError } from "@tetherbox/ui/components/field";
 import { Spinner } from "@tetherbox/ui/components/spinner";
+import { AuthorizationPendingAlert } from "../auth-setup/authorization-pending-alert.tsx";
+import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
 import { CliOutputLog } from "./cli-output-log.tsx";
 import { CliResponseForm } from "./cli-response-form.tsx";
-import { DeviceCodePrompt } from "../auth-setup/device-code-prompt.tsx";
 import { useCliAuthFlow } from "./use-cli-auth-flow.ts";
 import { isCliInstalled, type CliInstallRunner } from "./use-cli-install-runner.ts";
 
@@ -172,34 +167,18 @@ export function CliAuthFlowPanel({
       )}
 
       {activeFlow !== null && (
-        <div className="space-y-2.5 rounded-lg border border-border bg-muted/30 p-3">
+        <div className="space-y-2.5 pt-1">
           {auth.deviceCode !== undefined ? (
             <DeviceCodePrompt
               key={activeFlow.id}
               userCode={auth.deviceCode.userCode}
               verificationUri={auth.deviceCode.verificationUri}
               message="Open the verification page and enter this one-time code:"
-              codeBackground="bg-background"
             />
           ) : auth.authUrl !== undefined ? (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <Spinner className="size-3.5" />
-              <span>Complete sign-in in the browser tab.</span>
-              <a
-                href={auth.authUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-medium text-primary underline underline-offset-4"
-              >
-                <span>Open sign-in page</span>
-                <ExternalLinkIcon className="size-3.5" />
-              </a>
-            </div>
+            <AuthorizationPendingAlert url={auth.authUrl} message="Waiting for browser sign-in…" />
           ) : (
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Spinner className="size-3.5" />
-              <span>Waiting for {entry.binary} sign-in prompt…</span>
-            </div>
+            <AuthorizationPendingAlert message={`Waiting for ${entry.binary} sign-in prompt…`} />
           )}
 
           {(activeFlow.prompt !== null || auth.showOutput) && (

@@ -338,8 +338,11 @@ export function OnboardingScreen() {
           <Button
             type="button"
             size="sm"
-            disabled={activeProvider !== undefined || models.length === 0}
-            onClick={() => setStep("model")}
+            disabled={models.length === 0}
+            onClick={() => {
+              setActiveProviderId(null);
+              setStep("model");
+            }}
           >
             Next: Choose a default model
           </Button>

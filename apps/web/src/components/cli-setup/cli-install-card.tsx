@@ -34,8 +34,8 @@ export function CliInstallCard({
   });
 
   return (
-    <div className="space-y-3 rounded-xl border border-border bg-card p-3.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
+    <div className="rounded-xl border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3.5 py-3">
         <div>
           <div className="flex items-center gap-2">
             <span className="text-sm font-semibold">Install CLIs on VM</span>
@@ -67,7 +67,7 @@ export function CliInstallCard({
         )}
       </div>
 
-      <div className="divide-y divide-border rounded-lg border border-border">
+      <div className="divide-y divide-border border-t border-border">
         {entries.map((entry) => {
           const job = runner.jobs[entry.starterId];
           const isStarting = runner.starting[entry.starterId] === true;
@@ -77,7 +77,7 @@ export function CliInstallCard({
           const showLog = expandedLogs[entry.starterId] === true || hasFailed;
 
           return (
-            <div key={entry.starterId} className="space-y-2 px-3 py-2.5">
+            <div key={entry.starterId} className="space-y-2 px-3.5 py-2.5">
               <div className="flex items-center justify-between gap-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 text-xs">
@@ -111,7 +111,7 @@ export function CliInstallCard({
 
                   {isInstalled ? (
                     <Badge variant="secondary" className="gap-1">
-                      <CheckCircle2Icon className="size-3" />
+                      <CheckCircle2Icon className="size-3 text-emerald-600 dark:text-emerald-400" />
                       <span>Installed</span>
                     </Badge>
                   ) : isRunning ? (

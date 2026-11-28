@@ -9,9 +9,12 @@ import { TrackedRuns, type TrackedRun } from "./tracked-runs.ts";
 
 const AUTH_TIMEOUT_MS = 5 * 60_000;
 const INITIAL_AUTH_WAIT_MS = 2_000;
+const CURSOR_POSITION_QUERY = `${String.fromCharCode(0x1b)}[6n`;
+const CURSOR_POSITION_REPLY = `${String.fromCharCode(0x1b)}[24;80R`;
 
 interface AuthFlow extends TrackedRun<CliAuthFlowState> {
   timedOut: boolean;
+  autoConfirmedGitAuth: boolean;
   autoPressedEnter: boolean;
   onActivity?: (() => void) | undefined;
 }
@@ -192,6 +195,7 @@ export class CliAuthFlows {
         child.kill("SIGTERM");
       }, AUTH_TIMEOUT_MS),
       timedOut: false,
+      autoConfirmedGitAuth: false,
       autoPressedEnter: false,
     };
 
@@ -216,15 +220,34 @@ export class CliAuthFlows {
       return;
     }
 
+    const rawChunk = chunk.toString("utf8");
+
+    for (
+      let index = rawChunk.indexOf(CURSOR_POSITION_QUERY);
+      index !== -1;
+      index = rawChunk.indexOf(CURSOR_POSITION_QUERY, index + CURSOR_POSITION_QUERY.length)
+    ) {
+      writeChildStdin(flow.child, CURSOR_POSITION_REPLY);
+    }
+
     const prevEventCount = flow.state.events.length;
     const prevPrompt = flow.state.prompt;
-    const output = appendOutput(flow.state.output, chunk.toString("utf8"));
+    const output = appendOutput(flow.state.output, rawChunk);
     const events = extractAuthEvents(output);
-    const prompt = detectPromptLine(output);
+    let prompt = detectPromptLine(output);
+
+    if (
+      !flow.autoConfirmedGitAuth &&
+      /authenticate git with your github credentials\?\s*\(y\/n\)/i.test(output)
+    ) {
+      flow.autoConfirmedGitAuth = true;
+      prompt = null;
+      writeChildStdin(flow.child, "y\r");
+    }
 
     if (!flow.autoPressedEnter && /press enter to open/i.test(output)) {
       flow.autoPressedEnter = true;
-      writeChildStdin(flow.child, "\n");
+      writeChildStdin(flow.child, "\r");
     }
 
     flow.state = { ...flow.state, events, output, prompt };

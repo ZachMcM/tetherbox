@@ -3,7 +3,7 @@ import type { LlmProviderStatus } from "@tetherbox/core/app";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
-import { Spinner } from "@tetherbox/ui/components/spinner";
+import { AuthorizationPendingAlert } from "./authorization-pending-alert.tsx";
 import { DeviceCodePrompt } from "./device-code-prompt.tsx";
 import { ExternalLink } from "./external-link.tsx";
 import { useLlmOAuthFlow } from "./use-llm-oauth-flow.ts";
@@ -83,7 +83,6 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
               userCode={deviceCode.userCode}
               verificationUri={deviceCode.verificationUri}
               message="Open the verification page and enter this code to finish signing in:"
-              codeBackground="bg-muted"
             />
           ) : activeFlow.status === "waiting_input" && activeFlow.prompt.kind === "text" ? (
             <div className="space-y-2.5">
@@ -141,17 +140,10 @@ export function LlmOAuthFlowPanel({ provider }: { provider: LlmProviderStatus })
               </div>
             </div>
           ) : (
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-              <Spinner className="size-3.5" />
-              <span>
-                {authUrl !== undefined
-                  ? "Complete sign-in in the browser tab."
-                  : "Starting sign-in…"}
-              </span>
-              {authUrl !== undefined && (
-                <ExternalLink href={authUrl}>Open sign-in page</ExternalLink>
-              )}
-            </div>
+            <AuthorizationPendingAlert
+              url={authUrl}
+              message={authUrl !== undefined ? "Waiting for browser sign-in…" : "Starting sign-in…"}
+            />
           )}
 
           {oauth.respondError !== null && <FieldError>{oauth.respondError.message}</FieldError>}

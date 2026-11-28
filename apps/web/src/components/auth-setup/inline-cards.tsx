@@ -133,9 +133,11 @@ export function StarterSecretInlineCard({
 export function OAuthPresetInlineCard({
   preset,
   activeLogin,
+  credentialsHandledExternally = false,
 }: {
   preset: OAuthPresetSummary;
   activeLogin?: PresetLogin | undefined;
+  credentialsHandledExternally?: boolean;
 }) {
   const connected = activeLogin !== undefined;
 
@@ -168,6 +170,10 @@ export function OAuthPresetInlineCard({
       {!connected &&
         (preset.hasClientCredentials ? (
           <OAuthPresetConnectForm preset={preset} />
+        ) : credentialsHandledExternally ? (
+          <p className="text-xs text-muted-foreground">
+            Save the shared OAuth client credentials above to authorize.
+          </p>
         ) : (
           <OAuthPresetCredentialsForm preset={preset} />
         ))}

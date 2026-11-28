@@ -1,14 +1,31 @@
-import { Alert, AlertDescription, AlertTitle } from "@tetherbox/ui/components/alert";
-import { ExternalLink } from "./external-link.tsx";
+import { ExternalLinkIcon } from "lucide-react";
+import { buttonVariants } from "@tetherbox/ui/components/button";
+import { Spinner } from "@tetherbox/ui/components/spinner";
 
-export function AuthorizationPendingAlert({ url }: { url: string }) {
+export function AuthorizationPendingAlert({
+  url,
+  message = "Waiting for browser authorization…",
+}: {
+  url?: string | undefined;
+  message?: string;
+}) {
   return (
-    <Alert>
-      <AlertTitle>Finish authorization in the new tab</AlertTitle>
-      <AlertDescription className="space-y-1.5">
-        <p>Return here once the callback completes to continue.</p>
-        <ExternalLink href={url}>Open authorization link</ExternalLink>
-      </AlertDescription>
-    </Alert>
+    <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        <Spinner className="size-3.5 shrink-0" />
+        <span>{message}</span>
+      </div>
+      {url !== undefined && (
+        <a
+          href={url}
+          target="_blank"
+          rel="noreferrer"
+          className={buttonVariants({ variant: "outline", size: "xs" })}
+        >
+          <span>Open sign-in page</span>
+          <ExternalLinkIcon className="size-3" />
+        </a>
+      )}
+    </div>
   );
 }

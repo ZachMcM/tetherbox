@@ -1,10 +1,12 @@
-import { useState, type FormEvent } from "react";
+import { useId, useState, type FormEvent } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   oauthScopeModeSchema,
   type OAuthPresetSummary,
+  type OAuthProviderId,
   type OAuthScopeMode,
 } from "@tetherbox/core/app";
+import { CheckIcon, CopyIcon } from "lucide-react";
 import { Button } from "@tetherbox/ui/components/button";
 import { Field, FieldError, FieldLabel } from "@tetherbox/ui/components/field";
 import { Input } from "@tetherbox/ui/components/input";
@@ -12,6 +14,59 @@ import { NativeSelect, NativeSelectOption } from "@tetherbox/ui/components/nativ
 import { appClient, queryKeys, unwrapJson } from "../../lib/api.ts";
 import { openAuthWindow } from "../../lib/auth-window.ts";
 import { AuthorizationPendingAlert } from "./authorization-pending-alert.tsx";
+import { ExternalLink } from "./external-link.tsx";
+
+export const OAUTH_PROVIDER_LABELS: Readonly<Record<OAuthProviderId, string>> = {
+  google: "Google",
+};
+
+const OAUTH_PROVIDER_SETUP_DOCS: Readonly<Record<OAuthProviderId, { label: string; url: string }>> =
+  {
+    google: {
+      label: "How to create a Google OAuth client",
+      url: "https://developers.google.com/workspace/guides/create-credentials#oauth-client-id",
+    },
+  };
+
+export function OAuthRedirectUriField() {
+  const inputId = useId();
+  const [copied, setCopied] = useState(false);
+  const redirectUri = `${window.location.origin}/api/oauth/callback`;
+
+  return (
+    <Field>
+      <FieldLabel htmlFor={inputId} className="text-xs font-normal text-muted-foreground">
+        Authorized redirect URI
+      </FieldLabel>
+      <div className="flex items-center gap-2">
+        <Input
+          id={inputId}
+          value={redirectUri}
+          readOnly
+          className="font-mono text-xs text-muted-foreground"
+          onFocus={(event) => event.currentTarget.select()}
+        />
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            void navigator.clipboard
+              .writeText(redirectUri)
+              .then(() => {
+                setCopied(true);
+                setTimeout(() => setCopied(false), 1500);
+              })
+              .catch(() => {});
+          }}
+        >
+          {copied ? <CheckIcon className="size-3.5" /> : <CopyIcon className="size-3.5" />}
+          <span>{copied ? "Copied" : "Copy"}</span>
+        </Button>
+      </div>
+    </Field>
+  );
+}
 
 export function OAuthPresetCredentialsForm({
   preset,
@@ -53,12 +108,15 @@ export function OAuthPresetCredentialsForm({
     mutation.mutate();
   };
 
+  const setupDocs = OAUTH_PROVIDER_SETUP_DOCS[preset.provider];
+
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
-      <p className="text-xs text-muted-foreground">
-        Register <code>{`${window.location.origin}/api/oauth/callback`}</code> as an authorized
-        redirect URI, then save your OAuth client ID and secret.
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+        <span>Add this redirect URI to your OAuth client, then save the credentials below.</span>
+        <ExternalLink href={setupDocs.url}>{setupDocs.label}</ExternalLink>
+      </div>
+      <OAuthRedirectUriField />
       <Field>
         <FieldLabel
           htmlFor={`oauth-cid-${preset.id}`}
